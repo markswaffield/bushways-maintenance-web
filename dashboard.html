@@ -25,7 +25,7 @@
 
 <h1>To-Do — Chobe Elephant Camp</h1>
 <p class="sub">Open faults and scheduled maintenance, live from the database.</p>
-<p class="nav"><a href="./">← Run an inspection</a> · <a href="./fix.html">Fix a fault →</a> · <a href="./completed.html">Completed →</a></p>
+<p class="nav"><a href="./">← Run an inspection</a> · <a href="./report.html">Report a fault →</a> · <a href="./fix.html">Fix a fault →</a> · <a href="./completed.html">Completed →</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
@@ -62,7 +62,7 @@
     data.issues.forEach(function (group) {
       html += '<div class="card">' + '<p class="item">' + esc(group.target) + '</p>';
       group.faults.forEach(function (f) {
-        html += '<p class="fault-line">' + esc(f.label) +
+        html += '<p class="fault-line">' + (f.urgent ? '<span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span> ' : '') + esc(f.label) +
           (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
           (f.action ? ' — ' + esc(f.action) : '') +
           (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(f.assigned_department) + '</span>' : '') +

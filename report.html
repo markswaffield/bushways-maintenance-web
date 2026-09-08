@@ -1,0 +1,163 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp — Report a Fault</title>
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 20px}
+  label{display:block;font-size:13px;color:#5B5344;margin:14px 0 4px}
+  select{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
+  button{width:100%;padding:14px;font-size:16px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;margin-top:22px}
+  button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  button.stop{background:#A8502F}
+  .urgent-row{display:flex;align-items:center;gap:8px;margin-top:16px}
+  .urgent-row input{width:20px;height:20px}
+  .urgent-row label{margin:0;font-size:14px;color:#232019}
+  .recording{text-align:center;padding:30px 0}
+  .recording .dot{width:14px;height:14px;border-radius:50%;background:#A8502F;display:inline-block;margin-right:8px;animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .timer{font-size:32px;font-weight:700;margin:14px 0}
+  .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
+  .confirm .transcript{font-style:italic;margin-top:8px}
+  .nav{font-size:13px;margin:10px 0 0}
+  audio{width:100%;margin-top:16px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<div id="start">
+  <h1>Report a Fault</h1>
+  <p class="sub">Chobe Elephant Camp — record a voice note, it lands on the to-do list</p>
+  <p class="nav"><a href="./dashboard.html">See the to-do list →</a></p>
+  <label>Who are you?</label>
+  <select id="person"><option value="">Loading…</option></select>
+  <label>Which room?</label>
+  <select id="room"><option value="">Loading…</option></select>
+  <div class="urgent-row"><input type="checkbox" id="urgent"><label for="urgent">Urgent — needs attention today</label></div>
+  <button id="recordBtn">🎙️ Start recording</button>
+  <p class="sub" id="micError" style="color:#A8502F;margin-top:10px"></p>
+</div>
+
+<div id="recording" hidden>
+  <div class="recording"><span class="dot"></span>Recording…</div>
+  <div class="timer" id="timer" style="text-align:center">0:00</div>
+  <button class="stop" id="stopBtn">Stop</button>
+</div>
+
+<div id="review" hidden>
+  <h1>Review your recording</h1>
+  <p class="sub">Listen back before sending — re-record if it's not right</p>
+  <audio controls id="player"></audio>
+  <button id="submitBtn">Submit report</button>
+  <button class="secondary" id="rerecordBtn">Re-record</button>
+</div>
+
+<div id="done" hidden>
+  <h1>Report recorded</h1>
+  <div class="confirm" id="doneBox"></div>
+  <p><a href="#" id="again">Report another</a> · <a href="./dashboard.html">See the to-do list →</a></p>
+</div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  var people = [];
+  var mediaRecorder, chunks = [], recordedBlob = null, timerInterval, seconds = 0;
+  var MAX_SECONDS = 120; // a voice note, not a long recording — keeps uploads small
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    people = data.people;
+    var p = document.getElementById("person");
+    p.innerHTML = '<option value="">Select your name</option>' +
+      people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
+    var r = document.getElementById("room");
+    r.innerHTML = '<option value="">Select a room</option>' +
+      data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
+  }).catch(function (e) {
+    document.getElementById("start").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
+
+  document.getElementById("recordBtn").onclick = function () {
+    var personId = document.getElementById("person").value;
+    var roomId = document.getElementById("room").value;
+    if (!personId || !roomId) { alert("Pick your name and a room first."); return; }
+    document.getElementById("micError").textContent = "";
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = function (e) { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        document.getElementById("player").src = URL.createObjectURL(recordedBlob);
+        document.getElementById("recording").hidden = true;
+        document.getElementById("review").hidden = false;
+      };
+      mediaRecorder.start();
+      seconds = 0;
+      document.getElementById("timer").textContent = "0:00";
+      timerInterval = setInterval(function () {
+        seconds++;
+        var m = Math.floor(seconds / 60), s = seconds % 60;
+        document.getElementById("timer").textContent = m + ":" + (s < 10 ? "0" : "") + s;
+        if (seconds >= MAX_SECONDS) mediaRecorder.stop();
+      }, 1000);
+      document.getElementById("start").hidden = true;
+      document.getElementById("recording").hidden = false;
+    }).catch(function (e) {
+      document.getElementById("micError").textContent = "Couldn't access the microphone — check the browser has permission. (" + e.message + ")";
+    });
+  };
+
+  document.getElementById("stopBtn").onclick = function () {
+    clearInterval(timerInterval);
+    mediaRecorder.stop();
+  };
+
+  document.getElementById("rerecordBtn").onclick = function () {
+    document.getElementById("review").hidden = true;
+    document.getElementById("start").hidden = false;
+  };
+
+  document.getElementById("submitBtn").onclick = function () {
+    var btn = document.getElementById("submitBtn");
+    btn.disabled = true;
+    btn.textContent = "Uploading and transcribing…";
+    var reader = new FileReader();
+    reader.onload = function () {
+      fetch(FN + "?action=report", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          reported_by: document.getElementById("person").value,
+          room_id: document.getElementById("room").value,
+          priority: document.getElementById("urgent").checked ? "urgent" : "normal",
+          audio_data_url: reader.result,
+        }),
+      }).then(function (r) { return r.json(); }).then(function (out) {
+        if (out.error) { alert(out.error); btn.disabled = false; btn.textContent = "Submit report"; return; }
+        document.getElementById("review").hidden = true;
+        document.getElementById("done").hidden = false;
+        document.getElementById("doneBox").innerHTML =
+          "<p>On the to-do list now — visible immediately, whether or not it's transcribed yet.</p>" +
+          (out.transcript
+            ? '<p class="transcript">"' + esc(out.transcript) + '"</p>'
+            : "<p class='transcript'>Not transcribed yet — the recording itself is saved and playable from the to-do list either way.</p>");
+      }).catch(function (e) {
+        btn.disabled = false;
+        btn.textContent = "Submit report";
+        alert("Couldn't submit — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
+      });
+    };
+    reader.readAsDataURL(recordedBlob);
+  };
+
+  document.getElementById("again").onclick = function (e) {
+    e.preventDefault();
+    location.reload();
+  };
+</script>
+</body></html>

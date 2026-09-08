@@ -54,9 +54,14 @@
 
     data.issues.forEach(function (i) {
       html += '<div class="card">' +
-        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + '</p>' +
+        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) +
+        (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : '') + '</p>' +
         (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
         (i.note ? esc(i.note) : '');
+
+      if (i.audio_url) {
+        html += '<audio controls src="' + esc(i.audio_url) + '" style="width:100%;margin-top:8px"></audio>';
+      }
 
       html += '<div class="flow">';
 

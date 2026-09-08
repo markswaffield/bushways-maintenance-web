@@ -127,11 +127,14 @@
 
     issues.forEach(function (i) {
       html += '<div class="card" id="card-' + i.id + '">' +
-        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + '</p>' +
+        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : '') + '</p>' +
         (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
         (i.note || i.suggested_action ? esc(i.note || i.suggested_action) : '') +
         '<p class="meta">raised by ' + esc(i.raised_by) + ', ' + timeAgo(i.raised_at) + '</p>';
 
+      if (i.audio_url) {
+        html += '<audio controls src="' + esc(i.audio_url) + '" style="width:100%;margin-top:8px"></audio>';
+      }
       if (i.photos && i.photos.length) {
         html += '<div class="photos">' + i.photos.map(function (url) {
           return '<a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '"></a>';
