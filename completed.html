@@ -22,6 +22,8 @@
   .fixnote .part{color:#8C6A2F;font-size:12px;margin-top:2px}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
+  .photos{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .photos a img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
 </style></head><body>
 
 <h1>Completed Tasks</h1>
@@ -81,6 +83,12 @@
         html += '<div class="fixnote">' + esc(i.actual_action_taken || "") +
           (i.actual_part_used ? '<div class="part">Part used: ' + esc(i.actual_part_used) + '</div>' : '') +
           '</div>';
+      }
+
+      if (i.photos && i.photos.length) {
+        html += '<div class="photos">' + i.photos.map(function (url) {
+          return '<a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '"></a>';
+        }).join("") + '</div>';
       }
 
       html += '</div>';

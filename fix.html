@@ -21,6 +21,8 @@
   .assigned-label{font-size:12.5px;color:#43594A;font-weight:600;margin-top:6px}
   .fix-form{display:none;margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
   .card.open .fix-form{display:block}
+  .photos{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .photos a img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
   .actions{display:flex;gap:8px;margin-top:10px}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
@@ -130,6 +132,12 @@
         (i.note || i.suggested_action ? esc(i.note || i.suggested_action) : '') +
         '<p class="meta">raised by ' + esc(i.raised_by) + ', ' + timeAgo(i.raised_at) + '</p>';
 
+      if (i.photos && i.photos.length) {
+        html += '<div class="photos">' + i.photos.map(function (url) {
+          return '<a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '"></a>';
+        }).join("") + '</div>';
+      }
+
       if (i.assigned_department) {
         html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_department.name) + '</p>';
       }
@@ -151,6 +159,7 @@
         '<div class="fix-form">' +
         '<label>What was done?</label><textarea id="action-' + i.id + '" rows="2" placeholder="What actually fixed it"></textarea>' +
         '<label>Part used (optional)</label><input type="text" id="part-' + i.id + '" placeholder="e.g. SN352">' +
+        '<label>Photo of the fix (optional)</label><input type="file" accept="image/*" capture="environment" id="photo-' + i.id + '">' +
         '<div class="actions"><button onclick="doResolve(\'' + i.id + '\')">Confirm fixed</button>' +
         '<button class="secondary" onclick="toggleFix(\'' + i.id + '\')">Cancel</button></div>' +
         '</div></div>';
@@ -174,15 +183,49 @@
     }).catch(function (e) { alert("Couldn't assign — a fault in the page. (" + e.message + ")"); });
   };
 
+  // Resized client-side before it ever leaves the phone — same reasoning
+  // and same numbers as the checklist page's version of this.
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var scale = Math.min(1, 1000 / Math.max(img.width, img.height));
+          var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          var canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.6));
+        };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   window.doResolve = function (id) {
     var action = document.getElementById("action-" + id).value;
     var part = document.getElementById("part-" + id).value;
+    var photoFile = document.getElementById("photo-" + id).files[0];
     fetch(FN + "?action=resolve", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ issue_id: id, resolved_by: me.id, actual_action_taken: action, actual_part_used: part }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { alert(out.error); return; }
-      loadIssues();
+      if (!photoFile) { loadIssues(); return; }
+      // The issue already exists here (it's being resolved, not raised),
+      // so unlike the checklist page there's no need to wait for an id
+      // to come back — it's already known.
+      compressImage(photoFile).then(function (dataUrl) {
+        return fetch(FN + "?action=attach", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ issue_id: id, added_by: me.id, image_data_url: dataUrl }),
+        });
+      }).then(function () { loadIssues(); })
+        .catch(function () { alert("Fixed and recorded — the photo didn't upload, though. Nothing else was lost."); loadIssues(); });
     }).catch(function (e) { alert("Couldn't confirm — a fault in the page. (" + e.message + ")"); });
   };
 </script>
