@@ -1,0 +1,152 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp — Fix a Fault</title>
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:22px 0 8px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:13px;margin:10px 0 0}
+  label{display:block;font-size:13px;color:#5B5344;margin:14px 0 4px}
+  select,input[type=text],textarea{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
+  button{padding:10px 16px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff}
+  button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  button.small{padding:7px 12px;font-size:13px}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
+  .card .item{font-size:14.5px;font-weight:700;margin:0 0 4px}
+  .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F;margin-right:6px}
+  .card .meta{font-size:12.5px;color:#6B6455;margin:4px 0}
+  .assign-row{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .assign-row select{flex:1}
+  .assigned-label{font-size:12.5px;color:#43594A;font-weight:600;margin-top:6px}
+  .fix-form{display:none;margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
+  .card.open .fix-form{display:block}
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<div id="start">
+  <h1>Fix a Fault</h1>
+  <p class="sub">Chobe Elephant Camp — mark faults fixed, or assign them</p>
+  <p class="nav"><a href="./dashboard.html">← To-do list</a></p>
+  <label>Who are you?</label>
+  <select id="person"><option value="">Loading…</option></select>
+  <button id="startBtn" style="width:100%;margin-top:16px">Continue</button>
+</div>
+
+<div id="list" hidden></div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  var people = [];
+  var me = null;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function timeAgo(iso) {
+    var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 60) return mins + "m ago";
+    if (mins < 1440) return Math.round(mins / 60) + "h ago";
+    return Math.round(mins / 1440) + "d ago";
+  }
+
+  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    people = data.people;
+    var p = document.getElementById("person");
+    p.innerHTML = '<option value="">Select your name</option>' +
+      people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + ' — ' + esc(x.role) + '</option>'; }).join("");
+  }).catch(function (e) {
+    document.getElementById("start").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
+
+  document.getElementById("startBtn").onclick = function () {
+    var id = document.getElementById("person").value;
+    if (!id) { alert("Pick your name first."); return; }
+    me = people.find(function (p) { return p.id === id; });
+    document.getElementById("start").hidden = true;
+    document.getElementById("list").hidden = false;
+    loadIssues();
+  };
+
+  function loadIssues() {
+    var list = document.getElementById("list");
+    list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p><p class="loading">Loading…</p>';
+    fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
+      renderList(data.issues);
+    }).catch(function (e) {
+      list.innerHTML += "<p>Couldn't load the list — a fault in the page. (" + e.message + ")</p>";
+    });
+  }
+
+  function renderList(issues) {
+    var list = document.getElementById("list");
+    var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p>';
+    html += "<h2>Open faults <span style='color:#8C6A2F;font-weight:400'>" + issues.length + "</span></h2>";
+    if (!issues.length) html += '<p class="empty">Nothing open.</p>';
+
+    issues.forEach(function (i) {
+      html += '<div class="card" id="card-' + i.id + '">' +
+        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + '</p>' +
+        (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
+        (i.note || i.suggested_action ? esc(i.note || i.suggested_action) : '') +
+        '<p class="meta">raised by ' + esc(i.raised_by) + ', ' + timeAgo(i.raised_at) + '</p>';
+
+      if (i.assigned_to) {
+        html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_to.name) + '</p>';
+      }
+      if (me.is_manager) {
+        html += '<div class="assign-row"><select id="assign-' + i.id + '">' +
+          '<option value="">Unassigned</option>' +
+          people.map(function (p) {
+            return '<option value="' + p.id + '"' + (i.assigned_to && i.assigned_to.id === p.id ? " selected" : "") + '>' + esc(p.name) + '</option>';
+          }).join("") +
+          '</select><button class="small secondary" onclick="doAssign(\'' + i.id + '\')">Assign</button></div>';
+      }
+
+      html += '<div class="actions">' +
+        '<button class="small" onclick="toggleFix(\'' + i.id + '\')">Mark fixed</button>' +
+        '</div>' +
+        '<div class="fix-form">' +
+        '<label>What was done?</label><textarea id="action-' + i.id + '" rows="2" placeholder="What actually fixed it"></textarea>' +
+        '<label>Part used (optional)</label><input type="text" id="part-' + i.id + '" placeholder="e.g. SN352">' +
+        '<div class="actions"><button onclick="doResolve(\'' + i.id + '\')">Confirm fixed</button>' +
+        '<button class="secondary" onclick="toggleFix(\'' + i.id + '\')">Cancel</button></div>' +
+        '</div></div>';
+    });
+
+    list.innerHTML = html;
+  }
+
+  window.toggleFix = function (id) {
+    document.getElementById("card-" + id).classList.toggle("open");
+  };
+
+  window.doAssign = function (id) {
+    var assignedTo = document.getElementById("assign-" + id).value;
+    fetch(FN + "?action=assign", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_id: id, assigned_to: assignedTo, by_person_id: me.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      loadIssues();
+    }).catch(function (e) { alert("Couldn't assign — a fault in the page. (" + e.message + ")"); });
+  };
+
+  window.doResolve = function (id) {
+    var action = document.getElementById("action-" + id).value;
+    var part = document.getElementById("part-" + id).value;
+    fetch(FN + "?action=resolve", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_id: id, resolved_by: me.id, actual_action_taken: action, actual_part_used: part }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      loadIssues();
+    }).catch(function (e) { alert("Couldn't confirm — a fault in the page. (" + e.message + ")"); });
+  };
+</script>
+</body></html>
