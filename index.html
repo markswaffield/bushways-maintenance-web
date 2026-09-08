@@ -29,7 +29,7 @@
 <div id="start">
   <h1>Guest Room Inspection</h1>
   <p class="sub">Chobe Elephant Camp — minimal test screen</p>
-  <p class="nav"><a href="./dashboard.html">See the to-do list →</a></p>
+  <p class="nav"><a href="./dashboard.html">See the to-do list →</a> · <a href="./report.html">Report a fault →</a></p>
   <label>Who are you?</label>
   <select id="person"><option value="">Loading…</option></select>
   <label>Which room?</label>
@@ -89,6 +89,54 @@
     document.getElementById("start").hidden = true;
     var c = document.getElementById("checklist");
     c.hidden = false;
+
+    // Keyed by item id, so onComponentChange (below) can rebuild the
+    // second dropdown's options once a part is picked, without another
+    // round trip to the server — tool-local D-030, per Mark, 2026-09-08:
+    // a literacy-friendly two-step pick (part, then what's wrong with
+    // it) for item types that have a real Component catalogue behind
+    // them. Most item types don't yet — every fault's component_id is
+    // null — and fall straight back to the one flat dropdown this
+    // screen has always had.
+    var itemFaultsById = {};
+
+    function faultPickerHtml(item) {
+      itemFaultsById[item.id] = item.faults;
+      if (!item.faults.length) return "";
+      var grouped = item.faults.some(function (f) { return f.component_id; });
+      if (!grouped) {
+        return '<label>What\'s wrong?</label><select data-fault="' + item.id + '"><option value="">Choose one</option>' +
+          item.faults.map(function (f) {
+            return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+          }).join("") + '</select>';
+      }
+      var components = [], seen = {};
+      item.faults.forEach(function (f) {
+        var key = f.component_id || "__other__";
+        if (!seen[key]) { seen[key] = true; components.push({ key: key, name: f.component_name || "Other" }); }
+      });
+      return '<label>Which part?</label><select data-component="' + item.id + '" onchange="onComponentChange(\'' + item.id + '\')"><option value="">Choose one</option>' +
+        components.map(function (comp) { return '<option value="' + comp.key + '">' + esc(comp.name) + '</option>'; }).join("") +
+        '</select>' +
+        '<label>What\'s wrong?</label><select data-fault="' + item.id + '" disabled><option value="">Choose the part first</option></select>';
+    }
+
+    window.onComponentChange = function (itemId) {
+      var compSel = document.querySelector('[data-component="' + itemId + '"]');
+      var faultSel = document.querySelector('[data-fault="' + itemId + '"]');
+      var compVal = compSel.value;
+      if (!compVal) {
+        faultSel.innerHTML = '<option value="">Choose the part first</option>';
+        faultSel.disabled = true;
+        return;
+      }
+      var faults = itemFaultsById[itemId].filter(function (f) { return (f.component_id || "__other__") === compVal; });
+      faultSel.innerHTML = '<option value="">Choose one</option>' + faults.map(function (f) {
+        return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+      }).join("");
+      faultSel.disabled = false;
+    };
+
     var html = '<h1>Guest Room Inspection</h1>' +
       '<p class="sub">Chobe Elephant Camp, ' + esc(data.room_label) + ' — leave an item alone if it\'s fine (tool-local D-023)</p>';
     data.sections.forEach(function (s) {
@@ -98,15 +146,9 @@
           html += '<div class="item"><label class="main">' + esc(item.text) + '</label>' +
             '<input type="text" inputmode="numeric" data-value="' + item.id + '" placeholder="Reading"></div>';
         } else {
-          var faultOptions = item.faults.length
-            ? '<label>What\'s wrong?</label><select data-fault="' + item.id + '"><option value="">Choose one</option>' +
-              item.faults.map(function (f) {
-                return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
-              }).join("") + '</select>'
-            : "";
           html += '<div class="item" data-item="' + item.id + '">' +
             '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
-            '<div class="details">' + faultOptions +
+            '<div class="details">' + faultPickerHtml(item) +
             '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
             '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
             '</div></div>';
