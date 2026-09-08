@@ -43,6 +43,8 @@
   var people = [];
   var departments = [];
   var me = null;
+  var lastIssues = [];
+  var viewFilter = "";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -70,6 +72,10 @@
     var id = document.getElementById("person").value;
     if (!id) { alert("Pick your name first."); return; }
     me = people.find(function (p) { return p.id === id; });
+    // Defaults the view to their own department, per Mark, 2026-09-08 —
+    // "makes it easy for a department to easily see what it needs to
+    // focus on." Still switchable to any department, or "All", below.
+    viewFilter = me.department || "";
     document.getElementById("start").hidden = true;
     document.getElementById("list").hidden = false;
     loadIssues();
@@ -79,18 +85,41 @@
     var list = document.getElementById("list");
     list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
-      renderList(data.issues);
+      lastIssues = data.issues;
+      renderList(applyViewFilter());
     }).catch(function (e) {
       list.innerHTML += "<p>Couldn't load the list — a fault in the page. (" + e.message + ")</p>";
     });
   }
 
+  function applyViewFilter() {
+    if (!viewFilter) return lastIssues;
+    if (viewFilter === "__unassigned__") return lastIssues.filter(function (i) { return !i.assigned_department; });
+    return lastIssues.filter(function (i) { return i.assigned_department && i.assigned_department.name === viewFilter; });
+  }
+
+  window.setViewFilter = function (v) {
+    viewFilter = v;
+    renderList(applyViewFilter());
+  };
+
   function renderList(issues) {
     var list = document.getElementById("list");
     var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p>';
 
+    // Lets a department see just its own queue — Mark, 2026-09-08.
+    // Available to everyone, not only management: viewing your own
+    // department's work is different from assigning someone else's.
+    html += '<label>Show</label><select id="viewFilter" onchange="setViewFilter(this.value)">' +
+      '<option value=""' + (!viewFilter ? " selected" : "") + '>All departments</option>' +
+      '<option value="__unassigned__"' + (viewFilter === "__unassigned__" ? " selected" : "") + '>Unassigned</option>' +
+      departments.map(function (d) {
+        return '<option value="' + esc(d.name) + '"' + (viewFilter === d.name ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") +
+      '</select>';
+
     html += "<h2>Open faults <span style='color:#8C6A2F;font-weight:400'>" + issues.length + "</span></h2>";
-    if (!issues.length) html += '<p class="empty">Nothing open.</p>';
+    if (!issues.length) html += '<p class="empty">Nothing here' + (viewFilter ? " for this filter" : "") + '.</p>';
 
     issues.forEach(function (i) {
       html += '<div class="card" id="card-' + i.id + '">' +
