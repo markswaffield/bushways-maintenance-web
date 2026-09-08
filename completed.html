@@ -1,0 +1,94 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp — Completed Tasks</title>
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:22px 0 8px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline}
+  h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:13px;margin:10px 0 0}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
+  .card .item{font-size:14.5px;font-weight:700;margin:0 0 4px}
+  .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F;margin-right:6px}
+  .flow{margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
+  .step{display:flex;gap:10px;padding:4px 0}
+  .step .dot{width:9px;height:9px;border-radius:50%;background:#43594A;margin-top:5px;flex:none}
+  .step.pending .dot{background:#E3DFD3}
+  .step .text{font-size:13px}
+  .step .who{font-weight:600}
+  .step .when{color:#6B6455;font-size:12px;display:block}
+  .fixnote{background:#EFECE3;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:13px}
+  .fixnote .part{color:#8C6A2F;font-size:12px;margin-top:2px}
+  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+</style></head><body>
+
+<h1>Completed Tasks</h1>
+<p class="sub">Chobe Elephant Camp — the full flow of every fixed fault</p>
+<p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./fix.html">Fix a fault →</a></p>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=completed_issues";
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function when(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    var day = d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    var time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    return day + ", " + time;
+  }
+
+  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    var html = '<h2>Completed <span class="count">' + data.issues.length + '</span></h2>';
+    if (!data.issues.length) html += '<p class="empty">Nothing completed yet — fix something on the fix-a-fault page and it lands here.</p>';
+
+    data.issues.forEach(function (i) {
+      html += '<div class="card">' +
+        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + '</p>' +
+        (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
+        (i.note ? esc(i.note) : '');
+
+      html += '<div class="flow">';
+
+      html += '<div class="step"><span class="dot"></span><span class="text">' +
+        'Raised by <span class="who">' + esc(i.raised_by) + '</span>' +
+        '<span class="when">' + when(i.raised_at) + '</span></span></div>';
+
+      if (i.assigned_department) {
+        html += '<div class="step"><span class="dot"></span><span class="text">' +
+          'Assigned to <span class="who">' + esc(i.assigned_department) + '</span>' +
+          (i.assigned_at ? '<span class="when">' + when(i.assigned_at) + '</span>' : '<span class="when">no date on record</span>') +
+          '</span></div>';
+      } else {
+        html += '<div class="step pending"><span class="dot"></span><span class="text">Never formally assigned</span></div>';
+      }
+
+      html += '<div class="step"><span class="dot"></span><span class="text">' +
+        'Fixed by <span class="who">' + esc(i.resolved_by) + '</span>' +
+        '<span class="when">' + when(i.resolved_at) + '</span></span></div>';
+
+      html += '</div>';
+
+      if (i.actual_action_taken || i.actual_part_used) {
+        html += '<div class="fixnote">' + esc(i.actual_action_taken || "") +
+          (i.actual_part_used ? '<div class="part">Part used: ' + esc(i.actual_part_used) + '</div>' : '') +
+          '</div>';
+      }
+
+      html += '</div>';
+    });
+
+    document.getElementById("app").innerHTML = html;
+  }).catch(function (e) {
+    document.getElementById("app").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
+</script>
+</body></html>

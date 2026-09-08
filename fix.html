@@ -30,7 +30,7 @@
 <div id="start">
   <h1>Fix a Fault</h1>
   <p class="sub">Chobe Elephant Camp — mark faults fixed, or assign them</p>
-  <p class="nav"><a href="./dashboard.html">← To-do list</a></p>
+  <p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./completed.html">Completed →</a></p>
   <label>Who are you?</label>
   <select id="person"><option value="">Loading…</option></select>
   <button id="startBtn" style="width:100%;margin-top:16px">Continue</button>
@@ -85,7 +85,7 @@
 
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p><p class="loading">Loading…</p>';
+    list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./completed.html">Completed →</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       renderList(applyViewFilter());
@@ -107,7 +107,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p>';
+    var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./completed.html">Completed →</a></p>';
 
     // Lets a department see just its own queue — Mark, 2026-09-08.
     // Available to everyone, not only management: viewing your own
