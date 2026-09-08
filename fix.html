@@ -23,6 +23,11 @@
   .card.open .fix-form{display:block}
   .photos{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
   .photos a img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
+  .notes{margin-top:8px}
+  .note-line{background:#EFECE3;border-radius:6px;padding:6px 10px;font-size:13px;margin-top:4px}
+  .note-line .note-who{font-weight:600;color:#5B5344}
+  .note-add{margin-top:8px;display:flex;gap:8px;align-items:flex-start}
+  .note-add textarea{flex:1;font-size:14px}
   .actions{display:flex;gap:8px;margin-top:10px}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
@@ -141,10 +146,23 @@
         }).join("") + '</div>';
       }
 
+      // Detail management adds for whoever picks this up — per Mark,
+      // 2026-09-08: "add more detail before assigning the work." Shown
+      // to everyone (it's for whoever does the fix), added by management
+      // only, right alongside the assign control since that's the point
+      // it's meant to be added at.
+      if (i.notes && i.notes.length) {
+        html += '<div class="notes">' + i.notes.map(function (n) {
+          return '<p class="note-line"><span class="note-who">' + esc(n.by || "Unknown") + '</span> — ' + esc(n.text) + '</p>';
+        }).join("") + '</div>';
+      }
+
       if (i.assigned_department) {
         html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_department.name) + '</p>';
       }
       if (me.is_manager) {
+        html += '<div class="note-add"><textarea id="note-' + i.id + '" rows="1" placeholder="Add detail for whoever picks this up (optional)"></textarea>' +
+          '<button class="small secondary" onclick="doAddNote(\'' + i.id + '\')">Add note</button></div>';
         // Assign to a department directly, per Mark, 2026-09-08 — not a
         // named person out of 40+ staff. Who actually does the work is
         // still captured, separately, when it's marked fixed below.
@@ -173,6 +191,19 @@
 
   window.toggleFix = function (id) {
     document.getElementById("card-" + id).classList.toggle("open");
+  };
+
+  window.doAddNote = function (id) {
+    var field = document.getElementById("note-" + id);
+    var text = field.value.trim();
+    if (!text) return;
+    fetch(FN + "?action=attach", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_id: id, added_by: me.id, note: text }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      loadIssues();
+    }).catch(function (e) { alert("Couldn't add the note — a fault in the page. (" + e.message + ")"); });
   };
 
   window.doAssign = function (id) {

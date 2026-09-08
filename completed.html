@@ -24,6 +24,9 @@
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
   .photos{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
   .photos a img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
+  .notes{margin-top:8px}
+  .note-line{background:#EFECE3;border-radius:6px;padding:6px 10px;font-size:13px;margin-top:4px}
+  .note-line .note-who{font-weight:600;color:#5B5344}
 </style></head><body>
 
 <h1>Completed Tasks</h1>
@@ -88,6 +91,12 @@
         html += '<div class="fixnote">' + esc(i.actual_action_taken || "") +
           (i.actual_part_used ? '<div class="part">Part used: ' + esc(i.actual_part_used) + '</div>' : '') +
           '</div>';
+      }
+
+      if (i.notes && i.notes.length) {
+        html += '<div class="notes">' + i.notes.map(function (n) {
+          return '<p class="note-line"><span class="note-who">' + esc(n.by || "Unknown") + '</span> — ' + esc(n.text) + '</p>';
+        }).join("") + '</div>';
       }
 
       if (i.photos && i.photos.length) {
