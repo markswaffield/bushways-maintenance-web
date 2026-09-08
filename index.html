@@ -59,7 +59,7 @@
     state.people = data.people; state.rooms = data.rooms;
     var p = document.getElementById("person");
     p.innerHTML = '<option value="">Select your name</option>' +
-      data.people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + ' — ' + esc(x.role) + '</option>'; }).join("");
+      data.people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
     var r = document.getElementById("room");
     r.innerHTML = '<option value="">Select a room</option>' +
       data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
