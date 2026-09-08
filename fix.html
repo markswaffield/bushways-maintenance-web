@@ -75,7 +75,9 @@
     // Defaults the view to their own department, per Mark, 2026-09-08 —
     // "makes it easy for a department to easily see what it needs to
     // focus on." Still switchable to any department, or "All", below.
-    viewFilter = me.department || "";
+    // Management defaults to "All" instead — triaging and handing out
+    // work across every department is the actual job, not one queue.
+    viewFilter = me.is_manager ? "" : (me.department || "");
     document.getElementById("start").hidden = true;
     document.getElementById("list").hidden = false;
     loadIssues();
