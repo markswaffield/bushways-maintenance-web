@@ -43,8 +43,6 @@
   var people = [];
   var departments = [];
   var me = null;
-  var lastIssues = [];
-  var deptFilter = "";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -81,8 +79,7 @@
     var list = document.getElementById("list");
     list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
-      lastIssues = data.issues;
-      renderList(lastIssues);
+      renderList(data.issues);
     }).catch(function (e) {
       list.innerHTML += "<p>Couldn't load the list — a fault in the page. (" + e.message + ")</p>";
     });
@@ -91,16 +88,6 @@
   function renderList(issues) {
     var list = document.getElementById("list");
     var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a></p>';
-
-    // Narrows who shows up in every "Assign to" list below — Mark,
-    // 2026-09-08: with 40+ real staff, a manager needs to narrow by
-    // department before picking a name, not scroll a list of everyone.
-    if (me.is_manager && departments.length) {
-      html += '<label>Filter "Assign to" by department</label><select id="deptFilter" onchange="setDeptFilter(this.value)">' +
-        '<option value="">All departments</option>' +
-        departments.map(function (d) { return '<option value="' + esc(d) + '"' + (d === deptFilter ? " selected" : "") + '>' + esc(d) + '</option>'; }).join("") +
-        '</select>';
-    }
 
     html += "<h2>Open faults <span style='color:#8C6A2F;font-weight:400'>" + issues.length + "</span></h2>";
     if (!issues.length) html += '<p class="empty">Nothing open.</p>';
@@ -112,20 +99,17 @@
         (i.note || i.suggested_action ? esc(i.note || i.suggested_action) : '') +
         '<p class="meta">raised by ' + esc(i.raised_by) + ', ' + timeAgo(i.raised_at) + '</p>';
 
-      if (i.assigned_to) {
-        html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_to.name) + '</p>';
+      if (i.assigned_department) {
+        html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_department.name) + '</p>';
       }
       if (me.is_manager) {
-        // Always keep whoever's currently assigned in the list, even if
-        // they're outside the department filter — narrowing who you can
-        // pick shouldn't hide who's already picked.
-        var candidates = people.filter(function (p) {
-          return !deptFilter || p.department === deptFilter || (i.assigned_to && p.id === i.assigned_to.id);
-        });
+        // Assign to a department directly, per Mark, 2026-09-08 — not a
+        // named person out of 40+ staff. Who actually does the work is
+        // still captured, separately, when it's marked fixed below.
         html += '<div class="assign-row"><select id="assign-' + i.id + '">' +
           '<option value="">Unassigned</option>' +
-          candidates.map(function (p) {
-            return '<option value="' + p.id + '"' + (i.assigned_to && i.assigned_to.id === p.id ? " selected" : "") + '>' + esc(p.name) + (p.department ? ' — ' + esc(p.department) : '') + '</option>';
+          departments.map(function (d) {
+            return '<option value="' + d.id + '"' + (i.assigned_department && i.assigned_department.id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
           }).join("") +
           '</select><button class="small secondary" onclick="doAssign(\'' + i.id + '\')">Assign</button></div>';
       }
@@ -144,20 +128,15 @@
     list.innerHTML = html;
   }
 
-  window.setDeptFilter = function (v) {
-    deptFilter = v;
-    renderList(lastIssues);
-  };
-
   window.toggleFix = function (id) {
     document.getElementById("card-" + id).classList.toggle("open");
   };
 
   window.doAssign = function (id) {
-    var assignedTo = document.getElementById("assign-" + id).value;
+    var departmentId = document.getElementById("assign-" + id).value;
     fetch(FN + "?action=assign", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ issue_id: id, assigned_to: assignedTo, by_person_id: me.id }),
+      body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, by_person_id: me.id }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { alert(out.error); return; }
       loadIssues();
