@@ -1,0 +1,86 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp — To-Do</title>
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:26px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline}
+  h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:13px;margin:10px 0 0}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
+  .card .item{font-size:14px;font-weight:600;margin:0 0 3px}
+  .card .meta{font-size:12.5px;color:#6B6455;margin:0 0 2px}
+  .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F;margin-right:6px}
+  .card .action{font-size:12.5px;color:#43594A;margin-top:4px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
+  .badge.overdue{background:#F4CFC2;color:#A8502F}
+  .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
+  .badge.upcoming{background:#E3DFD3;color:#5B5344}
+  .sched-row{display:flex;justify-content:space-between;align-items:center}
+  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+</style></head><body>
+
+<h1>To-Do — Chobe Elephant Camp</h1>
+<p class="sub">Open faults and scheduled maintenance, live from the database.</p>
+<p class="nav"><a href="./">← Run an inspection</a></p>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard";
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function timeAgo(iso) {
+    var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 60) return mins + "m ago";
+    if (mins < 1440) return Math.round(mins / 60) + "h ago";
+    return Math.round(mins / 1440) + "d ago";
+  }
+  function dueText(s) {
+    if (s.days_until < 0) return "overdue by " + Math.abs(s.days_until) + " day" + (Math.abs(s.days_until) === 1 ? "" : "s");
+    if (s.days_until === 0) return "due now";
+    return "due in " + s.days_until + " day" + (s.days_until === 1 ? "" : "s");
+  }
+  function badgeText(status) {
+    return { overdue: "Overdue", due_soon: "Due soon", upcoming: "Upcoming" }[status];
+  }
+
+  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    var html = "";
+
+    html += '<h2>Open faults <span class="count">' + data.issues.length + '</span></h2>';
+    if (!data.issues.length) {
+      html += '<p class="empty">Nothing open — every recorded fault has been resolved.</p>';
+    }
+    data.issues.forEach(function (i) {
+      html += '<div class="card">' +
+        '<p class="item">' + esc(i.target) + (i.item_text ? " — " + esc(i.item_text) : "") + '</p>' +
+        (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
+        '<p class="meta">raised by ' + esc(i.raised_by) + ', ' + timeAgo(i.raised_at) + '</p>' +
+        (i.note ? '<p class="action">' + esc(i.note) + '</p>' : '') +
+        (i.suggested_action ? '<p class="action">Suggested: ' + esc(i.suggested_action) + '</p>' : '') +
+        '</div>';
+    });
+
+    html += '<h2>Scheduled maintenance <span class="count">' + data.schedules.length + '</span></h2>';
+    if (!data.schedules.length) {
+      html += '<p class="empty">Nothing scheduled yet.</p>';
+    }
+    data.schedules.forEach(function (s) {
+      html += '<div class="card sched-row"><div>' +
+        '<p class="item">' + esc(s.name) + '</p>' +
+        '<p class="meta">' + esc(s.interval) + ' — ' + dueText(s) + '</p>' +
+        '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
+    });
+
+    document.getElementById("app").innerHTML = html;
+  }).catch(function (e) {
+    document.getElementById("app").innerHTML = "<p>Couldn't load the to-do list — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
+</script>
+</body></html>
