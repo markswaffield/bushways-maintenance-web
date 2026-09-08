@@ -64,7 +64,9 @@
       group.faults.forEach(function (f) {
         html += '<p class="fault-line">' + esc(f.label) +
           (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
-          (f.action ? ' — ' + esc(f.action) : '') + '</p>';
+          (f.action ? ' — ' + esc(f.action) : '') +
+          (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(f.assigned_department) + '</span>' : '') +
+          '</p>';
       });
       html += '<p class="meta">' + esc(group.raised_by) + ', ' + timeAgo(group.raised_at) + '</p>' +
         '</div>';
