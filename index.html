@@ -1,0 +1,153 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp</title>
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:22px 0 8px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 20px}
+  label{display:block;font-size:13px;color:#5B5344;margin:14px 0 4px}
+  select,input[type=text],textarea{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
+  button{width:100%;padding:14px;font-size:16px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;margin-top:22px}
+  .item{border-bottom:1px solid #E3DFD3;padding:12px 0}
+  .item label.main{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#232019;margin:0;cursor:pointer}
+  .item input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
+  .details{display:none;margin:10px 0 0 30px;padding:10px;background:#EFECE3;border-radius:6px}
+  .item.open .details{display:block}
+  .note{color:#8C6A2F;font-size:12px;margin-top:2px}
+  .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<div id="start">
+  <h1>Guest Room Inspection</h1>
+  <p class="sub">Chobe Elephant Camp — minimal test screen</p>
+  <label>Who are you?</label>
+  <select id="person"><option value="">Loading…</option></select>
+  <label>Which room?</label>
+  <select id="room"><option value="">Loading…</option></select>
+  <button id="startBtn">Start inspection</button>
+</div>
+
+<div id="checklist" hidden></div>
+
+<div id="done" hidden>
+  <h1>Inspection recorded</h1>
+  <div class="confirm" id="doneBox"></div>
+  <p><a href="#" id="again">Start another</a></p>
+</div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  var state = { people: [], rooms: [], sections: [] };
+
+  function el(tag, attrs, html) {
+    var e = document.createElement(tag);
+    for (var k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    state.people = data.people; state.rooms = data.rooms;
+    var p = document.getElementById("person");
+    p.innerHTML = '<option value="">Select your name</option>' +
+      data.people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + ' — ' + esc(x.role) + '</option>'; }).join("");
+    var r = document.getElementById("room");
+    r.innerHTML = '<option value="">Select a room</option>' +
+      data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
+  }).catch(function (e) {
+    document.getElementById("start").innerHTML = "<p>Couldn't load — check your connection and reload. (" + esc(e.message) + ")</p>";
+  });
+
+  document.getElementById("startBtn").onclick = function () {
+    var personId = document.getElementById("person").value;
+    var roomId = document.getElementById("room").value;
+    if (!personId || !roomId) { alert("Pick your name and a room first."); return; }
+    fetch(FN + "?action=checklist&person=" + personId + "&room=" + roomId)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { renderChecklist(data, personId, roomId); });
+  };
+
+  function renderChecklist(data, personId, roomId) {
+    document.getElementById("start").hidden = true;
+    var c = document.getElementById("checklist");
+    c.hidden = false;
+    var html = '<h1>Guest Room Inspection</h1>' +
+      '<p class="sub">Chobe Elephant Camp, ' + esc(data.room_label) + ' — leave an item alone if it\'s fine (tool-local D-023)</p>';
+    data.sections.forEach(function (s) {
+      html += "<h2>" + esc(s.name) + "</h2>";
+      s.items.forEach(function (item) {
+        if (item.kind === "reading") {
+          html += '<div class="item"><label class="main">' + esc(item.text) + '</label>' +
+            '<input type="text" inputmode="numeric" data-value="' + item.id + '" placeholder="Reading"></div>';
+        } else {
+          var faultOptions = item.faults.length
+            ? '<label>What\'s wrong?</label><select data-fault="' + item.id + '"><option value="">Choose one</option>' +
+              item.faults.map(function (f) {
+                return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+              }).join("") + '</select>'
+            : "";
+          html += '<div class="item" data-item="' + item.id + '">' +
+            '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
+            '<div class="details">' + faultOptions +
+            '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
+            '</div></div>';
+        }
+      });
+    });
+    html += '<button id="submitBtn">Submit inspection</button>';
+    c.innerHTML = html;
+
+    c.querySelectorAll("[data-failed]").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        cb.closest(".item").classList.toggle("open", cb.checked);
+      });
+    });
+
+    document.getElementById("submitBtn").onclick = function () {
+      var results = [];
+      data.sections.forEach(function (s) {
+        s.items.forEach(function (item) {
+          if (item.kind === "reading") {
+            var v = c.querySelector('[data-value="' + item.id + '"]').value;
+            if (v) results.push({ item_id: item.id, value: Number(v) });
+          } else {
+            var failed = c.querySelector('[data-failed="' + item.id + '"]').checked;
+            if (failed) {
+              var faultEl = c.querySelector('[data-fault="' + item.id + '"]');
+              results.push({
+                item_id: item.id, failed: true,
+                fault_type_id: faultEl ? faultEl.value : null,
+                action_if_failed: c.querySelector('[data-action="' + item.id + '"]').value,
+              });
+            }
+          }
+        });
+      });
+      fetch(FN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ person_id: personId, room_id: roomId, template_id: data.template_id, results: results }),
+      }).then(function (r) { return r.json(); }).then(function (out) {
+        c.hidden = true;
+        document.getElementById("done").hidden = false;
+        document.getElementById("doneBox").innerHTML =
+          "<p>" + esc(out.room_label) + ", Chobe Elephant Camp.</p>" +
+          "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
+          '<p class="note">inspection id: ' + esc(out.inspection_id) + "</p>";
+      });
+    };
+  }
+
+  document.getElementById("again").onclick = function (e) {
+    e.preventDefault();
+    location.reload();
+  };
+</script>
+</body></html>
