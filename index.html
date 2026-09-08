@@ -62,7 +62,7 @@
     r.innerHTML = '<option value="">Select a room</option>' +
       data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
   }).catch(function (e) {
-    document.getElementById("start").innerHTML = "<p>Couldn't load — check your connection and reload. (" + esc(e.message) + ")</p>";
+    document.getElementById("start").innerHTML = "<p>Couldn't reach the checklist data. This is a fault in the page, not your connection or phone — please tell Mark/Claude. (" + esc(e.message) + ")</p>";
   });
 
   document.getElementById("startBtn").onclick = function () {
@@ -71,7 +71,8 @@
     if (!personId || !roomId) { alert("Pick your name and a room first."); return; }
     fetch(FN + "?action=checklist&person=" + personId + "&room=" + roomId)
       .then(function (r) { return r.json(); })
-      .then(function (data) { renderChecklist(data, personId, roomId); });
+      .then(function (data) { renderChecklist(data, personId, roomId); })
+      .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
   };
 
   function renderChecklist(data, personId, roomId) {
@@ -141,6 +142,8 @@
           "<p>" + esc(out.room_label) + ", Chobe Elephant Camp.</p>" +
           "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
           '<p class="note">inspection id: ' + esc(out.inspection_id) + "</p>";
+      }).catch(function (e) {
+        alert("Couldn't submit — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
       });
     };
   }
