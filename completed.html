@@ -8,7 +8,19 @@
   h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
   .nav{font-size:13px;margin:10px 0 0}
-  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
+  .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:10px;background:#fff}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section label:first-of-type{margin-top:0}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  .area-group{margin-top:22px}
+  .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
+  .target-group{margin-top:14px}
+  .target-group .target-heading{font-size:13.5px;font-weight:700;color:#5B5344;margin:0 0 6px}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:6px}
   .card .item{font-size:14.5px;font-weight:700;margin:0 0 4px}
   .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F;margin-right:6px}
   .flow{margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
@@ -27,6 +39,7 @@
   .notes{margin-top:8px}
   .note-line{background:#EFECE3;border-radius:6px;padding:6px 10px;font-size:13px;margin-top:4px}
   .note-line .note-who{font-weight:600;color:#5B5344}
+  [hidden]{display:none!important}
 </style></head><body>
 
 <h1>Completed Tasks</h1>
@@ -37,6 +50,18 @@
 
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=completed_issues";
+  var lastData = null;
+  // Same grouping and filters as the to-do list (tool-local D-034),
+  // per Mark, 2026-09-09: "can we apply the same ordering and filters
+  // to the Completed Task page." One difference: the relevant date
+  // here is when a fault was *resolved*, not raised — that's the
+  // page's own subject (a completed-tasks record) and already what it
+  // sorted by before this existed.
+  var dateDirection = "newest"; // newest | oldest
+  var dateFrom = "", dateTo = "";
+  var filterAreaId = "";
+  var filterTarget = "";
+  var filterDepartmentId = "";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -52,65 +77,205 @@
   }
 
   fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    lastData = data;
+    renderFilters(data);
+    renderIssues(applyFilters(data));
+  }).catch(function (e) {
+    document.getElementById("app").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
+
+  function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
+  function targetsIn(issues, areaId) {
+    var seen = {}, out = [];
+    (issues || []).forEach(function (f) {
+      if (f.target && f.area_id === areaId && !seen[f.target]) { seen[f.target] = true; out.push(f.target); }
+    });
+    return out.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  }
+
+  function renderFilters(data) {
+    var areas = data.areas || [];
+    var departments = data.departments || [];
+
+    var html = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own history ' +
+      (dateDirection === "oldest" ? "oldest resolved first" : "newest resolved first") + '.</p>';
+
+    html += '<div class="filter-section"><div class="title">Date resolved</div>' +
+      '<label>Order (within each target)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
+      '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
+      '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
+      '</select>' +
+      '<label>Custom date range (optional)</label>' +
+      '<div class="daterange">' +
+      '<input type="date" id="dateFrom" value="' + esc(dateFrom) + '" onchange="onDateRangeChange()">' +
+      '<span>to</span>' +
+      '<input type="date" id="dateTo" value="' + esc(dateTo) + '" onchange="onDateRangeChange()">' +
+      '</div></div>';
+
+    var targets = filterAreaId ? targetsIn(data.issues, filterAreaId) : [];
+    html += '<div class="filter-section"><div class="title">Maintenance area</div>' +
+      '<label>Area</label><select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All areas</option>' +
+      topLevelAreas(areas).map(function (a) {
+        return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>';
+    if (filterAreaId && targets.length) {
+      html += '<label>Target</label><select id="targetFilter" onchange="onTargetFilterChange()">' +
+        '<option value="">All targets in this area</option>' +
+        targets.map(function (t) {
+          return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
+        }).join("") + '</select>';
+    }
+    html += '</div>';
+
+    html += '<div class="filter-section"><div class="title">Department</div>' +
+      '<label>Department</label><select id="departmentFilter" onchange="onDepartmentFilterChange()">' +
+      '<option value="">All departments</option>' +
+      departments.map(function (d) {
+        return '<option value="' + d.id + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select></div>';
+
+    var existing = document.getElementById("filtersRow");
+    if (existing) { existing.outerHTML = '<div id="filtersRow">' + html + '</div>'; }
+    else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow">' + html + '</div>'); }
+  }
+
+  window.onDateDirectionChange = function () {
+    dateDirection = document.getElementById("dateDirection").value;
+    renderFilters(lastData);
+    renderIssues(applyFilters(lastData));
+  };
+  window.onDateRangeChange = function () {
+    dateFrom = document.getElementById("dateFrom").value;
+    dateTo = document.getElementById("dateTo").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onAreaFilterChange = function () {
+    filterAreaId = document.getElementById("areaFilter").value;
+    filterTarget = "";
+    renderFilters(lastData);
+    renderIssues(applyFilters(lastData));
+  };
+  window.onTargetFilterChange = function () {
+    filterTarget = document.getElementById("targetFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onDepartmentFilterChange = function () {
+    filterDepartmentId = document.getElementById("departmentFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+
+  function applyFilters(data) {
+    var issues = (data.issues || []).filter(function (f) {
+      if (filterDepartmentId && f.assigned_department_id !== filterDepartmentId) return false;
+      if (dateFrom && new Date(f.resolved_at) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(f.resolved_at) > new Date(dateTo + "T23:59:59")) return false;
+      if (filterAreaId && f.area_id !== filterAreaId) return false;
+      if (filterTarget && f.target !== filterTarget) return false;
+      return true;
+    });
+    return { issues: issues };
+  }
+
+  function sortNamesOtherLast(names, numeric) {
+    return names.slice().sort(function (a, b) {
+      if (a === "Other" && b !== "Other") return 1;
+      if (b === "Other" && a !== "Other") return -1;
+      return numeric ? a.localeCompare(b, undefined, { numeric: true }) : a.localeCompare(b);
+    });
+  }
+
+  function groupForDisplay(issues) {
+    var byArea = {};
+    issues.forEach(function (f) {
+      var areaName = f.area || "Other";
+      if (!byArea[areaName]) byArea[areaName] = {};
+      var targetName = f.target || "Other";
+      if (!byArea[areaName][targetName]) byArea[areaName][targetName] = [];
+      byArea[areaName][targetName].push(f);
+    });
+    return sortNamesOtherLast(Object.keys(byArea), false).map(function (areaName) {
+      var targets = byArea[areaName];
+      return {
+        name: areaName,
+        targets: sortNamesOtherLast(Object.keys(targets), true).map(function (targetName) {
+          var faults = targets[targetName].slice().sort(function (a, b) {
+            return dateDirection === "oldest"
+              ? new Date(a.resolved_at) - new Date(b.resolved_at)
+              : new Date(b.resolved_at) - new Date(a.resolved_at);
+          });
+          return { name: targetName, faults: faults };
+        }),
+      };
+    });
+  }
+
+  function renderIssues(data) {
+    var filtered = filterAreaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
     var html = '<h2>Completed <span class="count">' + data.issues.length + '</span></h2>';
-    if (!data.issues.length) html += '<p class="empty">Nothing completed yet — fix something on the fix-a-fault page and it lands here.</p>';
+    if (!data.issues.length) {
+      html += '<p class="empty">' + (filtered ? "Nothing completed for this filter." : "Nothing completed yet — fix something on the fix-a-fault page and it lands here.") + '</p>';
+    }
 
-    data.issues.forEach(function (i) {
-      html += '<div class="card">' +
-        '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) +
-        (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : '') + '</p>' +
-        (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
-        (i.note ? esc(i.note) : '');
+    groupForDisplay(data.issues).forEach(function (area) {
+      html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
+      area.targets.forEach(function (target) {
+        html += '<div class="target-group"><p class="target-heading">' + esc(target.name) + '</p>';
+        target.faults.forEach(function (i) {
+          html += '<div class="card">' +
+            '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) +
+            (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : '') + '</p>' +
+            (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
+            (i.note ? esc(i.note) : '');
 
-      if (i.audio_url) {
-        html += '<audio controls src="' + esc(i.audio_url) + '" style="width:100%;margin-top:8px"></audio>';
-      }
+          if (i.audio_url) {
+            html += '<audio controls src="' + esc(i.audio_url) + '" style="width:100%;margin-top:8px"></audio>';
+          }
 
-      html += '<div class="flow">';
+          html += '<div class="flow">';
+          html += '<div class="step"><span class="dot"></span><span class="text">' +
+            'Raised by <span class="who">' + esc(i.raised_by) + '</span>' +
+            '<span class="when">' + when(i.raised_at) + '</span></span></div>';
 
-      html += '<div class="step"><span class="dot"></span><span class="text">' +
-        'Raised by <span class="who">' + esc(i.raised_by) + '</span>' +
-        '<span class="when">' + when(i.raised_at) + '</span></span></div>';
+          if (i.assigned_department) {
+            html += '<div class="step"><span class="dot"></span><span class="text">' +
+              'Assigned to <span class="who">' + esc(i.assigned_department) + '</span>' +
+              (i.assigned_at ? '<span class="when">' + when(i.assigned_at) + '</span>' : '<span class="when">no date on record</span>') +
+              '</span></div>';
+          } else {
+            html += '<div class="step pending"><span class="dot"></span><span class="text">Never formally assigned</span></div>';
+          }
 
-      if (i.assigned_department) {
-        html += '<div class="step"><span class="dot"></span><span class="text">' +
-          'Assigned to <span class="who">' + esc(i.assigned_department) + '</span>' +
-          (i.assigned_at ? '<span class="when">' + when(i.assigned_at) + '</span>' : '<span class="when">no date on record</span>') +
-          '</span></div>';
-      } else {
-        html += '<div class="step pending"><span class="dot"></span><span class="text">Never formally assigned</span></div>';
-      }
+          html += '<div class="step"><span class="dot"></span><span class="text">' +
+            'Fixed by <span class="who">' + esc(i.resolved_by) + '</span>' +
+            '<span class="when">' + when(i.resolved_at) + '</span></span></div>';
+          html += '</div>';
 
-      html += '<div class="step"><span class="dot"></span><span class="text">' +
-        'Fixed by <span class="who">' + esc(i.resolved_by) + '</span>' +
-        '<span class="when">' + when(i.resolved_at) + '</span></span></div>';
+          if (i.actual_action_taken || i.actual_part_used) {
+            html += '<div class="fixnote">' + esc(i.actual_action_taken || "") +
+              (i.actual_part_used ? '<div class="part">Part used: ' + esc(i.actual_part_used) + '</div>' : '') +
+              '</div>';
+          }
 
-      html += '</div>';
+          if (i.notes && i.notes.length) {
+            html += '<div class="notes">' + i.notes.map(function (n) {
+              return '<p class="note-line"><span class="note-who">' + esc(n.by || "Unknown") + '</span> — ' + esc(n.text) + '</p>';
+            }).join("") + '</div>';
+          }
 
-      if (i.actual_action_taken || i.actual_part_used) {
-        html += '<div class="fixnote">' + esc(i.actual_action_taken || "") +
-          (i.actual_part_used ? '<div class="part">Part used: ' + esc(i.actual_part_used) + '</div>' : '') +
-          '</div>';
-      }
+          if (i.photos && i.photos.length) {
+            html += '<div class="photos">' + i.photos.map(function (url) {
+              return '<a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '"></a>';
+            }).join("") + '</div>';
+          }
 
-      if (i.notes && i.notes.length) {
-        html += '<div class="notes">' + i.notes.map(function (n) {
-          return '<p class="note-line"><span class="note-who">' + esc(n.by || "Unknown") + '</span> — ' + esc(n.text) + '</p>';
-        }).join("") + '</div>';
-      }
-
-      if (i.photos && i.photos.length) {
-        html += '<div class="photos">' + i.photos.map(function (url) {
-          return '<a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '"></a>';
-        }).join("") + '</div>';
-      }
-
+          html += '</div>';
+        });
+        html += '</div>';
+      });
       html += '</div>';
     });
 
     document.getElementById("app").innerHTML = html;
-  }).catch(function (e) {
-    document.getElementById("app").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
-  });
+  }
 </script>
 </body></html>
