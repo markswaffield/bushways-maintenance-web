@@ -43,7 +43,7 @@
   // against what's already loaded, same pattern as Fix a Fault's
   // existing department filter — the list is small enough that a
   // second fetch per filter change isn't worth it.
-  var filterAreaId = "", filterSubareaId = "", filterWindow = "", sortMode = "newest";
+  var filterAreaId = "", filterSubareaId = "", filterWindow = "", filterTarget = "", sortMode = "newest";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -83,10 +83,25 @@
 
   function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
   function subAreasOf(areas, areaId) { return (areas || []).filter(function (a) { return a.parent_area_id === areaId; }); }
+  // Every distinct heading already on the board — "Room 1," "Room 2,"
+  // and so on — sorted numerically (so Room 2 sorts before Room 10,
+  // not after) rather than alphabetically. Built from what's actually
+  // open rather than the full room catalogue, so this never lists a
+  // room with nothing currently on it.
+  function targetsOf(issues) {
+    var seen = {}, out = [];
+    (issues || []).forEach(function (g) { if (g.target && !seen[g.target]) { seen[g.target] = true; out.push(g.target); } });
+    return out.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  }
 
   function renderFilters(data) {
     var areas = data.areas || [];
+    var targets = targetsOf(data.issues);
     var html = '<div class="filters">' +
+      '<select id="targetFilter" onchange="onTargetFilterChange()"><option value="">All rooms/targets</option>' +
+      targets.map(function (t) {
+        return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
+      }).join("") + '</select>' +
       '<select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All areas</option>' +
       topLevelAreas(areas).map(function (a) {
         return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
@@ -105,6 +120,7 @@
       '<select id="sortMode" onchange="onSortChange()">' +
       '<option value="newest"' + (sortMode === "newest" ? " selected" : "") + '>Newest first</option>' +
       '<option value="oldest"' + (sortMode === "oldest" ? " selected" : "") + '>Oldest first</option>' +
+      '<option value="target"' + (sortMode === "target" ? " selected" : "") + '>By room/heading</option>' +
       '<option value="area"' + (sortMode === "area" ? " selected" : "") + '>By maintenance area</option>' +
       '</select>' +
       '</div>';
@@ -113,6 +129,10 @@
     else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow">' + html + '</div>'); }
   }
 
+  window.onTargetFilterChange = function () {
+    filterTarget = document.getElementById("targetFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
   window.onAreaFilterChange = function () {
     filterAreaId = document.getElementById("areaFilter").value;
     filterSubareaId = ""; // a sub-area from the old area no longer applies
@@ -134,6 +154,7 @@
 
   function applyFilters(data) {
     var issues = (data.issues || []).filter(function (g) {
+      if (filterTarget && g.target !== filterTarget) return false;
       if (filterAreaId && g.area_id !== filterAreaId) return false;
       if (filterSubareaId && g.sub_area_id !== filterSubareaId) return false;
       if (!withinWindow(g.raised_at, filterWindow)) return false;
@@ -141,6 +162,10 @@
     });
     issues = issues.slice().sort(function (a, b) {
       if (sortMode === "oldest") return new Date(a.raised_at) - new Date(b.raised_at);
+      if (sortMode === "target") {
+        var at = a.target || "", bt = b.target || "";
+        return at !== bt ? at.localeCompare(bt, undefined, { numeric: true }) : new Date(b.raised_at) - new Date(a.raised_at);
+      }
       if (sortMode === "area") {
         var an = a.area || "", bn = b.area || "";
         return an !== bn ? an.localeCompare(bn) : new Date(b.raised_at) - new Date(a.raised_at);
@@ -155,7 +180,7 @@
     var faultCount = data.issues.reduce(function (n, g) { return n + g.faults.length; }, 0);
     html += '<h2>Open faults <span class="count">' + faultCount + '</span></h2>';
     if (!data.issues.length) {
-      html += '<p class="empty">Nothing open' + (filterAreaId || filterWindow ? " for this filter" : " — every recorded fault has been resolved") + '.</p>';
+      html += '<p class="empty">Nothing open' + (filterTarget || filterAreaId || filterWindow ? " for this filter" : " — every recorded fault has been resolved") + '.</p>';
     }
     data.issues.forEach(function (group) {
       html += '<div class="card">' + '<p class="item">' + esc(group.target) + '</p>' +
