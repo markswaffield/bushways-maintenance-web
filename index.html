@@ -57,12 +57,11 @@
 </div>
 
 <div id="roomStep" hidden>
-  <h1 id="roomStepTitle"></h1>
-  <p class="sub" id="roomStepSub"></p>
+  <h1>Guest Room Inspection</h1>
+  <p class="sub">Chobe Elephant Camp — which room are you checking?</p>
   <label>Which room?</label>
   <select id="room"><option value="">Select a room</option></select>
-  <div class="urgent-row" id="urgentRow" hidden><input type="checkbox" id="urgent"><label for="urgent">Urgent — needs attention today</label></div>
-  <button id="roomContinueBtn">Continue</button>
+  <button id="roomContinueBtn">Start inspection</button>
   <button class="secondary" id="backFromRoom">← Choose again</button>
 </div>
 
@@ -72,7 +71,9 @@
 
 <div id="reportForm" hidden>
   <h1>Report a Fault</h1>
-  <p class="sub" id="reportRoomLabel"></p>
+  <p class="sub">Chobe Elephant Camp — say or type the room or department first, then what's wrong, e.g. "Room 5, towel rail loose" or "Guest kitchen, light bulbs broken."</p>
+
+  <div class="urgent-row"><input type="checkbox" id="reportUrgent"><label for="reportUrgent">Urgent — needs attention today</label></div>
 
   <div id="recordIdle">
     <button id="recordBtn">🎙️ Start recording</button>
@@ -87,9 +88,10 @@
     <audio controls id="player"></audio>
     <button class="secondary" id="rerecordBtn">🔁 Re-record</button>
   </div>
+  <p class="note" id="transcribeStatus" hidden></p>
 
-  <label>Add a note (optional)</label>
-  <textarea id="textNote" rows="3" placeholder="Type what's wrong, if that's easier than recording"></textarea>
+  <label id="noteLabel">Add a note (optional)</label>
+  <textarea id="textNote" rows="3" placeholder="Type what's wrong, if that's easier than recording — room or department first, e.g. Room 5, towel rail loose"></textarea>
 
   <label>Add a photo (optional)</label>
   <input type="file" accept="image/*" capture="environment" id="reportPhoto">
@@ -107,7 +109,7 @@
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
   var state = { people: [], rooms: [], areas: [] };
-  var myPersonId = null, pendingMode = null, pendingRoomId = null;
+  var myPersonId = null, pendingRoomId = null;
   var mediaRecorder, chunks = [], recordedBlob = null, timerInterval, seconds = 0;
   var MAX_SECONDS = 120; // a voice note, not a long recording — keeps uploads small
 
@@ -148,12 +150,12 @@
     var areaVal = document.getElementById("area").value;
     if (!myPersonId || !areaVal) { alert("Pick your name and what you'd like to do first."); return; }
     if (areaVal === "__report__") {
-      enterRoomStep("report");
+      enterReportForm();
       return;
     }
     var area = state.areas.find(function (x) { return x.id === areaVal; });
     if (area && area.available) {
-      enterRoomStep("checklist");
+      enterRoomStep();
     } else {
       document.getElementById("unavailableMsg").textContent =
         (area ? area.name : "This area") + " doesn't have a digital checklist yet — coming soon. For now, you can still flag anything here as a fault.";
@@ -161,20 +163,14 @@
     }
   };
 
-  document.getElementById("goReportBtn").onclick = function () { enterRoomStep("report"); };
+  document.getElementById("goReportBtn").onclick = function () { enterReportForm(); };
   document.getElementById("backFromUnavailable").onclick = function () { show("start"); };
   document.getElementById("backFromRoom").onclick = function () { show("start"); };
   document.getElementById("backFromReport").onclick = function () { show("start"); };
 
-  function enterRoomStep(mode) {
-    pendingMode = mode;
-    document.getElementById("roomStepTitle").textContent = mode === "checklist" ? "Guest Room Inspection" : "Report a Fault";
-    document.getElementById("roomStepSub").textContent = mode === "checklist"
-      ? "Chobe Elephant Camp — which room are you checking?"
-      : "Chobe Elephant Camp — which room is this about?";
-    document.getElementById("urgentRow").hidden = mode !== "report";
-    document.getElementById("urgent").checked = false;
-    document.getElementById("roomContinueBtn").textContent = mode === "checklist" ? "Start inspection" : "Continue";
+  // Only the Guest Rooms checklist uses this step now — Report a fault
+  // no longer asks which room at all, see enterReportForm below.
+  function enterRoomStep() {
     show("roomStep");
   }
 
@@ -182,14 +178,10 @@
     var roomId = document.getElementById("room").value;
     if (!roomId) { alert("Pick a room first."); return; }
     pendingRoomId = roomId;
-    if (pendingMode === "checklist") {
-      fetch(FN + "?action=checklist&person=" + myPersonId + "&room=" + roomId)
-        .then(function (r) { return r.json(); })
-        .then(function (data) { renderChecklist(data, myPersonId, roomId); })
-        .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
-    } else {
-      enterReportForm(roomId);
-    }
+    fetch(FN + "?action=checklist&person=" + myPersonId + "&room=" + roomId)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { renderChecklist(data, myPersonId, roomId); })
+      .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
   };
 
   // ------------------------------------------------------------------
@@ -220,24 +212,31 @@
 
   // ------------------------------------------------------------------
   // Report a Fault — voice, a typed note, a photo, or any mix of the
-  // three (tool-local D-029's 2026-09-09 follow-up). Reached from the
-  // combined area picker now, not a separate page — per Mark: "I would
-  // prefer to embed or have this page included on the inspection page."
+  // three (tool-local D-031). Reached from the combined area picker now,
+  // not a separate page — per Mark: "I would prefer to embed or have
+  // this page included on the inspection page." No room picker here at
+  // all — per Mark's follow-up, 2026-09-09: "the person leaving the
+  // voice note will state what room or what department first and then
+  // the fault," as part of what's said, not a field picked beforehand.
   // ------------------------------------------------------------------
-  function enterReportForm(roomId) {
-    var room = state.rooms.find(function (r) { return r.id === roomId; });
-    var urgent = document.getElementById("urgent").checked;
-    document.getElementById("reportRoomLabel").textContent =
-      (room ? room.label : "") + ", Chobe Elephant Camp" + (urgent ? " — marked urgent" : "");
+  var noteWasAutoFilled = false;
+
+  function enterReportForm() {
     recordedBlob = null;
+    noteWasAutoFilled = false;
+    document.getElementById("reportUrgent").checked = false;
     document.getElementById("recordIdle").hidden = false;
     document.getElementById("recordingInProgress").hidden = true;
     document.getElementById("recordedBox").hidden = true;
     document.getElementById("micError").textContent = "";
+    document.getElementById("transcribeStatus").hidden = true;
+    document.getElementById("noteLabel").textContent = "Add a note (optional)";
     document.getElementById("textNote").value = "";
     document.getElementById("reportPhoto").value = "";
     show("reportForm");
   }
+
+  document.getElementById("textNote").addEventListener("input", function () { noteWasAutoFilled = false; });
 
   document.getElementById("recordBtn").onclick = function () {
     document.getElementById("micError").textContent = "";
@@ -251,6 +250,7 @@
         document.getElementById("player").src = URL.createObjectURL(recordedBlob);
         document.getElementById("recordingInProgress").hidden = true;
         document.getElementById("recordedBox").hidden = false;
+        transcribeAndFill();
       };
       mediaRecorder.start();
       seconds = 0;
@@ -277,7 +277,43 @@
     recordedBlob = null;
     document.getElementById("recordedBox").hidden = true;
     document.getElementById("recordIdle").hidden = false;
+    if (noteWasAutoFilled) {
+      document.getElementById("textNote").value = "";
+      document.getElementById("noteLabel").textContent = "Add a note (optional)";
+      noteWasAutoFilled = false;
+    }
   };
+
+  // Transcribes right after recording stops — per Mark, 2026-09-09:
+  // "there was no option to transcribe the voice message and commit it
+  // as text." Shows the reading in the same note box, editable, so it's
+  // read and corrected before anything is submitted, not just produced
+  // silently after the fact.
+  function transcribeAndFill() {
+    var statusEl = document.getElementById("transcribeStatus");
+    statusEl.hidden = false;
+    statusEl.textContent = "Transcribing…";
+    blobToDataUrl(recordedBlob).then(function (dataUrl) {
+      return fetch(FN + "?action=transcribe", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ audio_data_url: dataUrl }),
+      });
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.transcript) {
+        statusEl.hidden = true;
+        var ta = document.getElementById("textNote");
+        if (!ta.value.trim() || noteWasAutoFilled) {
+          ta.value = out.transcript;
+          noteWasAutoFilled = true;
+          document.getElementById("noteLabel").textContent = "Transcribed — check it's right, edit if not";
+        }
+      } else {
+        statusEl.textContent = "Couldn't transcribe — the recording is still saved either way. Type it yourself below if you can.";
+      }
+    }).catch(function () {
+      statusEl.textContent = "Couldn't transcribe — the recording is still saved either way. Type it yourself below if you can.";
+    });
+  }
 
   document.getElementById("reportSubmitBtn").onclick = function () {
     var textNote = document.getElementById("textNote").value.trim();
@@ -299,8 +335,7 @@
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
           reported_by: myPersonId,
-          room_id: pendingRoomId,
-          priority: document.getElementById("urgent").checked ? "urgent" : "normal",
+          priority: document.getElementById("reportUrgent").checked ? "urgent" : "normal",
           audio_data_url: audioDataUrl,
           text_note: textNote || null,
           photo_data_url: photoDataUrl,
