@@ -41,7 +41,7 @@
 <div id="start">
   <h1>Chobe Elephant Camp</h1>
   <p class="sub">Pick your name, then what you'd like to do.</p>
-  <p class="nav"><a href="./dashboard.html">See the to-do list →</a></p>
+  <p class="nav"><a href="./dashboard.html">See the to-do list →</a> · <a href="./daily-ops.html">Daily Operational Sheet →</a></p>
   <label>Who are you?</label>
   <select id="person"><option value="">Loading…</option></select>
   <label>What would you like to do?</label>
@@ -57,9 +57,9 @@
 </div>
 
 <div id="roomStep" hidden>
-  <h1>Guest Room Inspection</h1>
-  <p class="sub">Chobe Elephant Camp — which room are you checking?</p>
-  <label>Which room?</label>
+  <h1 id="roomStepTitle">Guest Room Inspection</h1>
+  <p class="sub" id="roomStepSub">Chobe Elephant Camp — which room are you checking?</p>
+  <label id="roomStepLabel">Which room?</label>
   <select id="room"><option value="">Select a room</option></select>
   <button id="roomContinueBtn">Start inspection</button>
   <button class="secondary" id="backFromRoom">← Choose again</button>
@@ -110,8 +110,8 @@
 
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
-  var state = { people: [], rooms: [], areas: [] };
-  var myPersonId = null, pendingRoomId = null;
+  var state = { people: [], rooms: [], vehicles: [], areas: [] };
+  var myPersonId = null, pendingRoomId = null, pendingTargetType = "room";
   var mediaRecorder, chunks = [], recordedBlob = null, timerInterval, seconds = 0;
   var MAX_SECONDS = 120; // a voice note, not a long recording — keeps uploads small
 
@@ -127,13 +127,10 @@
   }
 
   fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
-    state.people = data.people; state.rooms = data.rooms; state.areas = data.areas;
+    state.people = data.people; state.rooms = data.rooms; state.vehicles = data.vehicles || []; state.areas = data.areas;
     var p = document.getElementById("person");
     p.innerHTML = '<option value="">Select your name</option>' +
       data.people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
-    var r = document.getElementById("room");
-    r.innerHTML = '<option value="">Select a room</option>' +
-      data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
     // The 14 real Lodge Maintenance Areas, plus Report a fault as the
     // 15th option in the same list — per Mark, 2026-09-09. Only Guest
     // Rooms has a real checklist behind it today; the rest show as
@@ -157,7 +154,7 @@
     }
     var area = state.areas.find(function (x) { return x.id === areaVal; });
     if (area && area.available) {
-      enterRoomStep();
+      enterRoomStep(area.name === "Vehicles" ? "vehicle" : "room");
     } else {
       document.getElementById("unavailableMsg").textContent =
         (area ? area.name : "This area") + " doesn't have a digital checklist yet — coming soon. For now, you can still flag anything here as a fault.";
@@ -170,19 +167,31 @@
   document.getElementById("backFromRoom").onclick = function () { show("start"); };
   document.getElementById("backFromReport").onclick = function () { show("start"); };
 
-  // Only the Guest Rooms checklist uses this step now — Report a fault
-  // no longer asks which room at all, see enterReportForm below.
-  function enterRoomStep() {
+  // Guest Rooms and, per Mark, 2026-09-09 (tool-local D-035, the Daily
+  // Operational Sheet's Vehicle Check side), Vehicles both use this
+  // same step now — Report a fault no longer asks which target at all,
+  // see enterReportForm below.
+  function enterRoomStep(targetType) {
+    pendingTargetType = targetType;
+    var isVehicle = targetType === "vehicle";
+    document.getElementById("roomStepTitle").textContent = isVehicle ? "Vehicle Check" : "Guest Room Inspection";
+    document.getElementById("roomStepSub").textContent = "Chobe Elephant Camp — which " + (isVehicle ? "vehicle" : "room") + " are you checking?";
+    document.getElementById("roomStepLabel").textContent = isVehicle ? "Which vehicle?" : "Which room?";
+    var list = isVehicle ? state.vehicles : state.rooms;
+    var sel = document.getElementById("room");
+    sel.innerHTML = '<option value="">Select a ' + (isVehicle ? "vehicle" : "room") + '</option>' +
+      list.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
+    document.getElementById("roomContinueBtn").textContent = "Start " + (isVehicle ? "check" : "inspection");
     show("roomStep");
   }
 
   document.getElementById("roomContinueBtn").onclick = function () {
-    var roomId = document.getElementById("room").value;
-    if (!roomId) { alert("Pick a room first."); return; }
-    pendingRoomId = roomId;
-    fetch(FN + "?action=checklist&person=" + myPersonId + "&room=" + roomId)
+    var targetId = document.getElementById("room").value;
+    if (!targetId) { alert("Pick one first."); return; }
+    pendingRoomId = targetId;
+    fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + targetId + "&target_type=" + pendingTargetType)
       .then(function (r) { return r.json(); })
-      .then(function (data) { renderChecklist(data, myPersonId, roomId); })
+      .then(function (data) { renderChecklist(data, myPersonId, targetId, pendingTargetType); })
       .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
   };
 
@@ -519,8 +528,10 @@
   // Guest Room Inspection — unchanged from before this merge, just
   // reached via the area picker above instead of its own start screen.
   // ------------------------------------------------------------------
-  function renderChecklist(data, personId, roomId) {
+  function renderChecklist(data, personId, roomId, targetType) {
     var c = document.getElementById("checklist");
+    var isVehicle = targetType === "vehicle";
+    var heading = isVehicle ? "Vehicle Check" : "Guest Room Inspection";
     show("checklist");
 
     var itemFaultsById = {};
@@ -562,8 +573,8 @@
       faultSel.disabled = false;
     };
 
-    var html = '<h1>Guest Room Inspection</h1>' +
-      '<p class="sub">Chobe Elephant Camp, ' + esc(data.room_label) + ' — leave an item alone if it\'s fine (tool-local D-023)</p>';
+    var html = '<h1>' + esc(heading) + '</h1>' +
+      '<p class="sub">Chobe Elephant Camp, ' + esc(data.target_label || data.room_label) + ' — leave an item alone if it\'s fine (tool-local D-023)</p>';
     data.sections.forEach(function (s) {
       html += "<h2>" + esc(s.name) + "</h2>";
       s.items.forEach(function (item) {
@@ -637,8 +648,8 @@
       show("review");
       var flagged = results.filter(function (x) { return x.failed; });
       var readings = results.filter(function (x) { return x.value !== undefined; });
-      var html = '<h1>Confirm Inspection</h1>' +
-        '<p class="sub">' + esc(data.room_label) + ', Chobe Elephant Camp — check this is right before it\'s recorded</p>';
+      var html = '<h1>Confirm ' + (isVehicle ? "Check" : "Inspection") + '</h1>' +
+        '<p class="sub">' + esc(data.target_label || data.room_label) + ', Chobe Elephant Camp — check this is right before it\'s recorded</p>';
 
       if (!flagged.length && !readings.length) {
         html += '<div class="review-card"><p class="review-line">Nothing flagged — every item recorded as fine.</p></div>';
@@ -671,7 +682,7 @@
         fetch(FN, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ person_id: personId, room_id: roomId, template_id: data.template_id, results: results }),
+          body: JSON.stringify({ person_id: personId, target_id: roomId, target_type: targetType, template_id: data.template_id, results: results }),
         }).then(function (resp) { return resp.json(); }).then(function (out) {
           // The issue this item's photo belongs to doesn't exist until
           // the line above returns — issue_ids maps item_id -> the real
@@ -679,9 +690,9 @@
           var withPhotos = flagged.filter(function (x) { return x.photoFile && out.issue_ids[x.item_id]; });
           var uploaded = 0, failed = 0;
           function finish() {
-            document.getElementById("doneTitle").textContent = "Inspection recorded";
+            document.getElementById("doneTitle").textContent = (isVehicle ? "Check" : "Inspection") + " recorded";
             document.getElementById("doneBox").innerHTML =
-              "<p>" + esc(out.room_label) + ", Chobe Elephant Camp.</p>" +
+              "<p>" + esc(out.target_label || out.room_label) + ", Chobe Elephant Camp.</p>" +
               "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
               (out.issues_raised ? "<p>" + out.issues_raised + " issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
               (uploaded ? "<p>" + uploaded + " photo" + (uploaded === 1 ? "" : "s") + " attached.</p>" : "") +
