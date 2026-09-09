@@ -227,6 +227,14 @@
   // text changes by hand, or a fresh recording starts, so a stale match
   // from a previous take or a previous edit is never silently kept.
   var matchedRoomId = null, matchedAreaId = null, matchedSubareaId = null;
+  // True once the note box holds a header-then-faults list (tool-local
+  // D-033's follow-up, per Mark: "they need to be recorded as separate
+  // entries so each can be resolved on its own") — stays true through
+  // further edits (fixing a typo doesn't un-structure it), only reset
+  // by starting fresh or re-recording. Independent of whether a
+  // location was actually matched — clearing a wrong match shouldn't
+  // also stop the fault list from being split.
+  var wasStructured = false;
 
   function clearMatch() {
     matchedRoomId = null; matchedAreaId = null; matchedSubareaId = null;
@@ -236,6 +244,7 @@
   function enterReportForm() {
     recordedBlob = null;
     noteWasAutoFilled = false;
+    wasStructured = false;
     clearMatch();
     document.getElementById("reportUrgent").checked = false;
     document.getElementById("recordIdle").hidden = false;
@@ -309,6 +318,7 @@
       document.getElementById("textNote").value = "";
       document.getElementById("noteLabel").textContent = "Add a note (optional)";
       noteWasAutoFilled = false;
+      wasStructured = false;
       clearMatch();
     }
   };
@@ -376,7 +386,10 @@
         lines = lines.concat(out.faults || []);
         document.getElementById("textNote").value = lines.join("\n");
         noteWasAutoFilled = true;
-        document.getElementById("noteLabel").textContent = "Tidied up — check it's right, edit if not";
+        wasStructured = true;
+        document.getElementById("noteLabel").textContent = out.faults && out.faults.length > 1
+          ? "Tidied up — each line below becomes its own to-do item. Check it's right, edit if not"
+          : "Tidied up — check it's right, edit if not";
       }
       matchedRoomId = out.matched_room_id || null;
       matchedAreaId = out.matched_area_id || null;
@@ -422,13 +435,16 @@
           room_id: matchedRoomId,
           area_id: matchedAreaId,
           sub_area_id: matchedSubareaId,
+          structured: wasStructured,
         }),
       });
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { alert(out.error); btn.disabled = false; btn.textContent = "Submit report"; return; }
       document.getElementById("doneTitle").textContent = "Report recorded";
       document.getElementById("doneBox").innerHTML =
-        "<p>On the to-do list now.</p>" +
+        "<p>" + (out.issues_raised > 1
+          ? out.issues_raised + " separate faults on the to-do list now — each one tracked and resolved on its own."
+          : "On the to-do list now.") + "</p>" +
         (out.transcript ? '<p class="transcript">"' + esc(out.transcript) + '"</p>' : "") +
         (out.photo_url ? "<p>Photo attached.</p>" : "");
       show("done");
