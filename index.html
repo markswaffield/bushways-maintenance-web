@@ -246,11 +246,26 @@
       mediaRecorder.ondataavailable = function (e) { if (e.data.size > 0) chunks.push(e.data); };
       mediaRecorder.onstop = function () {
         stream.getTracks().forEach(function (t) { t.stop(); });
-        recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
-        document.getElementById("player").src = URL.createObjectURL(recordedBlob);
-        document.getElementById("recordingInProgress").hidden = true;
-        document.getElementById("recordedBox").hidden = false;
-        transcribeAndFill();
+        var rawBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        // A real phone almost always records webm/opus (Android/Chrome)
+        // or mp4/aac (iPhone/Safari) — neither is in OpenRouter's
+        // supported input_audio format list, confirmed directly against
+        // their docs, 2026-09-09: transcription was failing on every
+        // real recording, not just an occasional one. Re-encoded to a
+        // plain WAV file here, client-side, before it's ever sent
+        // anywhere — the browser that recorded it can always decode its
+        // own output via Web Audio, regardless of which container that
+        // turned out to be, so this works the same way on every phone.
+        toWav(rawBlob).then(function (wavBlob) {
+          recordedBlob = wavBlob;
+        }).catch(function () {
+          recordedBlob = rawBlob; // better than nothing if conversion fails
+        }).then(function () {
+          document.getElementById("player").src = URL.createObjectURL(recordedBlob);
+          document.getElementById("recordingInProgress").hidden = true;
+          document.getElementById("recordedBox").hidden = false;
+          transcribeAndFill();
+        });
       };
       mediaRecorder.start();
       seconds = 0;
@@ -363,6 +378,57 @@
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  }
+
+  // Decodes whatever the recording actually is (webm/opus, mp4/aac —
+  // whichever the phone's MediaRecorder produced) and re-encodes it as
+  // a plain 16kHz mono WAV — a format OpenRouter's audio input
+  // genuinely supports, confirmed directly against their docs. Resampled
+  // down from the device's native rate (typically 44.1/48kHz) since a
+  // full-rate WAV is uncompressed and Maun's bandwidth is limited;
+  // 16kHz mono is still plenty for speech.
+  function toWav(blob) {
+    var TARGET_RATE = 16000;
+    return blob.arrayBuffer().then(function (buf) {
+      var AudioCtx = window.AudioContext || window.webkitAudioContext;
+      var decodeCtx = new AudioCtx();
+      return decodeCtx.decodeAudioData(buf).then(function (decoded) {
+        decodeCtx.close();
+        var frames = Math.ceil(decoded.duration * TARGET_RATE);
+        var offline = new OfflineAudioContext(1, frames, TARGET_RATE);
+        var src = offline.createBufferSource();
+        src.buffer = decoded;
+        src.connect(offline.destination);
+        src.start(0);
+        return offline.startRendering();
+      });
+    }).then(function (rendered) {
+      return encodeWav(rendered.getChannelData(0), TARGET_RATE);
+    });
+  }
+
+  function encodeWav(samples, sampleRate) {
+    var buffer = new ArrayBuffer(44 + samples.length * 2);
+    var view = new DataView(buffer);
+    function writeString(offset, s) { for (var i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i)); }
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true); // byte rate (mono, 16-bit)
+    view.setUint16(32, 2, true); // block align
+    view.setUint16(34, 16, true); // bits per sample
+    writeString(36, "data");
+    view.setUint32(40, samples.length * 2, true);
+    for (var i = 0, offset = 44; i < samples.length; i++, offset += 2) {
+      var s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([view], { type: "audio/wav" });
   }
 
   // ------------------------------------------------------------------
