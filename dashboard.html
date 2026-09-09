@@ -8,14 +8,13 @@
   h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
   .nav{font-size:13px;margin:10px 0 0}
-  .filters{margin-top:14px}
-  .filters label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:12px 0 4px}
-  .filters label:first-child{margin-top:0}
-  .filters select,.filters input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
-  .filters .row{display:flex;gap:8px}
-  .filters .row>*{flex:1;min-width:0}
-  .filters .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
-  .filters .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:12px;background:#fff}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section label:first-of-type{margin-top:0}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
   .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
   .card .item{font-size:14.5px;font-weight:700;margin:0 0 2px}
   .card .area-line{font-size:11.5px;color:#8C6A2F;margin:0 0 6px}
@@ -42,19 +41,15 @@
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard";
   var lastData = null;
-  // Per Mark, 2026-09-09 (second pass — "i would like to improve both
-  // these options and make them clear"): one "Order by" choice drives
-  // which drill-down control shows underneath it — Date (newest/oldest,
-  // plus an optional date range), Maintenance Area (alphabetical,
-  // tool-local D-013 — no numbering exists for areas, so alphabetical
-  // by name is the order used), or Target (alphabetical-then-numeric,
-  // so "Room 2" sorts before "Room 10"). A separate, always-available
-  // Department filter narrows by who it's assigned to, independent of
-  // whichever order mode is active. All client-side against the one
-  // ?action=dashboard fetch already loaded, same as before.
+  // Rebuilt 2026-09-09 to match Mark's own sketch exactly: two clearly
+  // separate boxed sections, Order and Filter. Order picks one of
+  // three ways to look at the list — Date, Area, Target — each with
+  // its own default and its own drill-down; Filter (by department) is
+  // separate and always available on top of whichever order is active.
   var orderBy = "date";
-  var dateDirection = "newest", dateFrom = "", dateTo = "";
-  var filterAreaId = "", filterSubareaId = "";
+  var dateMode = "newest"; // newest | oldest | custom
+  var dateFrom = "", dateTo = "";
+  var filterAreaId = "";
   var filterTarget = "";
   var filterDepartmentId = "";
 
@@ -87,12 +82,10 @@
   });
 
   function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
-  function subAreasOf(areas, areaId) { return (areas || []).filter(function (a) { return a.parent_area_id === areaId; }); }
   // Every distinct heading already on the board — "Room 1," "Room 2,"
   // and so on — built from what's actually open, not the full room
   // catalogue, so this never lists a room with nothing currently on
-  // it. Sorted alphabetically, then numerically within that, per Mark:
-  // "listed alphabetically and then numerically."
+  // it. Sorted alphabetically, then numerically within that.
   function targetsOf(issues) {
     var seen = {}, out = [];
     (issues || []).forEach(function (g) { if (g.target && !seen[g.target]) { seen[g.target] = true; out.push(g.target); } });
@@ -104,51 +97,46 @@
     var departments = data.departments || [];
     var targets = targetsOf(data.issues);
 
-    var html = '<div class="filters">';
+    var html = '<div class="filter-section"><div class="title">Order</div>';
 
-    html += '<label>Order by</label><select id="orderBy" onchange="onOrderByChange()">' +
+    html += '<label>By</label><select id="orderBy" onchange="onOrderByChange()">' +
       '<option value="date"' + (orderBy === "date" ? " selected" : "") + '>Date</option>' +
       '<option value="area"' + (orderBy === "area" ? " selected" : "") + '>Maintenance area</option>' +
       '<option value="target"' + (orderBy === "target" ? " selected" : "") + '>Target (room, etc.)</option>' +
       '</select>';
 
     if (orderBy === "date") {
-      html += '<div class="row">' +
-        '<select id="dateDirection" onchange="onDateDirectionChange()">' +
-        '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest</option>' +
-        '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
-        '</select></div>' +
-        '<div class="daterange">' +
-        '<input type="date" id="dateFrom" value="' + esc(dateFrom) + '" onchange="onDateRangeChange()">' +
-        '<span>to</span>' +
-        '<input type="date" id="dateTo" value="' + esc(dateTo) + '" onchange="onDateRangeChange()">' +
-        '</div>';
+      html += '<label>Date order</label><select id="dateMode" onchange="onDateModeChange()">' +
+        '<option value="newest"' + (dateMode === "newest" ? " selected" : "") + '>Newest — oldest (default)</option>' +
+        '<option value="oldest"' + (dateMode === "oldest" ? " selected" : "") + '>Oldest — newest</option>' +
+        '<option value="custom"' + (dateMode === "custom" ? " selected" : "") + '>Custom date range</option>' +
+        '</select>';
+      if (dateMode === "custom") {
+        html += '<div class="daterange">' +
+          '<input type="date" id="dateFrom" value="' + esc(dateFrom) + '" onchange="onDateRangeChange()">' +
+          '<span>to</span>' +
+          '<input type="date" id="dateTo" value="' + esc(dateTo) + '" onchange="onDateRangeChange()">' +
+          '</div>';
+      }
     } else if (orderBy === "area") {
-      html += '<select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All areas</option>' +
+      html += '<label>Area</label><select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All — alphabetically (default)</option>' +
         topLevelAreas(areas).map(function (a) {
           return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
         }).join("") + '</select>';
-      if (subAreasOf(areas, filterAreaId).length) {
-        html += '<select id="subareaFilter" onchange="onSubareaFilterChange()" style="margin-top:8px">' +
-          '<option value="">All parts of this area</option>' +
-          subAreasOf(areas, filterAreaId).map(function (a) {
-            return '<option value="' + a.id + '"' + (filterSubareaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
-          }).join("") + '</select>';
-      }
     } else if (orderBy === "target") {
-      html += '<select id="targetFilter" onchange="onTargetFilterChange()"><option value="">All targets</option>' +
+      html += '<label>Target</label><select id="targetFilter" onchange="onTargetFilterChange()"><option value="">All — alphabetically, then numerically (default)</option>' +
         targets.map(function (t) {
           return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
         }).join("") + '</select>';
     }
+    html += '</div>';
 
-    html += '<label>Filter by department</label><select id="departmentFilter" onchange="onDepartmentFilterChange()">' +
-      '<option value="">All departments</option>' +
+    html += '<div class="filter-section"><div class="title">Filter</div>' +
+      '<label>Department</label><select id="departmentFilter" onchange="onDepartmentFilterChange()">' +
+      '<option value="">All — default</option>' +
       departments.map(function (d) {
         return '<option value="' + d.id + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
-      }).join("") + '</select>';
-
-    html += '</div>';
+      }).join("") + '</select></div>';
 
     var existing = document.getElementById("filtersRow");
     if (existing) { existing.outerHTML = '<div id="filtersRow">' + html + '</div>'; }
@@ -159,12 +147,14 @@
     orderBy = document.getElementById("orderBy").value;
     // Each mode's own drill-down is cleared on the way out, so a
     // hidden filter never keeps silently narrowing the list.
-    filterAreaId = ""; filterSubareaId = ""; filterTarget = "";
+    filterAreaId = ""; filterTarget = ""; dateMode = "newest"; dateFrom = ""; dateTo = "";
     renderFilters(lastData);
     renderIssues(applyFilters(lastData));
   };
-  window.onDateDirectionChange = function () {
-    dateDirection = document.getElementById("dateDirection").value;
+  window.onDateModeChange = function () {
+    dateMode = document.getElementById("dateMode").value;
+    if (dateMode !== "custom") { dateFrom = ""; dateTo = ""; }
+    renderFilters(lastData);
     renderIssues(applyFilters(lastData));
   };
   window.onDateRangeChange = function () {
@@ -174,12 +164,6 @@
   };
   window.onAreaFilterChange = function () {
     filterAreaId = document.getElementById("areaFilter").value;
-    filterSubareaId = "";
-    renderFilters(lastData);
-    renderIssues(applyFilters(lastData));
-  };
-  window.onSubareaFilterChange = function () {
-    filterSubareaId = document.getElementById("subareaFilter").value;
     renderIssues(applyFilters(lastData));
   };
   window.onTargetFilterChange = function () {
@@ -206,11 +190,12 @@
 
     groups = groups.filter(function (g) {
       if (orderBy === "date") {
-        if (dateFrom && new Date(g.raised_at) < new Date(dateFrom)) return false;
-        if (dateTo && new Date(g.raised_at) > new Date(dateTo + "T23:59:59")) return false;
+        if (dateMode === "custom") {
+          if (dateFrom && new Date(g.raised_at) < new Date(dateFrom)) return false;
+          if (dateTo && new Date(g.raised_at) > new Date(dateTo + "T23:59:59")) return false;
+        }
       } else if (orderBy === "area") {
         if (filterAreaId && g.area_id !== filterAreaId) return false;
-        if (filterSubareaId && g.sub_area_id !== filterSubareaId) return false;
       } else if (orderBy === "target") {
         if (filterTarget && g.target !== filterTarget) return false;
       }
@@ -226,8 +211,9 @@
         var at = a.target || "", bt = b.target || "";
         return at !== bt ? at.localeCompare(bt, undefined, { numeric: true }) : new Date(b.raised_at) - new Date(a.raised_at);
       }
-      // Date mode, the default — newest to oldest unless switched.
-      return dateDirection === "oldest"
+      // Date mode — oldest-first only when explicitly chosen; the
+      // default, and "custom" range, both read newest to oldest.
+      return dateMode === "oldest"
         ? new Date(a.raised_at) - new Date(b.raised_at)
         : new Date(b.raised_at) - new Date(a.raised_at);
     });
@@ -238,7 +224,7 @@
   function renderIssues(data) {
     var html = "";
     var faultCount = data.issues.reduce(function (n, g) { return n + g.faults.length; }, 0);
-    var filtered = filterAreaId || filterSubareaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
+    var filtered = filterAreaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
     html += '<h2>Open faults <span class="count">' + faultCount + '</span></h2>';
     if (!data.issues.length) {
       html += '<p class="empty">Nothing open' + (filtered ? " for this filter" : " — every recorded fault has been resolved") + '.</p>';
