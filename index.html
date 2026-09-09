@@ -92,6 +92,8 @@
 
   <label id="noteLabel">Add a note (optional)</label>
   <textarea id="textNote" rows="3" placeholder="Type what's wrong, if that's easier than recording — room or department first, e.g. Room 5, towel rail loose"></textarea>
+  <button class="secondary" id="tidyBtn" type="button" style="margin-top:8px">Tidy up &amp; detect location</button>
+  <p class="note" id="detectedArea" hidden></p>
 
   <label>Add a photo (optional)</label>
   <input type="file" accept="image/*" capture="environment" id="reportPhoto">
@@ -220,10 +222,21 @@
   // the fault," as part of what's said, not a field picked beforehand.
   // ------------------------------------------------------------------
   var noteWasAutoFilled = false;
+  // What the last tidy-up/transcribe pass matched against the real room
+  // and Area catalogue (tool-local D-033) — cleared whenever the note
+  // text changes by hand, or a fresh recording starts, so a stale match
+  // from a previous take or a previous edit is never silently kept.
+  var matchedRoomId = null, matchedAreaId = null, matchedSubareaId = null;
+
+  function clearMatch() {
+    matchedRoomId = null; matchedAreaId = null; matchedSubareaId = null;
+    document.getElementById("detectedArea").hidden = true;
+  }
 
   function enterReportForm() {
     recordedBlob = null;
     noteWasAutoFilled = false;
+    clearMatch();
     document.getElementById("reportUrgent").checked = false;
     document.getElementById("recordIdle").hidden = false;
     document.getElementById("recordingInProgress").hidden = true;
@@ -296,6 +309,7 @@
       document.getElementById("textNote").value = "";
       document.getElementById("noteLabel").textContent = "Add a note (optional)";
       noteWasAutoFilled = false;
+      clearMatch();
     }
   };
 
@@ -322,12 +336,63 @@
           noteWasAutoFilled = true;
           document.getElementById("noteLabel").textContent = "Transcribed — check it's right, edit if not";
         }
+        // Straight on to identifying the location and tidying the fault
+        // list, per Mark, 2026-09-09: "from the transcription can the
+        // tool identify the location and give it a header" — one
+        // automatic step from the person's point of view, not two.
+        structureAndFill(out.transcript);
       } else {
         statusEl.textContent = "Couldn't transcribe — the recording is still saved either way. Type it yourself below if you can.";
       }
     }).catch(function () {
       statusEl.textContent = "Couldn't transcribe — the recording is still saved either way. Type it yourself below if you can.";
     });
+  }
+
+  // Reads a report's text back as a location header plus a short list
+  // of distinct faults (tool-local D-033), e.g. "Room one, the cistern
+  // is leaking and the towel rail is loose" becomes "Room 1 / cistern
+  // leaking / towel rail loose" — and tries to match the location
+  // against a real room or maintenance area, shown back for the person
+  // to confirm or clear, never applied silently. Works on typed text
+  // too (via "Tidy up & detect location"), not just a transcript.
+  document.getElementById("tidyBtn").onclick = function () {
+    var text = document.getElementById("textNote").value.trim();
+    if (!text) { alert("Type or record something first."); return; }
+    structureAndFill(text);
+  };
+
+  function structureAndFill(text) {
+    var btn = document.getElementById("tidyBtn");
+    btn.disabled = true;
+    fetch(FN + "?action=structure", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      btn.disabled = false;
+      if (out.header || (out.faults && out.faults.length)) {
+        var lines = [];
+        if (out.header) lines.push(out.header);
+        lines = lines.concat(out.faults || []);
+        document.getElementById("textNote").value = lines.join("\n");
+        noteWasAutoFilled = true;
+        document.getElementById("noteLabel").textContent = "Tidied up — check it's right, edit if not";
+      }
+      matchedRoomId = out.matched_room_id || null;
+      matchedAreaId = out.matched_area_id || null;
+      matchedSubareaId = out.matched_subarea_id || null;
+      var areaName = state.areas ? (state.areas.find(function (a) { return a.id === matchedAreaId; }) || {}).name : null;
+      var roomName = state.rooms ? (state.rooms.find(function (r) { return r.id === matchedRoomId; }) || {}).label : null;
+      var detected = document.getElementById("detectedArea");
+      if (matchedAreaId && areaName) {
+        detected.hidden = false;
+        detected.innerHTML = "Detected: " + esc(roomName || areaName) +
+          ' — <a href="#" id="clearMatchLink">not this, clear it</a>';
+        document.getElementById("clearMatchLink").onclick = function (e) { e.preventDefault(); clearMatch(); };
+      } else {
+        detected.hidden = true;
+      }
+    }).catch(function () { btn.disabled = false; });
   }
 
   document.getElementById("reportSubmitBtn").onclick = function () {
@@ -354,6 +419,9 @@
           audio_data_url: audioDataUrl,
           text_note: textNote || null,
           photo_data_url: photoDataUrl,
+          room_id: matchedRoomId,
+          area_id: matchedAreaId,
+          sub_area_id: matchedSubareaId,
         }),
       });
     }).then(function (r) { return r.json(); }).then(function (out) {

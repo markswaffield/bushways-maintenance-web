@@ -8,8 +8,11 @@
   h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
   .nav{font-size:13px;margin:10px 0 0}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .filters select{flex:1;min-width:120px;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit}
   .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
-  .card .item{font-size:14.5px;font-weight:700;margin:0 0 6px}
+  .card .item{font-size:14.5px;font-weight:700;margin:0 0 2px}
+  .card .area-line{font-size:11.5px;color:#8C6A2F;margin:0 0 6px}
   .card .meta{font-size:12.5px;color:#6B6455;margin:6px 0 0}
   .card .fault-line{font-size:13.5px;margin:0 0 4px;padding-left:2px}
   .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
@@ -21,6 +24,7 @@
   .sched-row{display:flex;justify-content:space-between;align-items:center}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
+  [hidden]{display:none!important}
 </style></head><body>
 
 <h1>To-Do — Chobe Elephant Camp</h1>
@@ -31,6 +35,16 @@
 
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard";
+  var lastData = null;
+  // Per Mark, 2026-09-09: "we need some filtering option and ordering
+  // option — order and/or filter by date, order and/or filter by
+  // maintenance area, order and filter by subsector within a
+  // maintenance area if this exists." All three live client-side
+  // against what's already loaded, same pattern as Fix a Fault's
+  // existing department filter — the list is small enough that a
+  // second fetch per filter change isn't worth it.
+  var filterAreaId = "", filterSubareaId = "", filterWindow = "", sortMode = "newest";
+
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -50,17 +64,102 @@
   function badgeText(status) {
     return { overdue: "Overdue", due_soon: "Due soon", upcoming: "Upcoming" }[status];
   }
+  function withinWindow(iso, win) {
+    if (!win) return true;
+    var days = (Date.now() - new Date(iso).getTime()) / 86400000;
+    if (win === "today") return days <= 1;
+    if (win === "week") return days <= 7;
+    if (win === "month") return days <= 30;
+    return true;
+  }
 
   fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
-    var html = "";
+    lastData = data;
+    renderFilters(data);
+    renderIssues(applyFilters(data));
+  }).catch(function (e) {
+    document.getElementById("app").innerHTML = "<p>Couldn't load the to-do list — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
 
+  function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
+  function subAreasOf(areas, areaId) { return (areas || []).filter(function (a) { return a.parent_area_id === areaId; }); }
+
+  function renderFilters(data) {
+    var areas = data.areas || [];
+    var html = '<div class="filters">' +
+      '<select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All areas</option>' +
+      topLevelAreas(areas).map(function (a) {
+        return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>' +
+      '<select id="subareaFilter" onchange="onSubareaFilterChange()"' + (subAreasOf(areas, filterAreaId).length ? "" : " hidden") + '>' +
+      '<option value="">All parts</option>' +
+      subAreasOf(areas, filterAreaId).map(function (a) {
+        return '<option value="' + a.id + '"' + (filterSubareaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>' +
+      '<select id="windowFilter" onchange="onWindowFilterChange()">' +
+      '<option value=""' + (!filterWindow ? " selected" : "") + '>All time</option>' +
+      '<option value="today"' + (filterWindow === "today" ? " selected" : "") + '>Last 24 hours</option>' +
+      '<option value="week"' + (filterWindow === "week" ? " selected" : "") + '>Last 7 days</option>' +
+      '<option value="month"' + (filterWindow === "month" ? " selected" : "") + '>Last 30 days</option>' +
+      '</select>' +
+      '<select id="sortMode" onchange="onSortChange()">' +
+      '<option value="newest"' + (sortMode === "newest" ? " selected" : "") + '>Newest first</option>' +
+      '<option value="oldest"' + (sortMode === "oldest" ? " selected" : "") + '>Oldest first</option>' +
+      '<option value="area"' + (sortMode === "area" ? " selected" : "") + '>By maintenance area</option>' +
+      '</select>' +
+      '</div>';
+    var existing = document.getElementById("filtersRow");
+    if (existing) { existing.outerHTML = '<div id="filtersRow">' + html + '</div>'; }
+    else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow">' + html + '</div>'); }
+  }
+
+  window.onAreaFilterChange = function () {
+    filterAreaId = document.getElementById("areaFilter").value;
+    filterSubareaId = ""; // a sub-area from the old area no longer applies
+    renderFilters(lastData);
+    renderIssues(applyFilters(lastData));
+  };
+  window.onSubareaFilterChange = function () {
+    filterSubareaId = document.getElementById("subareaFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onWindowFilterChange = function () {
+    filterWindow = document.getElementById("windowFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onSortChange = function () {
+    sortMode = document.getElementById("sortMode").value;
+    renderIssues(applyFilters(lastData));
+  };
+
+  function applyFilters(data) {
+    var issues = (data.issues || []).filter(function (g) {
+      if (filterAreaId && g.area_id !== filterAreaId) return false;
+      if (filterSubareaId && g.sub_area_id !== filterSubareaId) return false;
+      if (!withinWindow(g.raised_at, filterWindow)) return false;
+      return true;
+    });
+    issues = issues.slice().sort(function (a, b) {
+      if (sortMode === "oldest") return new Date(a.raised_at) - new Date(b.raised_at);
+      if (sortMode === "area") {
+        var an = a.area || "", bn = b.area || "";
+        return an !== bn ? an.localeCompare(bn) : new Date(b.raised_at) - new Date(a.raised_at);
+      }
+      return new Date(b.raised_at) - new Date(a.raised_at); // newest first, default
+    });
+    return { issues: issues, schedules: data.schedules || [] };
+  }
+
+  function renderIssues(data) {
+    var html = "";
     var faultCount = data.issues.reduce(function (n, g) { return n + g.faults.length; }, 0);
     html += '<h2>Open faults <span class="count">' + faultCount + '</span></h2>';
     if (!data.issues.length) {
-      html += '<p class="empty">Nothing open — every recorded fault has been resolved.</p>';
+      html += '<p class="empty">Nothing open' + (filterAreaId || filterWindow ? " for this filter" : " — every recorded fault has been resolved") + '.</p>';
     }
     data.issues.forEach(function (group) {
-      html += '<div class="card">' + '<p class="item">' + esc(group.target) + '</p>';
+      html += '<div class="card">' + '<p class="item">' + esc(group.target) + '</p>' +
+        (group.area ? '<p class="area-line">' + esc(group.area) + (group.sub_area ? " — " + esc(group.sub_area) : "") + '</p>' : "");
       group.faults.forEach(function (f) {
         html += '<p class="fault-line">' + (f.urgent ? '<span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span> ' : '') + esc(f.label) +
           (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
@@ -84,8 +183,6 @@
     });
 
     document.getElementById("app").innerHTML = html;
-  }).catch(function (e) {
-    document.getElementById("app").innerHTML = "<p>Couldn't load the to-do list — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
-  });
+  }
 </script>
 </body></html>
