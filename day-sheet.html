@@ -1,0 +1,355 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp — Day Sheet</title>
+<!--
+  The Day Sheet — tools/daily-operations/.
+
+  Layout follows Mark's own spreadsheet exactly
+  (tools/daily-operations/drafts/Day Sheet.xlsx): ONE CARD PER ROOM, not
+  per booking, with three groups inside it — arriving, staying,
+  departing — and maintenance standing on its own, independent of all
+  three ("it is there to catch any maintenance issues raised").
+
+  Cards rather than one wide grid because this is a phone-first page
+  (root D-016) and a 24-column table is unusable on one. The grid shape
+  survives on a laptop; the reading order is the same either way.
+
+  Sign-in here is the same stand-in as every other page in this
+  workspace — pick your name from the seeded test people. Not real
+  verification. Root D-017 replaces it with a WhatsApp code once
+  WhatsApp Business is verified; nothing here changes when it does,
+  because everything already just takes a person id.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 80px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:13px;margin:10px 0 0}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:14px 0 0;padding:12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
+  .bar label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
+  select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;max-width:100%}
+  textarea{width:100%;resize:vertical}
+  button{padding:8px 14px;font-size:14px;font-family:inherit;border:1px solid #43594A;background:#43594A;color:#fff;border-radius:6px;cursor:pointer}
+  button.ghost{background:#fff;color:#43594A}
+  button:disabled{opacity:.45;cursor:default}
+  .section-title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;margin:26px 0 8px}
+  .room{background:#fff;border:1px solid #E3DFD3;border-radius:8px;margin-top:10px;overflow:hidden}
+  .room > .head{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;background:#F1EDE4;border-bottom:1px solid #E3DFD3}
+  .room > .head .name{font-weight:700;font-size:15px}
+  .room > .head .state{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 9px;border-radius:10px}
+  .state.turnover{background:#F4CFC2;color:#A8502F}
+  .state.arriving{background:#D9E6DC;color:#2F6B45}
+  .state.departing{background:#F4E3D3;color:#8C6A2F}
+  .state.staying{background:#E3DFD3;color:#5B5344}
+  .state.empty{background:#F1EDE4;color:#8C8571}
+  .grp{padding:12px 14px;border-top:1px solid #F1EDE4}
+  .grp:first-of-type{border-top:0}
+  .grp .label{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+  .grp.arr .label{color:#2F6B45}
+  .grp.stay .label{color:#5B5344}
+  .grp.dep .label{color:#8C6A2F}
+  .grp.mnt{background:#FDF6F4;border-top:1px solid #F0DCD5}
+  .grp.mnt .label{color:#A8502F}
+  .guest{font-size:14.5px;font-weight:600;margin:0 0 2px}
+  .guestmeta{font-size:12.5px;color:#6B6455;margin:0 0 8px}
+  .diet{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F;margin:2px 4px 2px 0}
+  .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+  .fields .f{display:flex;flex-direction:column}
+  .fields .f span{font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
+  .fields .wide{grid-column:1/-1}
+  .save{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;background:#FAF8F3;border-top:1px solid #F1EDE4}
+  .save .msg{font-size:12.5px;color:#6B6455}
+  .save .msg.ok{color:#2F6B45}
+  .save .msg.err{color:#A8502F}
+  .place{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:11px 14px;margin-top:8px}
+  .place .who{font-size:14px;font-weight:600}
+  .place .meta{font-size:12.5px;color:#6B6455;margin:2px 0 8px}
+  .place .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:#F4CFC2;color:#A8502F}
+  .empty-note{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:8px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+  details{margin-top:10px}
+  summary{cursor:pointer;font-size:13.5px;color:#43594A}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1>Day Sheet — Chobe Elephant Camp</h1>
+<p class="sub">One row per room. Who is arriving, staying and departing, and the day's detail against each.</p>
+<p class="nav"><a href="./">← Inspect or report a fault</a> · <a href="./dashboard.html">To-do list →</a></p>
+
+<div class="bar">
+  <div><label for="who">You are</label><select id="who"></select></div>
+  <div><label for="date">Date</label><input type="date" id="date"></div>
+  <div><button class="ghost" id="reload">Refresh</button></div>
+</div>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/day-sheet";
+var boot = null, sheet = null, unplaced = [];
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function el(id){return document.getElementById(id);}
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function personId(){return el("who").value;}
+
+function opts(list, sel, blank){
+  var out = '<option value="">'+(blank||"—")+"</option>";
+  list.forEach(function(o){
+    out += '<option value="'+esc(o.id)+'"'+(sel===o.id?" selected":"")+">"+esc(o.label||o.name||o.registration)+"</option>";
+  });
+  return out;
+}
+
+function fieldSelect(row, key, list, label){
+  var v = (row.saved && row.saved[key]) || "";
+  return '<label class="f"><span>'+esc(label)+'</span><select data-room="'+row.room_id+'" data-key="'+key+'">'+opts(list, v)+"</select></label>";
+}
+function fieldText(row, key, label, wide){
+  var v = (row.saved && row.saved[key]) || "";
+  return '<label class="f'+(wide?" wide":"")+'"><span>'+esc(label)+'</span><input type="text" data-room="'+row.room_id+'" data-key="'+key+'" value="'+esc(v)+'"></label>';
+}
+
+// A booking's own detail is never copied onto the sheet — it is looked
+// up through the booking, which is why re-allocating takes everything
+// with it. This just renders what came back.
+function guestBlock(b){
+  if (!b) return "";
+  var pax = [];
+  if (b.adults) pax.push(b.adults + " ad");
+  if (b.children) pax.push(b.children + " ch");
+  var meta = [];
+  if (pax.length) meta.push(pax.join(", "));
+  if (b.room_type_needed) meta.push(esc(b.room_type_needed));
+  if (b.agent) meta.push("via " + esc(b.agent));
+  if (b.booking_ref) meta.push(esc(b.booking_ref));
+  var tags = "";
+  if (b.dietary) tags += '<span class="diet">'+esc(b.dietary)+"</span>";
+  if (b.special_requests) tags += '<span class="diet">'+esc(b.special_requests)+"</span>";
+  return '<p class="guest">'+esc(b.guest_name)+"</p>"
+       + (meta.length ? '<p class="guestmeta">'+meta.join(" · ")+"</p>" : "")
+       + tags;
+}
+
+function stateOf(row){
+  if (row.arriving && row.departing) return ["turnover","Turnover"];
+  if (row.arriving) return ["arriving","Arriving"];
+  if (row.departing) return ["departing","Departing"];
+  if (row.staying) return ["staying","In house"];
+  return ["empty","Empty"];
+}
+
+function roomCard(row){
+  var st = stateOf(row);
+  var people = boot.people, vehicles = boot.vehicles;
+  var h = '<div class="room" id="room-'+row.room_id+'">';
+  h += '<div class="head"><span class="name">'+esc(row.label)+'</span><span class="state '+st[0]+'">'+st[1]+"</span></div>";
+
+  if (row.arriving){
+    h += '<div class="grp arr"><p class="label">Arriving</p>'+guestBlock(row.arriving)+'<div class="fields">'
+      +  fieldSelect(row,"guide_id",people,"Guide")
+      +  fieldSelect(row,"driver_id",people,"Driver")
+      +  fieldSelect(row,"vehicle_id",vehicles,"Vehicle")
+      +  fieldSelect(row,"housekeeper_id",people,"Housekeeper")
+      +  fieldText(row,"arrival_details","Arrival details")
+      +  fieldText(row,"eta","ETA")
+      +  fieldText(row,"arrival_activity","Activity")
+      +  fieldText(row,"arrival_notes","Notes",true)
+      +  "</div></div>";
+  }
+  if (row.staying){
+    h += '<div class="grp stay"><p class="label">Staying</p>'+guestBlock(row.staying)+'<div class="fields">'
+      +  fieldText(row,"staying_activity","Activity")
+      +  fieldText(row,"staying_notes","Notes",true)
+      +  "</div></div>";
+  }
+  if (row.departing){
+    h += '<div class="grp dep"><p class="label">Departing</p>'+guestBlock(row.departing)+'<div class="fields">'
+      +  fieldText(row,"departure_details","Departure details")
+      +  fieldText(row,"etd","ETD")
+      +  fieldSelect(row,"departing_driver_id",people,"Driver")
+      +  fieldSelect(row,"departing_vehicle_id",vehicles,"Vehicle")
+      +  fieldText(row,"departure_activity","Activity")
+      +  fieldText(row,"departure_notes","Notes",true)
+      +  "</div></div>";
+  }
+  if (!row.arriving && !row.staying && !row.departing){
+    h += '<div class="grp"><p class="empty-note">Nobody in this room today.</p></div>';
+  }
+
+  // Always shown, whatever the room is doing — Mark: "maintenance sits
+  // completely on the side... it is there to catch any maintenance
+  // issues raised."
+  var mnt = (row.saved && row.saved.maintenance_note) || "";
+  h += '<div class="grp mnt"><p class="label">Maintenance</p>'
+    +  '<textarea rows="2" placeholder="Anything noticed in this room today" data-room="'+row.room_id+'" data-key="maintenance_note">'+esc(mnt)+"</textarea></div>";
+
+  h += '<div class="save"><span class="msg" id="msg-'+row.room_id+'"></span>'
+    +  '<button data-save="'+row.room_id+'" disabled>Save</button></div>';
+  return h + "</div>";
+}
+
+function placeCard(b){
+  var rooms = boot.rooms.map(function(r){return {id:r.id,label:r.label};});
+  return '<div class="place"><p class="who">'+esc(b.guest_name)
+    + ' <span class="pill">'+b.still_to_place+" room"+(b.still_to_place===1?"":"s")+" to place</span></p>"
+    + '<p class="meta">'+esc(b.arrive_date)+" → "+esc(b.depart_date)
+    + (b.room_type_needed?" · "+esc(b.room_type_needed):"")
+    + (b.booking_ref?" · "+esc(b.booking_ref):"")
+    + (b.room_stays.length?" · already in "+b.room_stays.map(function(s){return esc(s.label);}).join(", "):"")
+    + "</p>"
+    + '<div class="row"><select data-place="'+b.id+'">'+opts(rooms,"","Choose a room…")+"</select>"
+    + '<button data-placebtn="'+b.id+'">Place</button></div></div>';
+}
+
+function render(){
+  var h = "";
+  if (unplaced.length){
+    h += '<p class="section-title">Not yet in a room ('+unplaced.length+")</p>";
+    unplaced.forEach(function(b){ h += placeCard(b); });
+  }
+  h += '<p class="section-title">The sheet — '+esc(sheet.date)+"</p>";
+  h += '<div class="place"><label class="f"><span>Notes not tied to one room</span>'
+     + '<textarea rows="2" id="general" placeholder="Dietary notes, a pickup arrangement…">'
+     + esc(sheet.sheet && sheet.sheet.general_notes || "") + "</textarea></label>"
+     + '<div class="row" style="margin-top:8px"><button class="ghost" id="savenotes">Save notes</button>'
+     + '<span class="msg" id="msg-general"></span></div></div>';
+  sheet.rows.forEach(function(r){ h += roomCard(r); });
+
+  h += '<details><summary>Add a booking by hand</summary><div class="place">'
+    +  '<p class="meta">For anything ResRequest does not know about — the Pilot/Guide Room, a walk-in, an owner, staff in a guest room.</p>'
+    +  '<div class="fields">'
+    +  '<label class="f"><span>Guest / party</span><input id="nb_name" type="text"></label>'
+    +  '<label class="f"><span>Arrive</span><input id="nb_from" type="date"></label>'
+    +  '<label class="f"><span>Depart</span><input id="nb_to" type="date"></label>'
+    +  '<label class="f"><span>Rooms needed</span><input id="nb_rooms" type="number" min="1" value="1"></label>'
+    +  '<label class="f"><span>Adults</span><input id="nb_ad" type="number" min="0"></label>'
+    +  '<label class="f"><span>Children</span><input id="nb_ch" type="number" min="0"></label>'
+    +  '<label class="f wide"><span>Dietary / allergies</span><input id="nb_diet" type="text"></label>'
+    +  "</div>"
+    +  '<div class="row" style="margin-top:8px"><button id="addbooking">Add booking</button>'
+    +  '<span class="msg" id="msg-add"></span></div></div></details>';
+
+  el("app").innerHTML = h;
+  wire();
+}
+
+function wire(){
+  var app = el("app");
+  app.addEventListener("input", function(e){
+    var room = e.target.getAttribute("data-room");
+    if (!room) return;
+    var btn = app.querySelector('[data-save="'+room+'"]');
+    if (btn) btn.disabled = false;
+    var msg = el("msg-"+room); if (msg){ msg.textContent = ""; msg.className = "msg"; }
+  });
+  app.addEventListener("change", function(e){
+    var room = e.target.getAttribute("data-room");
+    if (!room) return;
+    var btn = app.querySelector('[data-save="'+room+'"]');
+    if (btn) btn.disabled = false;
+  });
+  app.addEventListener("click", function(e){
+    var t = e.target;
+    if (t.getAttribute("data-save")) return saveRoom(t.getAttribute("data-save"));
+    if (t.getAttribute("data-placebtn")) return placeBooking(t.getAttribute("data-placebtn"));
+    if (t.id === "savenotes") return saveNotes();
+    if (t.id === "addbooking") return addBooking();
+  });
+}
+
+function post(action, body){
+  return fetch(FN+"?action="+action, {
+    method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(body)
+  }).then(function(r){return r.json();});
+}
+
+function saveRoom(roomId){
+  var row = sheet.rows.filter(function(r){return r.room_id===roomId;})[0];
+  var body = { date: sheet.date, room_id: roomId, person_id: personId() };
+  document.querySelectorAll('[data-room="'+roomId+'"]').forEach(function(inp){
+    body[inp.getAttribute("data-key")] = inp.value;
+  });
+  // Freeze which booking each group referred to, so a sheet kept in
+  // history still says who was actually in the room that day.
+  if (row.arriving) body.arriving_booking_id = row.arriving.id;
+  if (row.staying) body.staying_booking_id = row.staying.id;
+  if (row.departing) body.departing_booking_id = row.departing.id;
+
+  var msg = el("msg-"+roomId), btn = document.querySelector('[data-save="'+roomId+'"]');
+  btn.disabled = true; msg.textContent = "Saving…"; msg.className = "msg";
+  post("save_row", body).then(function(res){
+    if (res.error){ msg.textContent = res.error; msg.className = "msg err"; btn.disabled = false; }
+    else { msg.textContent = "Saved"; msg.className = "msg ok"; }
+  }).catch(function(err){
+    msg.textContent = String(err); msg.className = "msg err"; btn.disabled = false;
+  });
+}
+
+function saveNotes(){
+  var msg = el("msg-general");
+  msg.textContent = "Saving…"; msg.className = "msg";
+  post("save_notes", { date: sheet.date, person_id: personId(), general_notes: el("general").value })
+    .then(function(res){
+      msg.textContent = res.error ? res.error : "Saved";
+      msg.className = res.error ? "msg err" : "msg ok";
+    });
+}
+
+function placeBooking(bookingId){
+  var sel = document.querySelector('[data-place="'+bookingId+'"]');
+  if (!sel.value) return;
+  post("allocate", { booking_id: bookingId, room_id: sel.value, person_id: personId() })
+    .then(function(res){ if (res.error) alert(res.error); load(); });
+}
+
+function addBooking(){
+  var msg = el("msg-add");
+  var body = {
+    guest_name: el("nb_name").value,
+    arrive_date: el("nb_from").value,
+    depart_date: el("nb_to").value,
+    rooms_needed: Number(el("nb_rooms").value || 1),
+    adults: el("nb_ad").value ? Number(el("nb_ad").value) : null,
+    children: el("nb_ch").value ? Number(el("nb_ch").value) : null,
+    dietary: el("nb_diet").value
+  };
+  if (!body.guest_name || !body.arrive_date || !body.depart_date){
+    msg.textContent = "Name and both dates are needed."; msg.className = "msg err"; return;
+  }
+  msg.textContent = "Saving…"; msg.className = "msg";
+  post("add_booking", body).then(function(res){
+    if (res.error){ msg.textContent = res.error; msg.className = "msg err"; return; }
+    load();
+  });
+}
+
+function load(){
+  var date = el("date").value || today();
+  el("date").value = date;
+  Promise.all([
+    fetch(FN+"?action=day_sheet&date="+date).then(function(r){return r.json();}),
+    fetch(FN+"?action=bookings&from="+date+"&to="+date).then(function(r){return r.json();})
+  ]).then(function(res){
+    sheet = res[0];
+    unplaced = (res[1].bookings || []).filter(function(b){ return b.still_to_place > 0; });
+    render();
+  }).catch(function(err){
+    el("app").innerHTML = '<p class="loading">Could not load: '+esc(err)+"</p>";
+  });
+}
+
+fetch(FN).then(function(r){return r.json();}).then(function(b){
+  boot = b;
+  el("who").innerHTML = b.people.map(function(p){
+    return '<option value="'+esc(p.id)+'">'+esc(p.name)+"</option>";
+  }).join("");
+  el("date").value = today();
+  el("date").addEventListener("change", load);
+  el("reload").addEventListener("click", load);
+  load();
+});
+</script>
+</body></html>
