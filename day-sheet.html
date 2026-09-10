@@ -127,7 +127,7 @@
 
 <script>
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/day-sheet";
-var boot = null, sheet = null, unplaced = [], dirty = {};
+var boot = null, sheet = null, unplaced = [], placed = [], dirty = {};
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -246,6 +246,20 @@ function render(){
      + '<textarea id="general" rows="4" placeholder="Dietary notes, a pickup arrangement…">'
      + esc(sheet.sheet && sheet.sheet.general_notes || "") + "</textarea></div>";
 
+  // Moving a placed booking lives here rather than in the grid: it is a
+  // planning action on a whole stay, not an edit to one day's row, and
+  // fiddly controls inside a dense grid would be worse for both jobs.
+  h += '<div class="panel"><h2>Placed — move or take out ('+placed.length+")</h2>";
+  if (!placed.length) h += '<p class="meta">Nothing placed for this date yet.</p>';
+  placed.forEach(function(p){
+    h += '<div class="place"><p class="who">'+esc(p.guest_name)+"</p>"
+      +  '<p class="meta">'+esc(p.from_date)+" → "+esc(p.to_date)+" · currently in "+esc(p.label)+"</p>"
+      +  '<div class="row"><select data-movesel="'+p.stay_id+'">'+opts(boot.rooms, p.room_id)+"</select>"
+      +  '<button data-move="'+p.stay_id+'">Move</button>'
+      +  '<button class="ghost" data-remove="'+p.stay_id+'">Take out</button></div></div>';
+  });
+  h += "</div>";
+
   h += '<div class="panel"><h2>Not yet in a room ('+unplaced.length+")</h2>";
   if (!unplaced.length) h += '<p class="meta">Everything for this date is placed.</p>';
   unplaced.forEach(function(b){
@@ -336,7 +350,18 @@ function load(){
     fetch(FN+"?action=bookings&from="+date+"&to="+date).then(function(r){return r.json();})
   ]).then(function(res){
     sheet = res[0];
-    unplaced = (res[1].bookings || []).filter(function(b){ return b.still_to_place > 0; });
+    var all = res[1].bookings || [];
+    unplaced = all.filter(function(b){ return b.still_to_place > 0; });
+    // Flattened to one entry per allocation, not per booking: a party in
+    // two rooms can have one of them moved without the other.
+    placed = [];
+    all.forEach(function(b){
+      (b.room_stays || []).forEach(function(st){
+        placed.push({ stay_id: st.id, room_id: st.room_id, label: st.label,
+                      guest_name: b.guest_name, from_date: st.from_date, to_date: st.to_date });
+      });
+    });
+    placed.sort(function(a,b){ return a.label.localeCompare(b.label, undefined, {numeric:true}); });
     render();
   }).catch(function(err){
     el("app").innerHTML = '<p class="loading">Could not load: '+esc(err)+"</p>";
@@ -359,6 +384,26 @@ document.addEventListener("click", function(e){
     if (!sel.value) return;
     post("allocate", { booking_id: t.getAttribute("data-placebtn"), room_id: sel.value, person_id: personId() })
       .then(function(res){ if (res.error) alert(res.error); load(); });
+  }
+  if (t.getAttribute && t.getAttribute("data-move")){
+    var sid = t.getAttribute("data-move");
+    var sel = document.querySelector('[data-movesel="'+sid+'"]');
+    if (!sel.value) return;
+    t.disabled = true;
+    post("move", { room_stay_id: sid, room_id: sel.value, person_id: personId() })
+      .then(function(res){
+        if (res.error){ alert(res.error); t.disabled = false; return; }
+        load();
+      });
+    return;
+  }
+  if (t.getAttribute && t.getAttribute("data-remove")){
+    if (!confirm("Take this booking out of its room? Any room check it opened is cancelled, unless another booking still needs that room.")) return;
+    post("unallocate", { room_stay_id: t.getAttribute("data-remove") }).then(function(res){
+      if (res.error) alert(res.error);
+      load();
+    });
+    return;
   }
   if (t.id === "addbooking"){
     var body = {
