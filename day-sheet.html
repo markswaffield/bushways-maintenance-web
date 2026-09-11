@@ -318,9 +318,16 @@ function rowHtml(row){
 // Counted per BOOKING, not per row. A party of four in two inter-leading
 // rooms appears on two lines with the same guide; counting rows would
 // call that eight people and flag a guide who has four.
-var MAX_PAX_PER_GUIDE = 6;
+//
+// The limit comes from the LODGE, not from here — Mark, 2026-09-11:
+// "depending on the lodge we determine the max number per vehicle - so
+// for Chobe it is 6 pax. Other lodges it may be 8 pax." Null means no
+// limit set for that lodge, and no warning at all: a camp nobody has
+// decided this for should not inherit somebody else's number.
+function maxPax(){ return (boot.location && boot.location.max_pax_per_vehicle) || null; }
 
 function markGuideLoad(){
+  var limit = maxPax();
   var perGuide = {};
   (sheet.rows || []).forEach(function(r){
     if (!r.stay) return;
@@ -340,14 +347,14 @@ function markGuideLoad(){
     var g = perGuide[gid];
     var name = (boot.people.filter(function(p){ return p.id === gid; })[0] || {}).name || "A guide";
     g.cells.forEach(function(c){
-      c.parentElement.classList.toggle("overload", g.pax > MAX_PAX_PER_GUIDE);
-      c.title = name + " has " + g.pax + " pax today";
+      c.parentElement.classList.toggle("overload", !!limit && g.pax > limit);
+      c.title = name + " has " + g.pax + " pax today" + (limit ? " (limit " + limit + ")" : "");
     });
-    if (g.pax > MAX_PAX_PER_GUIDE) over.push(name + " — " + g.pax + " pax");
+    if (limit && g.pax > limit) over.push(name + " — " + g.pax + " pax");
   });
   var el2 = document.getElementById("guidenote");
   if (el2) el2.textContent = over.length
-    ? "Over " + MAX_PAX_PER_GUIDE + " pax: " + over.join(" · ") + ". Outlined in amber."
+    ? "Over this lodge's limit of " + limit + " pax per guide: " + over.join(" · ") + ". Outlined in amber."
     : "";
 }
 
