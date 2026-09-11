@@ -63,7 +63,24 @@
   th.g-arr{background:#3F6B4C}
   th.g-stay{background:#5B5344}
   th.g-dep{background:#8C6A2F}
+  th.g-stay{background:#4C3B2C}
+  th.g-act{background:#5B6E8C}
   th.g-mnt{background:#A8502F}
+  .summary{font-size:13px;color:#5B5344;margin:12px 0 0}
+  .summary b{color:#232019}
+  td.status-cell{padding:5px 6px;white-space:nowrap;text-align:center}
+  td.status-cell .state{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;text-transform:uppercase;letter-spacing:.03em}
+  td.status-cell .night{display:block;font-size:10.5px;color:#8C8571;margin-top:2px}
+  .state.turnover{background:#F4CFC2;color:#A8502F}
+  .state.arriving{background:#D9E6DC;color:#2F6B45}
+  .state.departing{background:#F4E3D3;color:#8C6A2F}
+  .state.staying{background:#E7E3D7;color:#5B5344}
+  .state.empty{background:#F1EDE4;color:#A8A192}
+  tbody tr.st-turnover td.room{background:#F4CFC2;color:#A8502F}
+  tbody tr.st-arriving td.room{background:#D9E6DC;color:#2F6B45}
+  tbody tr.st-departing td.room{background:#F4E3D3;color:#8C6A2F}
+  tbody tr.st-empty td{background:#FAF9F5}
+  tbody tr.st-empty td.room{background:#F1EDE4;color:#A8A192}
   th.g-room{background:#4C3B2C}
   td.room{position:sticky;left:0;z-index:5;background:#F1EDE4;font-weight:700;text-align:center;
           padding:6px 8px;white-space:nowrap;border-right:2px solid #C9C2AC}
@@ -144,13 +161,21 @@ function opts(list, sel){
   });
   return out;
 }
-function cellSelect(row,key,list){
-  var v = (row.saved && row.saved[key]) || "";
-  return '<td><select data-room="'+row.room_id+'" data-key="'+key+'">'+opts(list,v)+"</select></td>";
+// scope "day" writes to the day sheet row; scope "stay" writes to the
+// stay itself, so it shows on every day of that party's stay.
+function val(row, key, scope){
+  if (scope === "stay") return (row.stay && row.stay[key]) || "";
+  return (row.saved && row.saved[key]) || "";
 }
-function cellText(row,key){
-  var v = (row.saved && row.saved[key]) || "";
-  return '<td><input type="text" data-room="'+row.room_id+'" data-key="'+key+'" value="'+esc(v)+'"></td>';
+function cellSelect(row,key,list,scope){
+  if (scope === "stay" && !row.stay) return '<td class="dim"></td>';
+  return '<td><select data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'">'
+       + opts(list, val(row,key,scope)) + "</select></td>";
+}
+function cellText(row,key,scope){
+  if (scope === "stay" && !row.stay) return '<td class="dim"></td>';
+  return '<td><input type="text" data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'" value="'
+       + esc(val(row,key,scope)) + '"></td>';
 }
 function cellGuest(b, dimIfEmpty){
   if (!b) return '<td class="ro'+(dimIfEmpty?" dim":"")+'"></td>';
@@ -172,45 +197,69 @@ var HEAD =
   '<thead>'
 + '<tr class="groups">'
 +   '<th class="room g-room" rowspan="2">Room</th>'
-+   '<th class="g-arr" colspan="11">Arriving guests</th>'
-+   '<th class="g-stay" colspan="3">Staying guests</th>'
-+   '<th class="g-dep" colspan="7">Departing guests</th>'
++   '<th class="g-room" rowspan="2">Status</th>'
++   '<th class="g-stay" colspan="7">The stay</th>'
++   '<th class="g-arr" colspan="4">Arrivals</th>'
++   '<th class="g-dep" colspan="5">Departures</th>'
++   '<th class="g-act" colspan="2">Activities</th>'
 +   '<th class="g-mnt" rowspan="2">Maintenance</th>'
 + "</tr>"
 + '<tr class="cols">'
-+   "<th>Pax</th><th>Type</th><th>Names</th><th>Guide</th><th>Driver</th><th>Vehicle</th>"
-+   "<th>Housekeeper</th><th>Arrival details</th><th>ETA</th><th>Activity</th><th>Notes</th>"
-+   "<th>Names</th><th>Activity</th><th>Notes</th>"
-+   "<th>Names</th><th>Departure details</th><th>ETD</th><th>Driver</th><th>Vehicle</th><th>Activity</th><th>Notes</th>"
++   "<th>Pax</th><th>Type</th><th>Names</th><th>Housekeeper</th><th>Guide</th><th>Vehicle</th><th>Notes</th>"
++   "<th>Driver/Guide</th><th>Vehicle</th><th>Arrival details</th><th>ETA</th>"
++   "<th>Names</th><th>Driver/Guide</th><th>Vehicle</th><th>Departure details</th><th>ETD</th>"
++   "<th>Activity</th><th>Time</th>"
 + "</tr></thead>";
+
+var STATUS_LABEL = { arriving:"Arriving", departing:"Departing", turnover:"Turnover", staying:"Staying", empty:"Empty" };
 
 function rowHtml(row){
   var people = boot.people, vehicles = boot.vehicles;
-  var turnover = row.arriving && row.departing;
-  var h = '<tr'+(turnover?' class="turnover"':"")+' data-rowfor="'+row.room_id+'">';
+  var b = (row.stay && row.stay.booking) || null;
+  var h = '<tr class="st-'+row.status+'" data-rowfor="'+row.room_id+'">';
   h += '<td class="room">'+esc(row.label)+"</td>";
 
-  // Arriving
-  h += cellPax(row.arriving);
-  h += '<td class="ro'+(row.arriving?"":" dim")+'">'+esc(row.arriving && row.arriving.room_type_needed || "")+"</td>";
-  h += cellGuest(row.arriving, true);
-  h += cellSelect(row,"guide_id",people) + cellSelect(row,"driver_id",people) + cellSelect(row,"vehicle_id",vehicles);
-  h += cellSelect(row,"housekeeper_id",people);
-  h += cellText(row,"arrival_details") + cellText(row,"eta") + cellText(row,"arrival_activity") + cellText(row,"arrival_notes");
+  // Status, and where in the stay they are — so the shape of the day
+  // reads down one narrow column without scanning across.
+  h += '<td class="status-cell"><span class="state '+row.status+'">'+STATUS_LABEL[row.status]+"</span>";
+  if (row.night) h += '<span class="night">Night '+row.night+" of "+row.nights+"</span>";
+  h += "</td>";
 
-  // Staying
-  h += cellGuest(row.staying, true);
-  h += cellText(row,"staying_activity") + cellText(row,"staying_notes");
+  // ---- Sector 1: the stay ----
+  h += cellPax(b);
+  h += '<td class="ro'+(b?"":" dim")+'">'+esc(b && b.room_type_needed || "")+"</td>";
+  h += cellGuest(b, true);
+  h += cellSelect(row,"housekeeper_id",people,"stay");
+  h += cellSelect(row,"guide_id",people,"stay");
+  h += cellSelect(row,"vehicle_id",vehicles,"stay");
+  h += cellText(row,"notes","stay");
 
-  // Departing
-  h += cellGuest(row.departing, true);
-  h += cellText(row,"departure_details") + cellText(row,"etd");
-  h += cellSelect(row,"departing_driver_id",people) + cellSelect(row,"departing_vehicle_id",vehicles);
-  h += cellText(row,"departure_activity") + cellText(row,"departure_notes");
+  // ---- Sector 2: arrivals (the pickup) ----
+  var arriving = row.status === "arriving" || row.status === "turnover";
+  if (arriving){
+    h += cellSelect(row,"arrival_driver_id",people) + cellSelect(row,"arrival_vehicle_id",vehicles)
+      +  cellText(row,"arrival_details") + cellText(row,"eta");
+  } else {
+    h += '<td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
+  }
 
-  // Maintenance — stands alone, always available, whatever the room is doing.
+  // ---- Sector 3: departures ----
+  if (row.departing){
+    h += '<td class="ro"><span class="name">'+esc(row.departing.guest_name)+"</span>"
+      +  (row.departing.booking_ref ? ' <span class="ref">'+esc(row.departing.booking_ref)+"</span>" : "")
+      +  "</td>";
+    h += cellSelect(row,"departure_driver_id",people) + cellSelect(row,"departure_vehicle_id",vehicles)
+      +  cellText(row,"departure_details") + cellText(row,"etd");
+  } else {
+    h += '<td class="ro dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
+  }
+
+  // ---- Sector 4: activities ----
+  h += cellText(row,"activity") + cellText(row,"activity_time");
+
+  // ---- Sector 5: maintenance, always available ----
   var mnt = (row.saved && row.saved.maintenance_note) || "";
-  h += '<td class="mnt"><input type="text" data-room="'+row.room_id+'" data-key="maintenance_note" value="'+esc(mnt)+'"></td>';
+  h += '<td class="mnt"><input type="text" placeholder="—" data-room="'+row.room_id+'" data-key="maintenance_note" data-scope="day" value="'+esc(mnt)+'"></td>';
   return h + "</tr>";
 }
 
@@ -221,9 +270,11 @@ function rowHtml(row){
 // collection — it just makes the repeat visible, which is what Mark
 // said the picture is for.
 function markClashes(){
+  var MOVEMENT = ["arrival_driver_id","arrival_vehicle_id","departure_driver_id","departure_vehicle_id"];
   var seen = {};
   document.querySelectorAll('td select[data-key]').forEach(function(sel){
     sel.parentElement.classList.remove("clash");
+    if (MOVEMENT.indexOf(sel.getAttribute("data-key")) === -1) return;
     if (!sel.value) return;
     (seen[sel.value] = seen[sel.value] || []).push(sel);
   });
@@ -232,11 +283,14 @@ function markClashes(){
     if (seen[v].length > 1){ n++; seen[v].forEach(function(s){ s.parentElement.classList.add("clash"); }); }
   });
   var w = el("clashnote");
-  if (w) w.textContent = n ? (n + (n===1?" person or vehicle appears":" people or vehicles appear") + " more than once today — outlined in red. Often fine, worth a look.") : "";
+  if (w) w.textContent = n ? (n + (n===1?" person or vehicle is":" people or vehicles are") + " in more than one pickup or drop-off today — outlined in red. Often fine, worth a look.") : "";
 }
 
 function render(){
-  var h = '<div class="scroll"><table>'+HEAD+"<tbody>";
+  var c = sheet.counts;
+  var h = '<p class="summary"><b>'+c.arriving+"</b> arriving · <b>"+c.departing+"</b> departing · <b>"
+        + c.in_house+"</b> rooms in house · <b>"+c.empty+"</b> empty of "+c.rooms+"</p>";
+  h += '<div class="scroll"><table>'+HEAD+"<tbody>";
   sheet.rows.forEach(function(r){ h += rowHtml(r); });
   h += "</tbody></table></div>";
   h += '<p class="warn" id="clashnote"></p>';
@@ -303,12 +357,11 @@ function markDirty(roomId){
 function collect(roomId){
   var row = sheet.rows.filter(function(r){return r.room_id===roomId;})[0];
   var body = { date: sheet.date, room_id: roomId, person_id: personId() };
+  if (row.stay) body.stay_id = row.stay.stay_id;
   document.querySelectorAll('[data-room="'+roomId+'"]').forEach(function(inp){
     body[inp.getAttribute("data-key")] = inp.value;
   });
-  if (row.arriving) body.arriving_booking_id = row.arriving.id;
-  if (row.staying) body.staying_booking_id = row.staying.id;
-  if (row.departing) body.departing_booking_id = row.departing.id;
+  if (row.stay && row.stay.booking) body.arriving_booking_id = row.stay.booking.id;
   return body;
 }
 
