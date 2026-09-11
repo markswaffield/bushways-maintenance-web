@@ -445,6 +445,7 @@ function collect(roomId){
     body[inp.getAttribute("data-key")] = inp.value;
   });
   if (row.stay && row.stay.booking) body.arriving_booking_id = row.stay.booking.id;
+  if (row.departing && row.departing.booking_id) body.departing_booking_id = row.departing.booking_id;
   return body;
 }
 
