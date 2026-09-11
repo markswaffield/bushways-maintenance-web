@@ -278,8 +278,17 @@ function rowHtml(row){
   h += cellNotes(row);
 
   // ---- Sector 2: arrivals (the pickup) ----
-  h += cellSelect(row,"arrival_driver_id",people) + cellSelect(row,"arrival_vehicle_id",vehicles)
-    +  cellText(row,"arrival_details") + cellTime(row,"eta", b && b.eta);
+  // Only where the movement applies. Mark, 2026-09-11, having seen the
+  // alternative live: "i now see that the drop down menu for driver and
+  // vehicle is visible for every row. i was happy with your option of
+  // only making them visible when a room is occupied." A picker on a row
+  // with nobody arriving invites data that means nothing.
+  if (row.status === "arriving" || row.status === "turnover"){
+    h += cellSelect(row,"arrival_driver_id",people) + cellSelect(row,"arrival_vehicle_id",vehicles)
+      +  cellText(row,"arrival_details") + cellTime(row,"eta", b && b.eta);
+  } else {
+    h += '<td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
+  }
 
   // ---- Sector 3: departures ----
   if (row.departing){
@@ -290,13 +299,15 @@ function rowHtml(row){
     h += cellSelect(row,"departure_driver_id",people) + cellSelect(row,"departure_vehicle_id",vehicles)
       +  cellText(row,"departure_details") + cellTime(row,"etd", row.departing.booking_etd);
   } else {
-    h += '<td class="ro dim"></td>';
-    h += cellSelect(row,"departure_driver_id",people) + cellSelect(row,"departure_vehicle_id",vehicles)
-      +  cellText(row,"departure_details") + cellTime(row,"etd", null);
+    h += '<td class="ro dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
   }
 
   // ---- Sector 4: activities ----
-  h += cellText(row,"activity") + cellText(row,"activity_time");
+  if (row.stay || row.departing){
+    h += cellText(row,"activity") + cellText(row,"activity_time");
+  } else {
+    h += '<td class="dim"></td><td class="dim"></td>';
+  }
 
   // ---- Sector 5: maintenance, always available ----
   var mnt = (row.saved && row.saved.maintenance_note) || "";
