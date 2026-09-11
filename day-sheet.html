@@ -96,7 +96,12 @@
   td.ro .ref{color:#8C8571;font-size:11px}
   td.dim{background:#F7F5F0}
   tbody tr:nth-child(even) td.dim{background:#F2F0E9}
-  .diet{display:block;font-size:11px;color:#A8502F;font-weight:600;margin-top:2px}
+  .diet{display:block;font-size:11px;color:#A8502F;font-weight:600;margin-top:1px}
+  .diet.req{color:#6B5A8C}
+  td.two{padding:4px 5px}
+  td.two input.sub{width:100%;border:1px dashed #C9C2AC;border-radius:4px;padding:3px 4px;margin-top:3px;font-size:11.5px;background:#FCFBF8}
+  td.two input.sub:focus{border-style:solid;background:#fff}
+  td.two input.sub::placeholder{color:#B5AE9C;font-style:italic}
   .clash{outline:2px solid #A8502F;outline-offset:-2px;background:#FDECE6!important}
 
   .below{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
@@ -177,13 +182,34 @@ function cellText(row,key,scope){
   return '<td><input type="text" data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'" value="'
        + esc(val(row,key,scope)) + '"></td>';
 }
-function cellGuest(b, dimIfEmpty){
-  if (!b) return '<td class="ro'+(dimIfEmpty?" dim":"")+'"></td>';
+// Two layers, never one field pretending to be both. The top line is
+// what ResRequest holds and a pull refreshes; the box below is the
+// camp's, and a pull never touches it. Mark, 2026-09-11: "Names will
+// normally be the booking name - but we will want to add the guests
+// first names as well for a more personalised touch."
+function cellNames(row){
+  var b = (row.stay && row.stay.booking) || null;
+  if (!b) return '<td class="ro dim"></td>';
   var h = '<span class="name">'+esc(b.guest_name)+"</span>";
   if (b.booking_ref) h += ' <span class="ref">'+esc(b.booking_ref)+"</span>";
+  h += '<input type="text" class="sub" placeholder="guest names…" data-room="'+row.room_id
+    +  '" data-key="guest_names" data-scope="stay" value="'+esc(row.stay.guest_names || "")+'">';
+  return '<td class="ro two">'+h+"</td>";
+}
+
+// Same idea for notes. Dietary and special requests come from the
+// booking and are read-only here; anything the camp needs to add sits
+// underneath - Mark: "we may need to add extra notes on dietaries etc
+// that were not captured at booking".
+function cellNotes(row){
+  if (!row.stay) return '<td class="dim"></td>';
+  var b = row.stay.booking || {};
+  var h = "";
   if (b.dietary) h += '<span class="diet">'+esc(b.dietary)+"</span>";
-  if (b.special_requests) h += '<span class="diet">'+esc(b.special_requests)+"</span>";
-  return '<td class="ro">'+h+"</td>";
+  if (b.special_requests) h += '<span class="diet req">'+esc(b.special_requests)+"</span>";
+  h += '<input type="text" class="sub" placeholder="camp notes…" data-room="'+row.room_id
+    +  '" data-key="notes" data-scope="stay" value="'+esc(row.stay.notes || "")+'">';
+  return '<td class="ro two">'+h+"</td>";
 }
 function cellPax(b){
   if (!b) return '<td class="ro dim"></td>';
@@ -228,11 +254,11 @@ function rowHtml(row){
   // ---- Sector 1: the stay ----
   h += cellPax(b);
   h += '<td class="ro'+(b?"":" dim")+'">'+esc(b && b.room_type_needed || "")+"</td>";
-  h += cellGuest(b, true);
+  h += cellNames(row);
   h += cellSelect(row,"housekeeper_id",people,"stay");
   h += cellSelect(row,"guide_id",people,"stay");
   h += cellSelect(row,"vehicle_id",vehicles,"stay");
-  h += cellText(row,"notes","stay");
+  h += cellNotes(row);
 
   // ---- Sector 2: arrivals (the pickup) ----
   var arriving = row.status === "arriving" || row.status === "turnover";
