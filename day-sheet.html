@@ -105,6 +105,8 @@
   td.two input.sub:focus{border-style:solid;background:#fff}
   td.two input.sub::placeholder{color:#B5AE9C;font-style:italic}
   .clash{outline:2px solid #A8502F;outline-offset:-2px;background:#FDECE6!important}
+  .overload{outline:2px solid #B8860B;outline-offset:-2px;background:#FBF3DF!important}
+  .warn.amber{color:#8C6A2F}
 
   .below{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
   .panel{flex:1 1 320px;background:#fff;border:1px solid #C9C2AC;border-radius:8px;padding:11px 13px}
@@ -276,13 +278,8 @@ function rowHtml(row){
   h += cellNotes(row);
 
   // ---- Sector 2: arrivals (the pickup) ----
-  var arriving = row.status === "arriving" || row.status === "turnover";
-  if (arriving){
-    h += cellSelect(row,"arrival_driver_id",people) + cellSelect(row,"arrival_vehicle_id",vehicles)
-      +  cellText(row,"arrival_details") + cellTime(row,"eta", b && b.eta);
-  } else {
-    h += '<td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
-  }
+  h += cellSelect(row,"arrival_driver_id",people) + cellSelect(row,"arrival_vehicle_id",vehicles)
+    +  cellText(row,"arrival_details") + cellTime(row,"eta", b && b.eta);
 
   // ---- Sector 3: departures ----
   if (row.departing){
@@ -293,7 +290,9 @@ function rowHtml(row){
     h += cellSelect(row,"departure_driver_id",people) + cellSelect(row,"departure_vehicle_id",vehicles)
       +  cellText(row,"departure_details") + cellTime(row,"etd", row.departing.booking_etd);
   } else {
-    h += '<td class="ro dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
+    h += '<td class="ro dim"></td>';
+    h += cellSelect(row,"departure_driver_id",people) + cellSelect(row,"departure_vehicle_id",vehicles)
+      +  cellText(row,"departure_details") + cellTime(row,"etd", null);
   }
 
   // ---- Sector 4: activities ----
@@ -311,6 +310,47 @@ function rowHtml(row){
 // a guide genuinely can do a morning drop-off and an afternoon
 // collection — it just makes the repeat visible, which is what Mark
 // said the picture is for.
+// A guide with more than six people across the whole day. Mark,
+// 2026-09-11: "i would also like to build in when a guide has been
+// allocated more than 6 pax - similar to your conflict highlight for the
+// vehicles." Six is a game-drive vehicle's worth.
+//
+// Counted per BOOKING, not per row. A party of four in two inter-leading
+// rooms appears on two lines with the same guide; counting rows would
+// call that eight people and flag a guide who has four.
+var MAX_PAX_PER_GUIDE = 6;
+
+function markGuideLoad(){
+  var perGuide = {};
+  (sheet.rows || []).forEach(function(r){
+    if (!r.stay) return;
+    var sel = document.querySelector('[data-room="'+r.room_id+'"][data-key="guide_id"]');
+    var gid = sel && sel.value;
+    if (!gid) return;
+    var b = r.stay.booking || {};
+    var g = perGuide[gid] || (perGuide[gid] = { pax: 0, seen: {}, cells: [] });
+    if (sel) g.cells.push(sel);
+    if (b.id && !g.seen[b.id]) {
+      g.seen[b.id] = true;
+      g.pax += (b.adults || 0) + (b.children || 0);
+    }
+  });
+  var over = [];
+  Object.keys(perGuide).forEach(function(gid){
+    var g = perGuide[gid];
+    var name = (boot.people.filter(function(p){ return p.id === gid; })[0] || {}).name || "A guide";
+    g.cells.forEach(function(c){
+      c.parentElement.classList.toggle("overload", g.pax > MAX_PAX_PER_GUIDE);
+      c.title = name + " has " + g.pax + " pax today";
+    });
+    if (g.pax > MAX_PAX_PER_GUIDE) over.push(name + " — " + g.pax + " pax");
+  });
+  var el2 = document.getElementById("guidenote");
+  if (el2) el2.textContent = over.length
+    ? "Over " + MAX_PAX_PER_GUIDE + " pax: " + over.join(" · ") + ". Outlined in amber."
+    : "";
+}
+
 function markClashes(){
   var MOVEMENT = ["arrival_driver_id","arrival_vehicle_id","departure_driver_id","departure_vehicle_id"];
   var seen = {};
@@ -335,7 +375,7 @@ function render(){
   h += '<div class="scroll"><table>'+HEAD+"<tbody>";
   sheet.rows.forEach(function(r){ h += rowHtml(r); });
   h += "</tbody></table></div>";
-  h += '<p class="warn" id="clashnote"></p>';
+  h += '<p class="warn" id="clashnote"></p><p class="warn amber" id="guidenote"></p>';
 
   h += '<div class="below">';
   h += '<div class="panel"><h2>Notes not tied to one room</h2>'
@@ -387,6 +427,7 @@ function render(){
 
   el("app").innerHTML = h;
   markClashes();
+  markGuideLoad();
 }
 
 function markDirty(roomId){
@@ -470,7 +511,7 @@ document.addEventListener("input", function(e){
 });
 document.addEventListener("change", function(e){
   var room = e.target.getAttribute && e.target.getAttribute("data-room");
-  if (room){ markDirty(room); markClashes(); }
+  if (room){ markDirty(room); markClashes(); markGuideLoad(); }
 });
 document.addEventListener("click", function(e){
   var t = e.target;
