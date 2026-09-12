@@ -150,7 +150,8 @@
     });
 
     var overdue = shown.filter(function (s) { return s.status === "overdue"; }).length;
-    var html = '<p class="order-note">' + all.length + " scheduled in total" +
+    var html = '<p class="order-note">Only what is coming up. Anything further off lives in Schedules below. ' +
+      all.length + " showing" +
       (overdue ? " · " + overdue + " of those shown " + (overdue === 1 ? "is" : "are") + " overdue" : "") + '.</p>';
 
     html += '<div class="filter-section"><div class="title">Order</div>' +
@@ -234,6 +235,7 @@
       name: document.getElementById("f_name").value,
       interval_kind: kind,
       default_department_id: document.getElementById("f_dept").value || null,
+      reminder_days: document.getElementById("f_reminder").value,
     };
     if (kind === "date") {
       var preset = document.getElementById("f_preset").value;
@@ -337,6 +339,9 @@
         '<label>Every how many</label>' +
         '<input type="number" id="f_meter" min="1" value="' + esc(isNew ? "" : (rule.meter_interval || "")) + '" placeholder="e.g. 100">' +
       '</div>' +
+      '<label>Show in Due how many days ahead?</label>' +
+      '<input type="number" id="f_reminder" min="0" value="' + esc(isNew ? "" : (rule.reminder_days == null ? "" : rule.reminder_days)) + '" placeholder="blank = only once due">' +
+      '<p class="rmeta" style="margin-top:4px">A six-monthly job wants about 30 days; a weekly one, two. Blank means it appears only on the day.</p>' +
       '<label>Always belongs to (optional)</label><select id="f_dept">' +
       '<option value="">Nobody in particular</option>' +
       departments.map(function (d) {
@@ -359,10 +364,18 @@
   };
 
   function rulesSection() {
-    var h = '<h2>Schedules <span class="count">' + rules.filter(function (r) { return !r.archived; }).length +
-      '</span></h2>';
+    var live = rules.filter(function (r) { return !r.archived; }).length;
+    // Collapsed by default — Mark, 2026-09-12: "We can actually collapse
+    // this whole section and just have it visible when we open it." These
+    // are settings, not the day's work, and they were crowding out the
+    // list people actually open this page to read.
+    var h = '<h2 style="cursor:pointer" onclick="toggleRules()">' +
+      (showRules ? "▾" : "▸") + ' Schedules <span class="count">' + live +
+      (showRules ? "" : " — tap to open") + '</span></h2>';
+    if (!showRules) return h;
+
     h += '<p class="order-note">The rules themselves, not what is due off them. ' +
-      'A schedule with no checklist behind it is completed here, with a note. ' +
+      'Editing, adding and removing happen here; completing happens above, beside the thing that is due. ' +
       (me && me.is_manager ? "" : "Management can add, edit and remove these.") + '</p>';
     if (me && me.is_manager && editingId !== "__new__") {
       h += '<div class="racts" style="margin-top:8px"><button onclick="startAdd()">+ Add a schedule</button></div>';
@@ -373,6 +386,7 @@
       h += '<div class="rule' + (r.archived ? " archived" : "") + '">' +
         '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
         '<p class="rmeta">' + esc(r.describes) +
+        (r.reminder_days != null ? " · shows " + r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s") + " ahead" : "") +
         (r.target ? " · " + esc(r.target) : "") +
         (r.default_department ? " · always " + esc(r.default_department) : "") +
         (r.last_completed ? " · last done " +
@@ -380,14 +394,11 @@
         (r.change_count ? " · " + r.change_count + " entr" + (r.change_count === 1 ? "y" : "ies") : "") +
         '</p>';
       if (editingId === r.id) { h += ruleForm(r); }
-      else if (completingId === r.id) { h += completeForm(r); }
+
       else {
         h += '<div class="racts">';
         if (r.change_count) h += '<button onclick="showHistory(\'' + r.id + '\')">' +
           (historyFor === r.id ? "Hide history" : "History") + '</button>';
-        if (me && me.is_manager && !r.archived && r.completable) {
-          h += '<button onclick="startComplete(\'' + r.id + '\')">Complete schedule</button>';
-        }
         if (me && me.is_manager && r.editable) {
           if (r.archived) h += '<button onclick="archiveRule(\'' + r.id + '\', true)">Restore</button>';
           else h += '<button onclick="startEdit(\'' + r.id + '\')">Edit</button>';
@@ -418,6 +429,14 @@
       '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
       who +
       '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
+
+    // Completing sits here, beside the thing that is due, rather than in
+    // the Schedules section below — Mark, 2026-09-12. Completing removes
+    // it from this list, and it returns only when it is next coming up.
+    if (completingId === s.id) return h + completeForm(s) + '</div>';
+    if (me && me.is_manager && s.is_schedule && s.completable) {
+      h += '<div class="assign-row"><button onclick="startComplete(\'' + s.id + '\')">Complete</button></div>';
+    }
 
     // Management assigns a department by hand, the same way a fault is
     // assigned. Only on a real Task — a recurring schedule row has no
