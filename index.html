@@ -468,18 +468,6 @@
       : "Required — set how far ahead to alert.";
   };
 
-  window.onFirstDue = function () {
-    var el2 = document.getElementById("f_arrives");
-    if (!el2) return;
-    var d = document.getElementById("f_firstdue").value;
-    var lead = Number(document.getElementById("f_reminder").value || 0);
-    if (!d) { el2.textContent = "A six-monthly job wants about 30 days' notice; a weekly one, two."; return; }
-    var arrive = new Date(d + "T00:00:00");
-    arrive.setDate(arrive.getDate() - lead);
-    el2.textContent = "Appears on the Due list from " +
-      arrive.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) +
-      (lead ? " — " + lead + " day" + (lead === 1 ? "" : "s") + " before it is due." : ", the day it is due.");
-  };
 
   window.onPresetPick = function () {
     document.getElementById("f_customrow").hidden = document.getElementById("f_preset").value !== "__custom__";
