@@ -208,6 +208,7 @@
     html += '<div style="margin-top:28px"></div>' + rulesSection();
 
     document.getElementById("app").innerHTML = html;
+    if (document.getElementById("f_arrives")) onFirstDue();
   }
 
   // The six date intervals Mark named, plus a free one for anything else.
@@ -236,6 +237,7 @@
       interval_kind: kind,
       default_department_id: document.getElementById("f_dept").value || null,
       reminder_days: document.getElementById("f_reminder").value,
+      next_due_date: document.getElementById("f_firstdue").value || null,
     };
     if (kind === "date") {
       var preset = document.getElementById("f_preset").value;
@@ -356,9 +358,19 @@
         '<label>Every how many</label>' +
         '<input type="number" id="f_meter" min="1" value="' + esc(isNew ? "" : (rule.meter_interval || "")) + '" placeholder="e.g. 100">' +
       '</div>' +
+      // Mark, 2026-09-12: "we need to be able to indicate when we want
+      // the schedule to arrive onto the Due list, which will also trigger
+      // the first alert." Set the date the work is first due; the lead
+      // below decides how far ahead of that it appears. Both are shown
+      // together with the resulting arrival date spelled out, so there is
+      // no arithmetic to do in your head.
+      '<label>First due on</label>' +
+      '<input type="date" id="f_firstdue" onchange="onFirstDue()" value="' +
+        esc(isNew ? new Date().toISOString().slice(0,10)
+                  : (rule.next_due_date ? rule.next_due_date.slice(0,10) : "")) + '">' +
       '<label>Show in Due how many days ahead?</label>' +
-      '<input type="number" id="f_reminder" min="0" value="' + esc(isNew ? "" : (rule.reminder_days == null ? "" : rule.reminder_days)) + '" placeholder="blank = only once due">' +
-      '<p class="rmeta" style="margin-top:4px">A six-monthly job wants about 30 days; a weekly one, two. Blank means it appears only on the day.</p>' +
+      '<input type="number" id="f_reminder" min="0" onchange="onFirstDue()" oninput="onFirstDue()" value="' + esc(isNew ? "" : (rule.reminder_days == null ? "" : rule.reminder_days)) + '" placeholder="blank = only once due">' +
+      '<p class="rmeta" style="margin-top:4px" id="f_arrives"></p>' +
       '<label>Always belongs to (optional)</label><select id="f_dept">' +
       '<option value="">Nobody in particular</option>' +
       departments.map(function (d) {
@@ -372,10 +384,25 @@
   }
 
   window.onKindPick = function () {
+    onFirstDue();
     var k = document.getElementById("f_kind").value;
     document.getElementById("f_date").hidden = k !== "date";
     document.getElementById("f_meterrow").hidden = k === "date";
   };
+  // Spell out the arrival date rather than leaving it to be worked out.
+  window.onFirstDue = function () {
+    var el2 = document.getElementById("f_arrives");
+    if (!el2) return;
+    var d = document.getElementById("f_firstdue").value;
+    var lead = Number(document.getElementById("f_reminder").value || 0);
+    if (!d) { el2.textContent = "A six-monthly job wants about 30 days' notice; a weekly one, two."; return; }
+    var arrive = new Date(d + "T00:00:00");
+    arrive.setDate(arrive.getDate() - lead);
+    el2.textContent = "Appears on the Due list from " +
+      arrive.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) +
+      (lead ? " — " + lead + " day" + (lead === 1 ? "" : "s") + " before it is due." : ", the day it is due.");
+  };
+
   window.onPresetPick = function () {
     document.getElementById("f_customrow").hidden = document.getElementById("f_preset").value !== "__custom__";
   };
