@@ -537,6 +537,8 @@
   // Guest Room Inspection — unchanged from before this merge, just
   // reached via the area picker above instead of its own start screen.
   // ------------------------------------------------------------------
+  var pendingOdometer = null;
+
   function renderChecklist(data, personId, roomId) {
     var c = document.getElementById("checklist");
     show("checklist");
@@ -580,8 +582,28 @@
       faultSel.disabled = false;
     };
 
-    var html = '<h1>Guest Room Inspection</h1>' +
-      '<p class="sub">Chobe Elephant Camp, ' + esc(data.room_label) + ' — leave an item alone if it\'s fine (tool-local D-023)</p>';
+    var isVeh = data.target_type === "vehicle";
+    var html = '<h1>' + (isVeh
+        ? 'Vehicle Inspection — <b>' + esc(data.target_label) + '</b>'
+        : 'Guest Room Inspection') + '</h1>' +
+      '<p class="sub">Chobe Elephant Camp' + (isVeh ? "" : ", " + esc(data.room_label)) +
+      ' — leave an item alone if it\'s fine (tool-local D-023)</p>' +
+      // The odometer, on a vehicle check only. Captured through the
+      // ordinary checklist rather than as a separate step nobody
+      // remembers (tool-local D-014). The last reading is shown so an
+      // obvious typo is visible as one.
+      (isVeh
+        ? '<div class="odo"><label>Odometer reading (km)</label>' +
+          '<input type="number" inputmode="numeric" id="odometer" min="0" step="1" placeholder="e.g. 184320">' +
+          '<p class="odo-note">' +
+          (data.odometer != null
+            ? "Last recorded: " + Number(data.odometer).toLocaleString() + " km."
+            : "No reading recorded for this vehicle yet.") +
+          (data.service_interval_km
+            ? " Serviced every " + Number(data.service_interval_km).toLocaleString() + " km."
+            : " No service interval set, so no service will be raised.") +
+          '</p></div>'
+        : "");
     data.sections.forEach(function (s) {
       html += "<h2>" + esc(s.name) + "</h2>";
       s.items.forEach(function (item) {
@@ -642,6 +664,13 @@
           }
         });
       });
+      var odoInput = document.getElementById("odometer");
+      pendingOdometer = odoInput && odoInput.value !== "" ? Number(odoInput.value) : null;
+      if (pendingOdometer !== null && data.odometer != null && pendingOdometer < Number(data.odometer)) {
+        if (!confirm("That odometer reading (" + pendingOdometer.toLocaleString() +
+            " km) is lower than the last one recorded (" + Number(data.odometer).toLocaleString() +
+            " km). Record it anyway?")) return;
+      }
       showReview(results);
     };
 
@@ -656,7 +685,12 @@
       var flagged = results.filter(function (x) { return x.failed; });
       var readings = results.filter(function (x) { return x.value !== undefined; });
       var html = '<h1>Confirm Inspection</h1>' +
-        '<p class="sub">' + esc(data.room_label) + ', Chobe Elephant Camp — check this is right before it\'s recorded</p>';
+        '<p class="sub">' + esc(data.target_label || data.room_label) + ', Chobe Elephant Camp — check this is right before it\'s recorded</p>';
+
+      if (pendingOdometer !== null) {
+        html += '<div class="review-card"><p class="review-line">Odometer: <b>' +
+          pendingOdometer.toLocaleString() + ' km</b></p></div>';
+      }
 
       if (!flagged.length && !readings.length) {
         html += '<div class="review-card"><p class="review-line">Nothing flagged — every item recorded as fine.</p></div>';
@@ -696,6 +730,7 @@
             // is the general form a vehicle check uses.
             room_id: targetType === "room" ? roomId : null,
             target_id: roomId, target_type: targetType,
+            odometer: pendingOdometer,
             template_id: data.template_id, results: results,
           }),
         }).then(function (resp) { return resp.json(); }).then(function (out) {
@@ -710,6 +745,8 @@
               "<p>" + esc(out.target_label || out.room_label) + ", Chobe Elephant Camp.</p>" +
               "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
               (out.issues_raised ? "<p>" + out.issues_raised + " issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
+              (out.odometer_recorded != null ? "<p>Odometer recorded: " + Number(out.odometer_recorded).toLocaleString() + " km.</p>" : "") +
+              (out.service_raised ? "<p><b>A service is now due for this vehicle</b> — it's on the schedule.</p>" : "") +
               (uploaded ? "<p>" + uploaded + " photo" + (uploaded === 1 ? "" : "s") + " attached.</p>" : "") +
               (failed ? "<p class='note'>" + failed + " photo" + (failed === 1 ? "" : "s") + " didn't upload — the inspection itself is still safely recorded.</p>" : "") +
               '<p class="note">inspection id: ' + esc(out.inspection_id) + "</p>";
