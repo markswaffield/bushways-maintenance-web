@@ -35,6 +35,12 @@
   .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
   .badge.upcoming{background:#E3DFD3;color:#5B5344}
   .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .who{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-top:4px}
+  .who.dept{background:#E3DFD3;color:#5B5344}
+  .who.none{background:#F1EDE4;color:#A8A192;font-weight:400;font-style:italic}
+  .assign-row{display:flex;gap:6px;margin-top:8px}
+  .assign-row select{flex:1;padding:6px;font-size:13px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit}
+  .assign-row button{padding:6px 11px;font-size:13px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
   .group{margin-top:20px}
   .group .heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
@@ -45,6 +51,7 @@
 
 <h1>Schedule — Chobe Elephant Camp</h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
+<p class="sub" id="whoRow" hidden>You are <select id="who" onchange="onWho()"></select></p>
 <p class="nav"><b>Schedule</b> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
@@ -58,6 +65,8 @@
   var direction = "newest";
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
+  var mine = false;
+  var me = null, people = [], departments = [];
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -88,11 +97,31 @@
   };
   window.onKind = function () { kind = document.getElementById("kind").value; render(); };
   window.clearRange = function () { from = ""; to = ""; render(); };
+  window.onWho = function () {
+    me = people.filter(function (p) { return p.id === document.getElementById("who").value; })[0] || null;
+    render();
+  };
+  window.onMine = function () { mine = document.getElementById("mine").checked; render(); };
+  window.doAssignTask = function (taskId) {
+    var sel = document.getElementById("assign-" + taskId);
+    fetch(FN.replace("action=dashboard", "action=assign_task"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ task_id: taskId, assigned_department_id: sel.value || null, by_person_id: me && me.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      reload();
+    });
+  };
 
   function render() {
     var all = (lastData.schedules || []);
     var shown = all.filter(function (s) {
       if (kind && kindOf(s) !== kind) return false;
+      if (mine && me) {
+        var isMine = s.assigned_person_id === me.id ||
+          (me.department && s.assigned_department === me.department);
+        if (!isMine) return false;
+      }
       var d = new Date(s.due_date);
       if (from && d < new Date(from)) return false;
       if (to && d > new Date(to + "T23:59:59")) return false;
@@ -119,6 +148,13 @@
       '</div>' +
       ((from || to) ? '<p class="order-note" style="margin-top:8px"><a href="#" onclick="clearRange();return false;">Clear the range</a></p>' : "") +
       '</div>';
+
+    if (me) {
+      html += '<div class="filter-section"><div class="title">Mine</div>' +
+        '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px">' +
+        '<input type="checkbox" id="mine" onchange="onMine()" style="width:auto"' + (mine ? " checked" : "") + '>' +
+        'Only what is assigned to me or ' + esc(me.department || "my department") + '</label></div>';
+    }
 
     html += '<div class="filter-section"><div class="title">Kind</div>' +
       '<label>Show</label><select id="kind" onchange="onKind()">' +
@@ -154,15 +190,50 @@
   }
 
   function card(s) {
-    return '<div class="card sched-row"><div>' +
+    var who = s.assigned_person
+      ? '<span class="who">' + esc(s.assigned_person) + '</span>'
+      : s.assigned_department
+        ? '<span class="who dept">' + esc(s.assigned_department) + '</span>'
+        : s.is_task ? '<span class="who none">Unassigned</span>' : "";
+
+    var h = '<div class="card"><div class="sched-row"><div>' +
       '<p style="font-weight:700;margin:0">' + esc(s.name) + '</p>' +
       '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
+      who +
       '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
+
+    // Management assigns a department by hand, the same way a fault is
+    // assigned. Only on a real Task — a recurring schedule row has no
+    // task behind it to hang an assignment on yet.
+    if (me && me.is_manager && s.is_task) {
+      h += '<div class="assign-row"><select id="assign-' + s.id + '">' +
+        '<option value="">Unassigned</option>' +
+        departments.map(function (d) {
+          return '<option value="' + esc(d.id) + '"' +
+            (s.assigned_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+        }).join("") +
+        '</select><button onclick="doAssignTask(\'' + s.id + '\')">Assign</button></div>';
+    }
+    return h + '</div>';
   }
 
-  fetch(FN).then(function (r) { return r.json(); }).then(function (d) {
-    lastData = d;
-    render();
+  function reload() {
+    return fetch(FN).then(function (r) { return r.json(); }).then(function (d) {
+      lastData = d; departments = d.departments || []; render();
+    });
+  }
+
+  // Who is looking — the same stand-in sign-in as every other page:
+  // pick your name. Root D-017 replaces it with a WhatsApp code.
+  var BOOT = FN.replace("?action=dashboard", "");
+  fetch(BOOT).then(function (r) { return r.json(); }).then(function (b) {
+    people = b.people || [];
+    var sel = document.getElementById("who");
+    sel.innerHTML = '<option value="">— nobody —</option>' + people.map(function (p) {
+      return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
+    }).join("");
+    document.getElementById("whoRow").hidden = false;
+    return reload();
   }).catch(function (e) {
     document.getElementById("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>';
   });
