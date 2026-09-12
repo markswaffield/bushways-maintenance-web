@@ -88,7 +88,7 @@
   var direction = "newest";
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
-  var mine = false;
+  var mine = false, filterDept = "", filterPerson = "";
   var me = null, people = [], departments = [], areas = [], boot_vehicles = [];
   var VEHICLE_AREA_ID = null, addForVehicle = null;
   function isVehicleArea(id) { return !!id && id === VEHICLE_AREA_ID; }
@@ -132,6 +132,13 @@
     render();
   };
   window.onMine = function () { mine = document.getElementById("mine").checked; render(); };
+  window.onFilterDept = function () {
+    filterDept = document.getElementById("fDept").value; filterPerson = ""; mine = false; render();
+  };
+  window.onFilterPerson = function () {
+    filterPerson = document.getElementById("fPerson").value; filterDept = ""; mine = false; render();
+  };
+  window.clearWhoFilter = function () { filterDept = ""; filterPerson = ""; mine = false; render(); };
   window.doAssignTask = function (taskId) {
     var sel = document.getElementById("assign-" + taskId);
     fetch(FN.replace("action=dashboard", "action=assign_task"), {
@@ -152,6 +159,8 @@
           (me.department && s.assigned_department === me.department);
         if (!isMine) return false;
       }
+      if (filterDept && s.assigned_department !== filterDept) return false;
+      if (filterPerson && s.assigned_person_id !== filterPerson) return false;
       var d = new Date(s.due_date);
       if (from && d < new Date(from)) return false;
       if (to && d > new Date(to + "T23:59:59")) return false;
@@ -180,12 +189,32 @@
       ((from || to) ? '<p class="order-note" style="margin-top:8px"><a href="#" onclick="clearRange();return false;">Clear the range</a></p>' : "") +
       '</div>';
 
+    // Who it belongs to — Mark, 2026-09-12: "instead of a Mine option we
+    // need some filters. Mine - Department - Person. This way we can
+    // filter with respect to department. important for meetings to be
+    // able to easily instruct each department what is on their schedule
+    // for the day."
+    html += '<div class="filter-section"><div class="title">Who</div>';
     if (me) {
-      html += '<div class="filter-section"><div class="title">Mine</div>' +
-        '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px">' +
+      html += '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px">' +
         '<input type="checkbox" id="mine" onchange="onMine()" style="width:auto"' + (mine ? " checked" : "") + '>' +
-        'Only what is assigned to me or ' + esc(me.department || "my department") + '</label></div>';
+        'Mine — me or ' + esc(me.department || "my department") + '</label>';
     }
+    html += '<label>Department</label><select id="fDept" onchange="onFilterDept()">' +
+      '<option value="">All departments</option>' +
+      departments.map(function (d) {
+        return '<option value="' + esc(d.name) + '"' + (filterDept === d.name ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select>';
+    html += '<label>Person</label><select id="fPerson" onchange="onFilterPerson()">' +
+      '<option value="">Anyone</option>' +
+      people.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (filterPerson === p.id ? " selected" : "") + '>' +
+          esc(p.name) + (p.department ? " · " + esc(p.department) : "") + '</option>';
+      }).join("") + '</select>';
+    if (mine || filterDept || filterPerson) {
+      html += '<p class="order-note" style="margin-top:8px"><a href="#" onclick="clearWhoFilter();return false;">Show everything again</a></p>';
+    }
+    html += '</div>';
 
     html += '<div class="filter-section"><div class="title">Kind</div>' +
       '<label>Show</label><select id="kind" onchange="onKind()">' +
@@ -699,11 +728,14 @@
   }
 
   function card(s) {
-    var who = s.assigned_person
-      ? '<span class="who">' + esc(s.assigned_person) + '</span>'
-      : s.assigned_department
-        ? '<span class="who dept">' + esc(s.assigned_department) + '</span>'
-        : s.is_task ? '<span class="who none">Unassigned</span>' : "";
+    // Department first, then the person — Mark, 2026-09-12: "it must
+    // first show - Housekeeping (Department) - Name". The department is
+    // who owes the work; the name is who is doing it today. Both, not
+    // one or the other.
+    var who = (s.assigned_department || s.assigned_person)
+      ? '<span class="who' + (s.assigned_person ? "" : " dept") + '">' +
+        esc([s.assigned_department, s.assigned_person].filter(Boolean).join(" — ")) + '</span>'
+      : s.is_task ? '<span class="who none">Unassigned</span>' : "";
 
     var h = '<div class="card"><div class="sched-row"><div>' +
       '<p style="font-weight:700;margin:0">' + esc(s.name) + '</p>' +
