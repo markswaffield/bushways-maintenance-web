@@ -1,0 +1,233 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp — Assets</title>
+<!--
+  Assets — vehicles, rooms, trailers and everything else at a lodge.
+  Management adds, edits, retires and transfers them here.
+
+  Built 2026-09-12 after Mark chose Option B from
+  tools/maintenance/docs/asset-lifecycle-proposal.md: an asset takes its
+  open work and its rules to a new lodge, while the record of what was
+  already DONE stays where it was done.
+
+  Two rules this page exists to enforce:
+   - NOTHING IS EVER DELETED. A vehicle with two years of inspections
+     behind it cannot be deleted without destroying that history or
+     orphaning it. Retire instead; it leaves the lists and keeps
+     everything. Restorable, because things come back.
+   - A vehicle bought in Kasane next month should not need a code change.
+     Assets are data, the same argument root D-012 made about locations.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:24px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:13px;margin:10px 0 0}
+  .nav b{color:#43594A}
+  select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
+  button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
+  button.primary{background:#43594A;color:#fff}
+  button.danger{border-color:#A8502F;color:#A8502F}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0 0;padding:10px 12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
+  .bar label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
+  .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
+  .row.retired{opacity:.5;border-style:dashed}
+  .row .nm{font-weight:700;margin:0}
+  .row .mt{font-size:12px;color:#6B6455;margin:2px 0 0}
+  .acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
+  .form label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:9px 0 4px}
+  .form label:first-child{margin-top:0}
+  .note{font-size:12.5px;color:#6B6455;margin:6px 0 0}
+  .warn{font-size:12.5px;color:#A8502F;margin:6px 0 0}
+  .hist{margin-top:8px;border-top:1px solid #F1EDE4;padding-top:7px;font-size:12px;color:#6B6455}
+  .loading{color:#6B6455;margin-top:18px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1>Assets — Chobe Elephant Camp</h1>
+<p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
+<p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a> · <b>Assets</b></p>
+
+<div class="bar">
+  <div><label for="who">You are</label><select id="who"></select></div>
+  <div style="align-self:center"><label><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label></div>
+</div>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+var me = null, people = [], data = null, locations = [], showRetired = false;
+var editing = null, transferring = null, historyFor = null, historyRows = [];
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function el(id){return document.getElementById(id);}
+
+var KINDS = [
+  ["vehicle", "Vehicles", true],
+  ["trailer", "Trailers", true],
+  ["room", "Rooms", false],       // a room does not move between lodges
+  ["asset", "Other equipment", true],
+];
+
+function post(action, body){
+  return fetch(FN + "?action=" + action, {
+    method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify(Object.assign({ by_person_id: me && me.id }, body))
+  }).then(function(r){return r.json();});
+}
+
+window.startAdd = function(kind){ editing = { kind: kind }; transferring = null; render(); };
+window.startEdit = function(kind, id){
+  var a = (data[kind] || []).filter(function(x){ return x.id === id; })[0];
+  editing = Object.assign({}, a); transferring = null; render();
+};
+window.cancel = function(){ editing = null; transferring = null; render(); };
+
+window.saveAsset = function(){
+  post("save_asset", {
+    kind: editing.kind, id: editing.id || null,
+    name: el("f_name").value,
+    description: el("f_desc") ? el("f_desc").value : null,
+  }).then(function(out){
+    if (out.error) { alert(out.error); return; }
+    editing = null; load();
+  });
+};
+
+window.retire = function(kind, id, restore){
+  var reason = restore ? null : prompt("Why is it leaving? (sold, written off, returned…)");
+  if (!restore && reason === null) return;
+  post("retire_asset", { kind: kind, id: id, restore: !!restore, reason: reason })
+    .then(function(out){ if (out.error) alert(out.error); load(); });
+};
+
+window.startTransfer = function(kind, id){
+  var a = (data[kind] || []).filter(function(x){ return x.id === id; })[0];
+  transferring = Object.assign({}, a); editing = null; render();
+};
+
+window.doTransfer = function(){
+  post("transfer_asset", {
+    kind: transferring.kind, id: transferring.id,
+    to_location_id: el("t_to").value,
+    transferred_on: el("t_on").value,
+    reason: el("t_reason").value,
+  }).then(function(out){
+    if (out.error) { alert(out.error); return; }
+    alert("Moved. " + out.checks_moved + " open check(s), " + out.issues_moved +
+          " open fault(s) and " + out.schedules_moved + " schedule(s) went with it.");
+    transferring = null; load();
+  });
+};
+
+window.showHistory = function(kind, id){
+  if (historyFor === id) { historyFor = null; render(); return; }
+  fetch(FN + "?action=asset_history&kind=" + kind + "&id=" + id)
+    .then(function(r){return r.json();})
+    .then(function(out){ historyFor = id; historyRows = out.transfers || []; render(); });
+};
+
+function assetForm(){
+  var isNew = !editing.id;
+  return '<div class="form">' +
+    '<label>' + (editing.kind === "vehicle" || editing.kind === "trailer" ? "Registration" : "Name or number") + '</label>' +
+    '<input type="text" id="f_name" value="' + esc(editing.name || "") + '" placeholder="' +
+      (editing.kind === "vehicle" ? "B 121 BWP" : editing.kind === "room" ? "19" : "Generator 2") + '">' +
+    (editing.kind === "vehicle"
+      ? '<label>Description</label><input type="text" id="f_desc" value="' + esc(editing.description || "") +
+        '" placeholder="GD - L/C 2.8 Auto">' +
+        '<p class="note">A registration alone is not memorable. This shows beside it everywhere.</p>'
+      : "") +
+    '<div class="acts"><button class="primary" onclick="saveAsset()">' +
+      (isNew ? "Add" : "Save changes") + '</button>' +
+    '<button onclick="cancel()">Cancel</button></div></div>';
+}
+
+function transferForm(){
+  var today = new Date().toISOString().slice(0,10);
+  return '<div class="form">' +
+    '<label>Moving to</label><select id="t_to">' +
+    locations.map(function(l){ return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>'; }).join("") +
+    '</select>' +
+    '<label>Moved on</label><input type="date" id="t_on" value="' + today + '">' +
+    '<label>Why</label><input type="text" id="t_reason" placeholder="e.g. reassigned after fleet reduction">' +
+    '<p class="warn">Its open faults, open checks and schedules go with it. Everything already done stays on ' +
+      'the record at the lodge where it happened, and any check assigned to a named person here is unassigned.</p>' +
+    '<div class="acts"><button class="primary" onclick="doTransfer()">Transfer</button>' +
+    '<button onclick="cancel()">Cancel</button></div></div>';
+}
+
+function render(){
+  var h = "";
+  KINDS.forEach(function(k){
+    var kind = k[0], title = k[1], movable = k[2];
+    var all = data[kind] || [];
+    var list = showRetired ? all : all.filter(function(a){ return !a.retired; });
+    var retiredCount = all.filter(function(a){ return a.retired; }).length;
+
+    h += '<h2>' + esc(title) + ' <span style="color:#8C6A2F;font-weight:400">' + list.length +
+      (retiredCount && !showRetired ? " · " + retiredCount + " retired" : "") + '</span></h2>';
+
+    if (me && me.is_manager && !(editing && editing.kind === kind && !editing.id)) {
+      h += '<div class="acts"><button onclick="startAdd(\'' + kind + '\')">+ Add</button></div>';
+    }
+    if (editing && editing.kind === kind && !editing.id) h += assetForm();
+
+    list.forEach(function(a){
+      h += '<div class="row' + (a.retired ? " retired" : "") + '">' +
+        '<p class="nm">' + esc(a.name) + (a.description ? ' — ' + esc(a.description) : "") +
+        (a.retired ? " · retired" : "") + '</p>' +
+        (a.retired && a.retired_reason ? '<p class="mt">' + esc(a.retired_reason) + '</p>' : "");
+      if (editing && editing.id === a.id) { h += assetForm(); }
+      else if (transferring && transferring.id === a.id) { h += transferForm(); }
+      else if (me && me.is_manager) {
+        h += '<div class="acts">';
+        h += '<button onclick="startEdit(\'' + kind + '\',\'' + a.id + '\')">Edit</button>';
+        if (movable && !a.retired) h += '<button onclick="startTransfer(\'' + kind + '\',\'' + a.id + '\')">Transfer</button>';
+        if (movable) h += '<button onclick="showHistory(\'' + kind + '\',\'' + a.id + '\')">' +
+          (historyFor === a.id ? "Hide moves" : "Moves") + '</button>';
+        h += a.retired
+          ? '<button onclick="retire(\'' + kind + '\',\'' + a.id + '\',true)">Restore</button>'
+          : '<button class="danger" onclick="retire(\'' + kind + '\',\'' + a.id + '\')">Retire</button>';
+        h += '</div>';
+      }
+      if (historyFor === a.id) {
+        h += '<div class="hist">' + (historyRows.length
+          ? historyRows.map(function(t){
+              return '<p>' + esc(t.on) + " — " + esc(t.from) + " → " + esc(t.to) +
+                (t.reason ? ", " + esc(t.reason) : "") + " (" + esc(t.by) + ")</p>";
+            }).join("")
+          : "<p>Never moved.</p>") + '</div>';
+      }
+      h += '</div>';
+    });
+    if (!list.length) h += '<p class="note">None' + (retiredCount ? " showing" : "") + '.</p>';
+  });
+  el("app").innerHTML = h;
+}
+
+function load(){
+  return fetch(FN + "?action=assets_list").then(function(r){return r.json();}).then(function(d){
+    data = d; locations = d.locations || []; render();
+  });
+}
+
+el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
+
+fetch(FN).then(function(r){return r.json();}).then(function(b){
+  people = b.people || [];
+  el("who").innerHTML = '<option value="">— nobody —</option>' + people.map(function(p){
+    return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
+  }).join("");
+  el("who").addEventListener("change", function(){
+    me = people.filter(function(p){ return p.id === this.value; }.bind(this))[0] || null;
+    render();
+  });
+  return load();
+}).catch(function(e){ el("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>'; });
+</script>
+</body></html>
