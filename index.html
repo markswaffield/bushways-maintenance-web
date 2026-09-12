@@ -332,6 +332,12 @@
       alert("Choose which vehicle this schedule is for. Different vehicles have different servicing intervals, so each one carries its own.");
       return;
     }
+    // The catchall, alongside the alert — Mark, 2026-09-12: "no schedule
+    // gets captured without adding an alert or department."
+    if (!body.default_department_id) {
+      alert("Say which department this belongs to. Work nobody owes is work nobody does.");
+      return;
+    }
     saving = true;
     if (btn) btn.disabled = true;
     var action = id === "__new__" ? "create_schedule" : "update_schedule";
@@ -490,8 +496,8 @@
           return '<option value="' + esc(v.id) + '"' + (sel ? " selected" : "") + '>' + esc(v.label) + '</option>';
         }).join("") + '</select>' +
       '</div>' +
-      '<label>Always belongs to (optional)</label><select id="f_dept">' +
-      '<option value="">Nobody in particular</option>' +
+      '<label>Which department does this belong to?</label><select id="f_dept">' +
+      '<option value="">Choose a department…</option>' +
       departments.map(function (d) {
         return '<option value="' + esc(d.id) + '"' + (!isNew && rule.default_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select>' +
