@@ -252,17 +252,21 @@
     return body;
   }
 
-  window.saveRule = function (id) {
+  window.saveRule = function (id, btn) {
+    if (saving) return;
+    saving = true;
+    if (btn) btn.disabled = true;
     var body = formValues();
     var action = id === "__new__" ? "create_schedule" : "update_schedule";
     if (id !== "__new__") body.schedule_id = id;
     fetch(FN.replace("action=dashboard", "action=" + action), {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
     }).then(function (r) { return r.json(); }).then(function (out) {
-      if (out.error) { alert(out.error); return; }
+      saving = false;
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
       editingId = null;
       reload();
-    });
+    }).catch(function (e) { saving = false; if (btn) btn.disabled = false; alert(e); });
   };
 
   window.archiveRule = function (id, restore) {
@@ -278,9 +282,13 @@
 
   window.startComplete = function (id) { completingId = id; editingId = null; render(); };
   window.cancelComplete = function () { completingId = null; render(); };
-  window.saveComplete = function (id) {
+  var saving = false;
+  window.saveComplete = function (id, btn) {
+    if (saving) return;
     var notes = document.getElementById("c_notes").value;
     if (!notes.trim()) { alert("Say what was done — the note is the only record of this work."); return; }
+    saving = true;
+    if (btn) { btn.disabled = true; btn.textContent = "Recording…"; }
     fetch(FN.replace("action=dashboard", "action=complete_schedule"), {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -289,9 +297,18 @@
         notes: notes,
       }),
     }).then(function (r) { return r.json(); }).then(function (out) {
-      if (out.error) { alert(out.error); return; }
+      saving = false;
+      if (out.error) {
+        alert(out.error);
+        if (btn) { btn.disabled = false; btn.textContent = "Record as complete"; }
+        return;
+      }
       completingId = null;
       reload();
+    }).catch(function (e) {
+      saving = false;
+      if (btn) { btn.disabled = false; btn.textContent = "Record as complete"; }
+      alert(e);
     });
   };
 
@@ -303,7 +320,7 @@
       '<label>What was done</label>' +
       '<textarea id="c_notes" rows="3" placeholder="e.g. Borehole water test complete — tested 14/5/2026, results back from Kasane Lab"></textarea>' +
       '<p class="rmeta" style="margin-top:4px">There is no checklist behind this schedule, so this note is the whole record.</p>' +
-      '<div class="racts"><button onclick="saveComplete(\'' + rule.id + '\')">Record as complete</button>' +
+      '<div class="racts"><button onclick="saveComplete(\'' + rule.id + '\', this)">Record as complete</button>' +
       '<button onclick="cancelComplete()">Cancel</button></div></div>';
   }
 
@@ -347,7 +364,7 @@
       departments.map(function (d) {
         return '<option value="' + esc(d.id) + '"' + (!isNew && rule.default_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select>' +
-      '<div class="racts"><button onclick="saveRule(\'' + (isNew ? "__new__" : rule.id) + '\')">Save changes</button>' +
+      '<div class="racts"><button onclick="saveRule(\'' + (isNew ? "__new__" : rule.id) + '\', this)">Save changes</button>' +
       '<button onclick="cancelEdit()">Discard changes</button>' +
       (isNew ? "" : '<button class="danger" onclick="archiveRule(\'' + rule.id + '\')">Delete schedule</button>') +
       '</div></div>';
