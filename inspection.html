@@ -1,0 +1,746 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chobe Elephant Camp</title>
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:22px 0 8px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 20px}
+  label{display:block;font-size:13px;color:#5B5344;margin:14px 0 4px}
+  select,input[type=text],textarea{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
+  select:disabled{color:#8C6A2F}
+  button{width:100%;padding:14px;font-size:16px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;margin-top:22px}
+  button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  button.stop{background:#A8502F}
+  .item{border-bottom:1px solid #E3DFD3;padding:12px 0}
+  .item label.main{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#232019;margin:0;cursor:pointer}
+  .item input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
+  .details{display:none;margin:10px 0 0 30px;padding:10px;background:#EFECE3;border-radius:6px}
+  .item.open .details{display:block}
+  .note{color:#8C6A2F;font-size:12px;margin-top:2px}
+  .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
+  .confirm .transcript{font-style:italic;margin-top:8px}
+  .nav{font-size:13px;margin:10px 0 0}
+  .review-card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
+  .review-line{font-size:14px;margin:0 0 6px}
+  .review-line .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
+  .btnrow{display:flex;gap:10px;margin-top:22px}
+  .btnrow button{margin-top:0}
+  .btn-secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  .urgent-row{display:flex;align-items:center;gap:8px;margin-top:16px}
+  .urgent-row input{width:20px;height:20px}
+  .urgent-row label{margin:0;font-size:14px;color:#232019}
+  .recording{text-align:center;padding:20px 0}
+  .recording .dot{width:14px;height:14px;border-radius:50%;background:#A8502F;display:inline-block;margin-right:8px;animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .timer{font-size:28px;font-weight:700;margin:10px 0;text-align:center}
+  audio{width:100%;margin-top:10px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<div id="start">
+  <h1>Chobe Elephant Camp</h1>
+  <p class="sub">Pick your name, then what you'd like to do.</p>
+  <p class="nav"><a href="./">Schedule</a> · <b>Inspection</b> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a></p>
+  <label>Who are you?</label>
+  <select id="person"><option value="">Loading…</option></select>
+  <label>What would you like to do?</label>
+  <select id="area"><option value="">Loading…</option></select>
+  <button id="startBtn">Continue</button>
+</div>
+
+<div id="unavailable" hidden>
+  <h1>Not set up yet</h1>
+  <p class="sub" id="unavailableMsg"></p>
+  <button id="goReportBtn">Report a fault instead</button>
+  <button class="secondary" id="backFromUnavailable">← Choose again</button>
+</div>
+
+<div id="roomStep" hidden>
+  <h1 id="targetTitle">Guest Room Inspection</h1>
+  <p class="sub" id="targetSub">Chobe Elephant Camp — which room are you checking?</p>
+  <label id="targetLabel">Which room?</label>
+  <select id="room"><option value="">Select one</option></select>
+  <button id="roomContinueBtn">Start inspection</button>
+  <button class="secondary" id="backFromRoom">← Choose again</button>
+</div>
+
+<div id="checklist" hidden></div>
+
+<div id="review" hidden></div>
+
+<div id="reportForm" hidden>
+  <h1>Report a Fault</h1>
+  <p class="sub">Chobe Elephant Camp — say or type the room or department first, then what's wrong, e.g. "Room 5, towel rail loose" or "Guest kitchen, light bulbs broken."</p>
+
+  <div class="urgent-row"><input type="checkbox" id="reportUrgent"><label for="reportUrgent">Urgent — needs attention today</label></div>
+
+  <div id="recordIdle">
+    <button id="recordBtn">🎙️ Start recording</button>
+    <p class="note" id="micError"></p>
+  </div>
+  <div id="recordingInProgress" hidden>
+    <div class="recording"><span class="dot"></span>Recording…</div>
+    <div class="timer" id="timer">0:00</div>
+    <button class="stop" id="stopBtn">Stop</button>
+  </div>
+  <div id="recordedBox" hidden>
+    <audio controls id="player"></audio>
+    <button class="secondary" id="rerecordBtn">🔁 Re-record</button>
+  </div>
+  <p class="note" id="transcribeStatus" hidden></p>
+
+  <label id="noteLabel">Add a note (optional)</label>
+  <textarea id="textNote" rows="3" placeholder="Type what's wrong, if that's easier than recording — room or department first, e.g. Room 5, towel rail loose"></textarea>
+  <button class="secondary" id="tidyBtn" type="button" style="margin-top:8px">Tidy up &amp; detect location</button>
+  <p class="note" id="detectedArea" hidden></p>
+
+  <label>Add a photo (optional)</label>
+  <input type="file" accept="image/*" capture="environment" id="reportPhoto">
+
+  <button id="reportSubmitBtn">Submit report</button>
+  <button class="secondary" id="backFromReport">← Choose again</button>
+</div>
+
+<div id="done" hidden>
+  <h1 id="doneTitle">Recorded</h1>
+  <div class="confirm" id="doneBox"></div>
+  <p><a href="#" id="again">Start again</a> · <a href="./dashboard.html">See the to-do list →</a></p>
+</div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  var state = { people: [], rooms: [], vehicles: [], areas: [] };
+  // "room" or "vehicle" — which kind of thing is being inspected.
+  var targetType = "room";
+  var myPersonId = null, pendingRoomId = null;
+  var mediaRecorder, chunks = [], recordedBlob = null, timerInterval, seconds = 0;
+  var MAX_SECONDS = 120; // a voice note, not a long recording — keeps uploads small
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function show(id) {
+    ["start", "unavailable", "roomStep", "checklist", "review", "reportForm", "done"].forEach(function (x) {
+      document.getElementById(x).hidden = x !== id;
+    });
+  }
+
+  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    state.people = data.people; state.rooms = data.rooms; state.areas = data.areas;
+    state.vehicles = data.vehicles || [];
+    var p = document.getElementById("person");
+    p.innerHTML = '<option value="">Select your name</option>' +
+      data.people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
+    var r = document.getElementById("room");
+    r.innerHTML = '<option value="">Select a room</option>' +
+      data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
+    // The 14 real Lodge Maintenance Areas, plus Report a fault as the
+    // 15th option in the same list — per Mark, 2026-09-09. Only Guest
+    // Rooms has a real checklist behind it today; the rest show as
+    // "(coming soon)" rather than disappearing, so the full property is
+    // visible even before every area has a working screen.
+    var a = document.getElementById("area");
+    a.innerHTML = '<option value="">Select one</option>' +
+      data.areas.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.available ? "" : " (coming soon)") + '</option>'; }).join("") +
+      '<option value="__report__">Report a fault</option>';
+  }).catch(function (e) {
+    document.getElementById("start").innerHTML = "<p>Couldn't reach the checklist data. This is a fault in the page, not your connection or phone — please tell Mark/Claude. (" + esc(e.message) + ")</p>";
+  });
+
+  document.getElementById("startBtn").onclick = function () {
+    myPersonId = document.getElementById("person").value;
+    var areaVal = document.getElementById("area").value;
+    if (!myPersonId || !areaVal) { alert("Pick your name and what you'd like to do first."); return; }
+    if (areaVal === "__report__") {
+      enterReportForm();
+      return;
+    }
+    var area = state.areas.find(function (x) { return x.id === areaVal; });
+    if (area && area.available) {
+      // Vehicles and Guest Rooms are the two areas with a real screen.
+      // Same step, same checklist machinery — only what is being picked
+      // differs (2026-09-11, Mark: "please build the vehicle inspection
+      // screen for the maintenance tool").
+      targetType = area.name === "Vehicles" ? "vehicle" : "room";
+      var list = targetType === "vehicle" ? state.vehicles : state.rooms;
+      document.getElementById("targetTitle").textContent =
+        targetType === "vehicle" ? "Vehicle Check" : "Guest Room Inspection";
+      document.getElementById("targetSub").textContent = "Chobe Elephant Camp — which "
+        + (targetType === "vehicle" ? "vehicle" : "room") + " are you checking?";
+      document.getElementById("targetLabel").textContent =
+        targetType === "vehicle" ? "Which vehicle?" : "Which room?";
+      document.getElementById("room").innerHTML =
+        '<option value="">Select one</option>' +
+        list.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
+      enterRoomStep();
+    } else {
+      document.getElementById("unavailableMsg").textContent =
+        (area ? area.name : "This area") + " doesn't have a digital checklist yet — coming soon. For now, you can still flag anything here as a fault.";
+      show("unavailable");
+    }
+  };
+
+  document.getElementById("goReportBtn").onclick = function () { enterReportForm(); };
+  document.getElementById("backFromUnavailable").onclick = function () { show("start"); };
+  document.getElementById("backFromRoom").onclick = function () { show("start"); };
+  document.getElementById("backFromReport").onclick = function () { show("start"); };
+
+  // Only the Guest Rooms checklist uses this step now — Report a fault
+  // no longer asks which room at all, see enterReportForm below.
+  function enterRoomStep() {
+    show("roomStep");
+  }
+
+  document.getElementById("roomContinueBtn").onclick = function () {
+    var roomId = document.getElementById("room").value;
+    if (!roomId) { alert("Pick a " + (targetType === "vehicle" ? "vehicle" : "room") + " first."); return; }
+    pendingRoomId = roomId;
+    fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + roomId + "&target_type=" + targetType)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { renderChecklist(data, myPersonId, roomId); })
+      .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+  };
+
+  // ------------------------------------------------------------------
+  // Shared: resized client-side before it ever leaves the phone — Maun's
+  // bandwidth is the reason this happens here, not on the server. Used
+  // by both the checklist's per-fault photo and the report's own photo.
+  // ------------------------------------------------------------------
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var scale = Math.min(1, 1000 / Math.max(img.width, img.height));
+          var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          var canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.6));
+        };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Report a Fault — voice, a typed note, a photo, or any mix of the
+  // three (tool-local D-031). Reached from the combined area picker now,
+  // not a separate page — per Mark: "I would prefer to embed or have
+  // this page included on the inspection page." No room picker here at
+  // all — per Mark's follow-up, 2026-09-09: "the person leaving the
+  // voice note will state what room or what department first and then
+  // the fault," as part of what's said, not a field picked beforehand.
+  // ------------------------------------------------------------------
+  var noteWasAutoFilled = false;
+  // What the last tidy-up/transcribe pass matched against the real room
+  // and Area catalogue (tool-local D-033) — cleared whenever the note
+  // text changes by hand, or a fresh recording starts, so a stale match
+  // from a previous take or a previous edit is never silently kept.
+  var matchedRoomId = null, matchedAreaId = null, matchedSubareaId = null;
+  // True once the note box holds a header-then-faults list (tool-local
+  // D-033's follow-up, per Mark: "they need to be recorded as separate
+  // entries so each can be resolved on its own") — stays true through
+  // further edits (fixing a typo doesn't un-structure it), only reset
+  // by starting fresh or re-recording. Independent of whether a
+  // location was actually matched — clearing a wrong match shouldn't
+  // also stop the fault list from being split.
+  var wasStructured = false;
+
+  function clearMatch() {
+    matchedRoomId = null; matchedAreaId = null; matchedSubareaId = null;
+    document.getElementById("detectedArea").hidden = true;
+  }
+
+  function enterReportForm() {
+    recordedBlob = null;
+    noteWasAutoFilled = false;
+    wasStructured = false;
+    clearMatch();
+    document.getElementById("reportUrgent").checked = false;
+    document.getElementById("recordIdle").hidden = false;
+    document.getElementById("recordingInProgress").hidden = true;
+    document.getElementById("recordedBox").hidden = true;
+    document.getElementById("micError").textContent = "";
+    document.getElementById("transcribeStatus").hidden = true;
+    document.getElementById("noteLabel").textContent = "Add a note (optional)";
+    document.getElementById("textNote").value = "";
+    document.getElementById("reportPhoto").value = "";
+    show("reportForm");
+  }
+
+  document.getElementById("textNote").addEventListener("input", function () { noteWasAutoFilled = false; });
+
+  document.getElementById("recordBtn").onclick = function () {
+    document.getElementById("micError").textContent = "";
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = function (e) { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        var rawBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        // A real phone almost always records webm/opus (Android/Chrome)
+        // or mp4/aac (iPhone/Safari) — neither is in OpenRouter's
+        // supported input_audio format list, confirmed directly against
+        // their docs, 2026-09-09: transcription was failing on every
+        // real recording, not just an occasional one. Re-encoded to a
+        // plain WAV file here, client-side, before it's ever sent
+        // anywhere — the browser that recorded it can always decode its
+        // own output via Web Audio, regardless of which container that
+        // turned out to be, so this works the same way on every phone.
+        toWav(rawBlob).then(function (wavBlob) {
+          recordedBlob = wavBlob;
+        }).catch(function () {
+          recordedBlob = rawBlob; // better than nothing if conversion fails
+        }).then(function () {
+          document.getElementById("player").src = URL.createObjectURL(recordedBlob);
+          document.getElementById("recordingInProgress").hidden = true;
+          document.getElementById("recordedBox").hidden = false;
+          transcribeAndFill();
+        });
+      };
+      mediaRecorder.start();
+      seconds = 0;
+      document.getElementById("timer").textContent = "0:00";
+      timerInterval = setInterval(function () {
+        seconds++;
+        var m = Math.floor(seconds / 60), s = seconds % 60;
+        document.getElementById("timer").textContent = m + ":" + (s < 10 ? "0" : "") + s;
+        if (seconds >= MAX_SECONDS) mediaRecorder.stop();
+      }, 1000);
+      document.getElementById("recordIdle").hidden = true;
+      document.getElementById("recordingInProgress").hidden = false;
+    }).catch(function (e) {
+      document.getElementById("micError").textContent = "Couldn't access the microphone — check the browser has permission. (" + e.message + ")";
+    });
+  };
+
+  document.getElementById("stopBtn").onclick = function () {
+    clearInterval(timerInterval);
+    mediaRecorder.stop();
+  };
+
+  document.getElementById("rerecordBtn").onclick = function () {
+    recordedBlob = null;
+    document.getElementById("recordedBox").hidden = true;
+    document.getElementById("recordIdle").hidden = false;
+    if (noteWasAutoFilled) {
+      document.getElementById("textNote").value = "";
+      document.getElementById("noteLabel").textContent = "Add a note (optional)";
+      noteWasAutoFilled = false;
+      wasStructured = false;
+      clearMatch();
+    }
+  };
+
+  // Transcribes right after recording stops — per Mark, 2026-09-09:
+  // "there was no option to transcribe the voice message and commit it
+  // as text." Shows the reading in the same note box, editable, so it's
+  // read and corrected before anything is submitted, not just produced
+  // silently after the fact.
+  function transcribeAndFill() {
+    var statusEl = document.getElementById("transcribeStatus");
+    statusEl.hidden = false;
+    statusEl.textContent = "Transcribing…";
+    blobToDataUrl(recordedBlob).then(function (dataUrl) {
+      return fetch(FN + "?action=transcribe", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ audio_data_url: dataUrl }),
+      });
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.transcript) {
+        statusEl.hidden = true;
+        var ta = document.getElementById("textNote");
+        if (!ta.value.trim() || noteWasAutoFilled) {
+          ta.value = out.transcript;
+          noteWasAutoFilled = true;
+          document.getElementById("noteLabel").textContent = "Transcribed — check it's right, edit if not";
+        }
+        // Straight on to identifying the location and tidying the fault
+        // list, per Mark, 2026-09-09: "from the transcription can the
+        // tool identify the location and give it a header" — one
+        // automatic step from the person's point of view, not two.
+        structureAndFill(out.transcript);
+      } else {
+        statusEl.textContent = "Couldn't transcribe — the recording is still saved either way. Type it yourself below if you can.";
+      }
+    }).catch(function () {
+      statusEl.textContent = "Couldn't transcribe — the recording is still saved either way. Type it yourself below if you can.";
+    });
+  }
+
+  // Reads a report's text back as a location header plus a short list
+  // of distinct faults (tool-local D-033), e.g. "Room one, the cistern
+  // is leaking and the towel rail is loose" becomes "Room 1 / cistern
+  // leaking / towel rail loose" — and tries to match the location
+  // against a real room or maintenance area, shown back for the person
+  // to confirm or clear, never applied silently. Works on typed text
+  // too (via "Tidy up & detect location"), not just a transcript.
+  document.getElementById("tidyBtn").onclick = function () {
+    var text = document.getElementById("textNote").value.trim();
+    if (!text) { alert("Type or record something first."); return; }
+    structureAndFill(text);
+  };
+
+  function structureAndFill(text) {
+    var btn = document.getElementById("tidyBtn");
+    btn.disabled = true;
+    fetch(FN + "?action=structure", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      btn.disabled = false;
+      if (out.header || (out.faults && out.faults.length)) {
+        var lines = [];
+        if (out.header) lines.push(out.header);
+        lines = lines.concat(out.faults || []);
+        document.getElementById("textNote").value = lines.join("\n");
+        noteWasAutoFilled = true;
+        wasStructured = true;
+        document.getElementById("noteLabel").textContent = out.faults && out.faults.length > 1
+          ? "Tidied up — each line below becomes its own to-do item. Check it's right, edit if not"
+          : "Tidied up — check it's right, edit if not";
+      }
+      matchedRoomId = out.matched_room_id || null;
+      matchedAreaId = out.matched_area_id || null;
+      matchedSubareaId = out.matched_subarea_id || null;
+      var areaName = state.areas ? (state.areas.find(function (a) { return a.id === matchedAreaId; }) || {}).name : null;
+      var roomName = state.rooms ? (state.rooms.find(function (r) { return r.id === matchedRoomId; }) || {}).label : null;
+      var detected = document.getElementById("detectedArea");
+      if (matchedAreaId && areaName) {
+        detected.hidden = false;
+        detected.innerHTML = "Detected: " + esc(roomName || areaName) +
+          ' — <a href="#" id="clearMatchLink">not this, clear it</a>';
+        document.getElementById("clearMatchLink").onclick = function (e) { e.preventDefault(); clearMatch(); };
+      } else {
+        detected.hidden = true;
+      }
+    }).catch(function () { btn.disabled = false; });
+  }
+
+  document.getElementById("reportSubmitBtn").onclick = function () {
+    var textNote = document.getElementById("textNote").value.trim();
+    var photoFile = document.getElementById("reportPhoto").files[0];
+    if (!recordedBlob && !textNote && !photoFile) {
+      alert("Add a voice note, a photo, or a bit of text — at least one.");
+      return;
+    }
+    var btn = document.getElementById("reportSubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+
+    Promise.all([
+      recordedBlob ? blobToDataUrl(recordedBlob) : Promise.resolve(null),
+      photoFile ? compressImage(photoFile) : Promise.resolve(null),
+    ]).then(function (results) {
+      var audioDataUrl = results[0], photoDataUrl = results[1];
+      return fetch(FN + "?action=report", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          reported_by: myPersonId,
+          priority: document.getElementById("reportUrgent").checked ? "urgent" : "normal",
+          audio_data_url: audioDataUrl,
+          text_note: textNote || null,
+          photo_data_url: photoDataUrl,
+          room_id: matchedRoomId,
+          area_id: matchedAreaId,
+          sub_area_id: matchedSubareaId,
+          structured: wasStructured,
+        }),
+      });
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); btn.disabled = false; btn.textContent = "Submit report"; return; }
+      document.getElementById("doneTitle").textContent = "Report recorded";
+      document.getElementById("doneBox").innerHTML =
+        "<p>" + (out.issues_raised > 1
+          ? out.issues_raised + " separate faults on the to-do list now — each one tracked and resolved on its own."
+          : "On the to-do list now.") + "</p>" +
+        (out.transcript ? '<p class="transcript">"' + esc(out.transcript) + '"</p>' : "") +
+        (out.photo_url ? "<p>Photo attached.</p>" : "");
+      show("done");
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = "Submit report";
+      alert("Couldn't submit — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
+    });
+  };
+
+  function blobToDataUrl(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Decodes whatever the recording actually is (webm/opus, mp4/aac —
+  // whichever the phone's MediaRecorder produced) and re-encodes it as
+  // a plain 16kHz mono WAV — a format OpenRouter's audio input
+  // genuinely supports, confirmed directly against their docs. Resampled
+  // down from the device's native rate (typically 44.1/48kHz) since a
+  // full-rate WAV is uncompressed and Maun's bandwidth is limited;
+  // 16kHz mono is still plenty for speech.
+  function toWav(blob) {
+    var TARGET_RATE = 16000;
+    return blob.arrayBuffer().then(function (buf) {
+      var AudioCtx = window.AudioContext || window.webkitAudioContext;
+      var decodeCtx = new AudioCtx();
+      return decodeCtx.decodeAudioData(buf).then(function (decoded) {
+        decodeCtx.close();
+        var frames = Math.ceil(decoded.duration * TARGET_RATE);
+        var offline = new OfflineAudioContext(1, frames, TARGET_RATE);
+        var src = offline.createBufferSource();
+        src.buffer = decoded;
+        src.connect(offline.destination);
+        src.start(0);
+        return offline.startRendering();
+      });
+    }).then(function (rendered) {
+      return encodeWav(rendered.getChannelData(0), TARGET_RATE);
+    });
+  }
+
+  function encodeWav(samples, sampleRate) {
+    var buffer = new ArrayBuffer(44 + samples.length * 2);
+    var view = new DataView(buffer);
+    function writeString(offset, s) { for (var i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i)); }
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true); // byte rate (mono, 16-bit)
+    view.setUint16(32, 2, true); // block align
+    view.setUint16(34, 16, true); // bits per sample
+    writeString(36, "data");
+    view.setUint32(40, samples.length * 2, true);
+    for (var i = 0, offset = 44; i < samples.length; i++, offset += 2) {
+      var s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([view], { type: "audio/wav" });
+  }
+
+  // ------------------------------------------------------------------
+  // Guest Room Inspection — unchanged from before this merge, just
+  // reached via the area picker above instead of its own start screen.
+  // ------------------------------------------------------------------
+  function renderChecklist(data, personId, roomId) {
+    var c = document.getElementById("checklist");
+    show("checklist");
+
+    var itemFaultsById = {};
+
+    function faultPickerHtml(item) {
+      itemFaultsById[item.id] = item.faults;
+      if (!item.faults.length) return "";
+      var grouped = item.faults.some(function (f) { return f.component_id; });
+      if (!grouped) {
+        return '<label>What\'s wrong?</label><select data-fault="' + item.id + '"><option value="">Choose one</option>' +
+          item.faults.map(function (f) {
+            return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+          }).join("") + '</select>';
+      }
+      var components = [], seen = {};
+      item.faults.forEach(function (f) {
+        var key = f.component_id || "__other__";
+        if (!seen[key]) { seen[key] = true; components.push({ key: key, name: f.component_name || "Other" }); }
+      });
+      return '<label>Which part?</label><select data-component="' + item.id + '" onchange="onComponentChange(\'' + item.id + '\')"><option value="">Choose one</option>' +
+        components.map(function (comp) { return '<option value="' + comp.key + '">' + esc(comp.name) + '</option>'; }).join("") +
+        '</select>' +
+        '<label>What\'s wrong?</label><select data-fault="' + item.id + '" disabled><option value="">Choose the part first</option></select>';
+    }
+
+    window.onComponentChange = function (itemId) {
+      var compSel = document.querySelector('[data-component="' + itemId + '"]');
+      var faultSel = document.querySelector('[data-fault="' + itemId + '"]');
+      var compVal = compSel.value;
+      if (!compVal) {
+        faultSel.innerHTML = '<option value="">Choose the part first</option>';
+        faultSel.disabled = true;
+        return;
+      }
+      var faults = itemFaultsById[itemId].filter(function (f) { return (f.component_id || "__other__") === compVal; });
+      faultSel.innerHTML = '<option value="">Choose one</option>' + faults.map(function (f) {
+        return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+      }).join("");
+      faultSel.disabled = false;
+    };
+
+    var html = '<h1>Guest Room Inspection</h1>' +
+      '<p class="sub">Chobe Elephant Camp, ' + esc(data.room_label) + ' — leave an item alone if it\'s fine (tool-local D-023)</p>';
+    data.sections.forEach(function (s) {
+      html += "<h2>" + esc(s.name) + "</h2>";
+      s.items.forEach(function (item) {
+        if (item.kind === "reading") {
+          html += '<div class="item"><label class="main">' + esc(item.text) + '</label>' +
+            '<input type="text" inputmode="numeric" data-value="' + item.id + '" placeholder="Reading"></div>';
+        } else {
+          html += '<div class="item" data-item="' + item.id + '">' +
+            '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
+            '<div class="details">' + faultPickerHtml(item) +
+            '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
+            '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
+            '</div></div>';
+        }
+      });
+    });
+    html += '<button id="submitBtn">Submit inspection</button>' +
+      '<button class="secondary" id="backFromChecklist">← Choose again</button>';
+    c.innerHTML = html;
+
+    document.getElementById("backFromChecklist").onclick = function () { show("start"); };
+
+    c.querySelectorAll("[data-failed]").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        cb.closest(".item").classList.toggle("open", cb.checked);
+      });
+    });
+
+    // A short label per item, the same way the dashboard and completed-
+    // tasks pages derive one server-side — the review screen below needs
+    // to show what's actually being submitted in plain terms, not just
+    // "3 items flagged."
+    function shortLabel(text) {
+      return String(text).split("\n")[0].split(/\s+[—-]\s+/)[0].trim();
+    }
+
+    document.getElementById("submitBtn").onclick = function () {
+      var results = [];
+      data.sections.forEach(function (s) {
+        s.items.forEach(function (item) {
+          if (item.kind === "reading") {
+            var v = c.querySelector('[data-value="' + item.id + '"]').value;
+            if (v) results.push({ item_id: item.id, value: Number(v), label: shortLabel(item.text) });
+          } else {
+            var failed = c.querySelector('[data-failed="' + item.id + '"]').checked;
+            if (failed) {
+              var faultEl = c.querySelector('[data-fault="' + item.id + '"]');
+              var faultLabel = faultEl && faultEl.value ? faultEl.options[faultEl.selectedIndex].text.split(" — ")[0] : null;
+              var photoInput = c.querySelector('[data-photo="' + item.id + '"]');
+              results.push({
+                item_id: item.id, failed: true,
+                fault_type_id: faultEl ? faultEl.value : null,
+                action_if_failed: c.querySelector('[data-action="' + item.id + '"]').value,
+                label: shortLabel(item.text), fault_type_label: faultLabel,
+                photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
+              });
+            }
+          }
+        });
+      });
+      showReview(results);
+    };
+
+    // Nothing is written to the database yet at this point — per Mark,
+    // 2026-09-08: "once submitted we need an edit or confirm button."
+    // "Submit" above only builds the summary; the actual write happens
+    // on "Confirm" below, so a mistake is easy to catch and go back to
+    // without it ever having been recorded.
+    function showReview(results) {
+      var r = document.getElementById("review");
+      show("review");
+      var flagged = results.filter(function (x) { return x.failed; });
+      var readings = results.filter(function (x) { return x.value !== undefined; });
+      var html = '<h1>Confirm Inspection</h1>' +
+        '<p class="sub">' + esc(data.room_label) + ', Chobe Elephant Camp — check this is right before it\'s recorded</p>';
+
+      if (!flagged.length && !readings.length) {
+        html += '<div class="review-card"><p class="review-line">Nothing flagged — every item recorded as fine.</p></div>';
+      } else {
+        html += '<div class="review-card">';
+        flagged.forEach(function (x) {
+          html += '<p class="review-line">' + esc(x.label) +
+            (x.fault_type_label ? ' — <span class="fault">' + esc(x.fault_type_label) + '</span>' : '') +
+            (x.action_if_failed ? ' — ' + esc(x.action_if_failed) : '') +
+            (x.photoFile ? ' 📷' : '') + '</p>';
+        });
+        readings.forEach(function (x) {
+          html += '<p class="review-line">' + esc(x.label) + ': ' + esc(x.value) + '</p>';
+        });
+        html += '</div>';
+      }
+
+      html += '<div class="btnrow">' +
+        '<button class="btn-secondary" id="editBtn">← Edit</button>' +
+        '<button id="confirmBtn">Confirm — submit inspection</button>' +
+        '</div>';
+      r.innerHTML = html;
+
+      document.getElementById("editBtn").onclick = function () { show("checklist"); };
+
+      document.getElementById("confirmBtn").onclick = function () {
+        var btn = document.getElementById("confirmBtn");
+        btn.disabled = true;
+        btn.textContent = "Submitting…";
+        fetch(FN, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            person_id: personId,
+            // room_id is still sent for a room so nothing about the
+            // existing Guest Rooms path changes; target_id/target_type
+            // is the general form a vehicle check uses.
+            room_id: targetType === "room" ? roomId : null,
+            target_id: roomId, target_type: targetType,
+            template_id: data.template_id, results: results,
+          }),
+        }).then(function (resp) { return resp.json(); }).then(function (out) {
+          // The issue this item's photo belongs to doesn't exist until
+          // the line above returns — issue_ids maps item_id -> the real
+          // issue, created moments ago, specifically so this can happen.
+          var withPhotos = flagged.filter(function (x) { return x.photoFile && out.issue_ids[x.item_id]; });
+          var uploaded = 0, failed = 0;
+          function finish() {
+            document.getElementById("doneTitle").textContent = "Inspection recorded";
+            document.getElementById("doneBox").innerHTML =
+              "<p>" + esc(out.target_label || out.room_label) + ", Chobe Elephant Camp.</p>" +
+              "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
+              (out.issues_raised ? "<p>" + out.issues_raised + " issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
+              (uploaded ? "<p>" + uploaded + " photo" + (uploaded === 1 ? "" : "s") + " attached.</p>" : "") +
+              (failed ? "<p class='note'>" + failed + " photo" + (failed === 1 ? "" : "s") + " didn't upload — the inspection itself is still safely recorded.</p>" : "") +
+              '<p class="note">inspection id: ' + esc(out.inspection_id) + "</p>";
+            show("done");
+          }
+          if (!withPhotos.length) { finish(); return; }
+          btn.textContent = "Uploading photos…";
+          var remaining = withPhotos.length;
+          withPhotos.forEach(function (x) {
+            compressImage(x.photoFile).then(function (dataUrl) {
+              return fetch(FN + "?action=attach", {
+                method: "POST", headers: { "content-type": "application/json" },
+                body: JSON.stringify({ issue_id: out.issue_ids[x.item_id], added_by: personId, image_data_url: dataUrl }),
+              });
+            }).then(function (r2) { return r2.json(); }).then(function (a) {
+              if (a.error) failed++; else uploaded++;
+            }).catch(function () { failed++; })
+              .then(function () { if (--remaining === 0) finish(); });
+          });
+        }).catch(function (e) {
+          btn.disabled = false;
+          btn.textContent = "Confirm — submit inspection";
+          alert("Couldn't submit — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
+        });
+      };
+    }
+  }
+
+  document.getElementById("again").onclick = function (e) {
+    e.preventDefault();
+    location.reload();
+  };
+</script>
+</body></html>

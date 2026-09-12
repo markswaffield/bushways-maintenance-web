@@ -35,8 +35,8 @@
 </style></head><body>
 
 <h1>To-Do — Chobe Elephant Camp</h1>
-<p class="sub">Open faults and scheduled maintenance, live from the database.</p>
-<p class="nav"><a href="./">← Inspect or report a fault</a> · <a href="./fix.html">Fix a fault →</a> · <a href="./completed.html">Completed →</a></p>
+<p class="sub">Every open fault, grouped by area and target. Anything <em>due</em> lives on the Schedule.</p>
+<p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <b>To-do list</b> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
@@ -62,8 +62,7 @@
   // above — per Mark, 2026-09-11, and defaulting to newest first at his
   // request. Note what that means for a schedule: "newest" is the
   // furthest-away due date, so upcoming work sorts above overdue work.
-  var schedDirection = "newest"; // newest | oldest
-  var schedFrom = "", schedTo = "";
+  
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -262,45 +261,9 @@
       html += '</div>';
     });
 
-    // ---- Scheduled maintenance: its own order and its own range ----
-    var scheds = (data.schedules || []).filter(function (s) {
-      var d = new Date(s.due_date);
-      if (schedFrom && d < new Date(schedFrom)) return false;
-      if (schedTo && d > new Date(schedTo + "T23:59:59")) return false;
-      return true;
-    });
-    scheds.sort(function (a, b) {
-      var da = new Date(a.due_date).getTime(), db = new Date(b.due_date).getTime();
-      return schedDirection === "oldest" ? da - db : db - da;
-    });
-
-    html += '<h2>Scheduled maintenance <span class="count">' + scheds.length +
-      (scheds.length !== (data.schedules || []).length ? " of " + data.schedules.length : "") + '</span></h2>';
-
-    html += '<div class="filter-section"><div class="title">Order</div>' +
-      '<label>By due date</label><select id="schedDirection" onchange="onSchedDirectionChange()">' +
-      '<option value="newest"' + (schedDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
-      '<option value="oldest"' + (schedDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
-      '</select>' +
-      '<label>Custom date range (optional)</label>' +
-      '<div class="daterange">' +
-      '<input type="date" id="schedFrom" value="' + esc(schedFrom) + '" onchange="onSchedRangeChange()">' +
-      '<span>to</span>' +
-      '<input type="date" id="schedTo" value="' + esc(schedTo) + '" onchange="onSchedRangeChange()">' +
-      '</div>' +
-      ((schedFrom || schedTo) ? '<p class="order-note" style="margin-top:8px"><a href="#" onclick="clearSchedRange();return false;">Clear the range</a></p>' : "") +
-      '</div>';
-
-    if (!scheds.length) {
-      html += '<p class="empty">' +
-        ((data.schedules || []).length ? "Nothing scheduled in that range." : "Nothing scheduled yet.") + '</p>';
-    }
-    scheds.forEach(function (s) {
-      html += '<div class="card sched-row"><div>' +
-        '<p class="fault-line" style="font-weight:700">' + esc(s.name) + '</p>' +
-        '<p class="meta">' + esc(s.interval) + ' — ' + dueText(s) + '</p>' +
-        '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
-    });
+    // The scheduled half of this payload is rendered by schedule.html
+    // now, not here — Mark, 2026-09-12: "the schedule should be
+    // seperated from the to-do list". This page is open faults only.
 
     document.getElementById("app").innerHTML = html;
   }

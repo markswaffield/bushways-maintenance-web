@@ -7,6 +7,19 @@
   h2{font-size:15px;margin:22px 0 8px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
   .nav{font-size:13px;margin:10px 0 0}
+  .nav b{color:#43594A}
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:10px;background:#fff}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section label:first-of-type{margin-top:0}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
+  .area-group{margin-top:22px}
+  .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
+  .target-group{margin-top:14px}
+  .target-group .target-heading{font-size:13.5px;font-weight:700;color:#5B5344;margin:0 0 6px}
   label{display:block;font-size:13px;color:#5B5344;margin:14px 0 4px}
   select,input[type=text],textarea{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
   button{padding:10px 16px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff}
@@ -37,7 +50,7 @@
 <div id="start">
   <h1>Fix a Fault</h1>
   <p class="sub">Chobe Elephant Camp — mark faults fixed, or assign them</p>
-  <p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./completed.html">Completed →</a></p>
+  <p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <b>Fix a fault</b> · <a href="./completed.html">Completed</a></p>
   <label>Who are you?</label>
   <select id="person"><option value="">Loading…</option></select>
   <button id="startBtn" style="width:100%;margin-top:16px">Continue</button>
@@ -52,6 +65,15 @@
   var me = null;
   var lastIssues = [];
   var viewFilter = "";
+  // The same ordering rules as the to-do list, per Mark, 2026-09-12:
+  // grouped by maintenance Area, then Target within it, with date only
+  // ordering the faults inside one target. Area and Target are the
+  // grouping itself, never something a filter switches away from
+  // (tool-local D-034). The department "Show" control below predates
+  // this and stays — it is what lets a department see its own queue.
+  var dateDirection = "newest";   // newest | oldest
+  var dateFrom = "", dateTo = "";
+  var filterAreaId = "", filterTarget = "";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -92,7 +114,7 @@
 
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./completed.html">Completed →</a></p><p class="loading">Loading…</p>';
+    list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <b>Fix a fault</b> · <a href="./completed.html">Completed</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       renderList(applyViewFilter());
@@ -102,10 +124,86 @@
   }
 
   function applyViewFilter() {
-    if (!viewFilter) return lastIssues;
-    if (viewFilter === "__unassigned__") return lastIssues.filter(function (i) { return !i.assigned_department; });
-    return lastIssues.filter(function (i) { return i.assigned_department && i.assigned_department.name === viewFilter; });
+    return lastIssues.filter(function (i) {
+      if (viewFilter === "__unassigned__" && i.assigned_department) return false;
+      if (viewFilter && viewFilter !== "__unassigned__" &&
+          !(i.assigned_department && i.assigned_department.name === viewFilter)) return false;
+      if (dateFrom && new Date(i.raised_at) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(i.raised_at) > new Date(dateTo + "T23:59:59")) return false;
+      if (filterAreaId && i.area_id !== filterAreaId) return false;
+      if (filterTarget && i.target !== filterTarget) return false;
+      return true;
+    });
   }
+
+  // "Other" (nothing matched yet) always sorts last, never alphabetically
+  // among real names — the same rule the to-do list uses.
+  function sortNamesOtherLast(names, numeric) {
+    return names.slice().sort(function (a, b) {
+      if (a === "Other" && b !== "Other") return 1;
+      if (b === "Other" && a !== "Other") return -1;
+      return numeric ? a.localeCompare(b, undefined, { numeric: true }) : a.localeCompare(b);
+    });
+  }
+
+  function groupForDisplay(issues) {
+    var byArea = {};
+    issues.forEach(function (f) {
+      var a = f.area || "Other", t = f.target || "Other";
+      if (!byArea[a]) byArea[a] = {};
+      if (!byArea[a][t]) byArea[a][t] = [];
+      byArea[a][t].push(f);
+    });
+    return sortNamesOtherLast(Object.keys(byArea), false).map(function (a) {
+      return {
+        name: a,
+        targets: sortNamesOtherLast(Object.keys(byArea[a]), true).map(function (t) {
+          return {
+            name: t,
+            faults: byArea[a][t].slice().sort(function (x, y) {
+              return dateDirection === "oldest"
+                ? new Date(x.raised_at) - new Date(y.raised_at)
+                : new Date(y.raised_at) - new Date(x.raised_at);
+            }),
+          };
+        }),
+      };
+    });
+  }
+
+  function areasPresent() {
+    var seen = {}, out = [];
+    lastIssues.forEach(function (i) {
+      if (i.area_id && !seen[i.area_id]) { seen[i.area_id] = true; out.push({ id: i.area_id, name: i.area }); }
+    });
+    return out.sort(function (a, b) { return a.name.localeCompare(b.name); });
+  }
+  function targetsIn(areaId) {
+    var seen = {}, out = [];
+    lastIssues.forEach(function (i) {
+      if (i.area_id === areaId && i.target && !seen[i.target]) { seen[i.target] = true; out.push(i.target); }
+    });
+    return sortNamesOtherLast(out, true);
+  }
+
+  window.onFixDateDirection = function () {
+    dateDirection = document.getElementById("fixDateDirection").value;
+    renderList(applyViewFilter());
+  };
+  window.onFixDateRange = function () {
+    dateFrom = document.getElementById("fixDateFrom").value;
+    dateTo = document.getElementById("fixDateTo").value;
+    renderList(applyViewFilter());
+  };
+  window.onFixArea = function () {
+    filterAreaId = document.getElementById("fixArea").value;
+    filterTarget = "";
+    renderList(applyViewFilter());
+  };
+  window.onFixTarget = function () {
+    filterTarget = document.getElementById("fixTarget").value;
+    renderList(applyViewFilter());
+  };
 
   window.setViewFilter = function (v) {
     viewFilter = v;
@@ -114,7 +212,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./dashboard.html">← To-do list</a> · <a href="./completed.html">Completed →</a></p>';
+    var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + '</p><p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <b>Fix a fault</b> · <a href="./completed.html">Completed</a></p>';
 
     // Lets a department see just its own queue — Mark, 2026-09-08.
     // Available to everyone, not only management: viewing your own
@@ -127,10 +225,48 @@
       }).join("") +
       '</select>';
 
-    html += "<h2>Open faults <span style='color:#8C6A2F;font-weight:400'>" + issues.length + "</span></h2>";
-    if (!issues.length) html += '<p class="empty">Nothing here' + (viewFilter ? " for this filter" : "") + '.</p>';
+    html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
+      (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
 
-    issues.forEach(function (i) {
+    html += '<div class="filter-section"><div class="title">Date</div>' +
+      '<label>Order (within each target)</label><select id="fixDateDirection" onchange="onFixDateDirection()">' +
+      '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
+      '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
+      '</select>' +
+      '<label>Custom date range (optional)</label>' +
+      '<div class="daterange">' +
+      '<input type="date" id="fixDateFrom" value="' + esc(dateFrom) + '" onchange="onFixDateRange()">' +
+      '<span>to</span>' +
+      '<input type="date" id="fixDateTo" value="' + esc(dateTo) + '" onchange="onFixDateRange()">' +
+      '</div></div>';
+
+    var areas = areasPresent();
+    html += '<div class="filter-section"><div class="title">Maintenance area</div>' +
+      '<label>Area</label><select id="fixArea" onchange="onFixArea()">' +
+      '<option value="">All areas</option>' +
+      areas.map(function (a) {
+        return '<option value="' + esc(a.id) + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>';
+    if (filterAreaId) {
+      var ts = targetsIn(filterAreaId);
+      html += '<label>Target</label><select id="fixTarget" onchange="onFixTarget()">' +
+        '<option value="">All in this area</option>' +
+        ts.map(function (t) {
+          return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
+        }).join("") + '</select>';
+    }
+    html += '</div>';
+
+    html += "<h2>Open faults <span style='color:#8C6A2F;font-weight:400'>" + issues.length +
+      (issues.length !== lastIssues.length ? " of " + lastIssues.length : "") + "</span></h2>";
+    if (!issues.length) html += '<p class="empty">Nothing here' +
+      ((viewFilter || filterAreaId || dateFrom || dateTo) ? " for this filter" : "") + '.</p>';
+
+    groupForDisplay(issues).forEach(function (area) {
+      html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
+      area.targets.forEach(function (target) {
+        html += '<div class="target-group"><p class="target-heading">' + esc(target.name) + '</p>';
+        target.faults.forEach(function (i) {
       html += '<div class="card" id="card-' + i.id + '">' +
         '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : '') + '</p>' +
         (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
@@ -184,7 +320,11 @@
         '<div class="actions"><button onclick="doResolve(\'' + i.id + '\')">Confirm fixed</button>' +
         '<button class="secondary" onclick="toggleFix(\'' + i.id + '\')">Cancel</button></div>' +
         '</div></div>';
-    });
+        });        // faults within this target
+        html += '</div>';
+      });            // targets within this area
+      html += '</div>';
+    });              // areas
 
     list.innerHTML = html;
   }
