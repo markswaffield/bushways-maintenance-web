@@ -47,6 +47,8 @@
   .rule.archived{opacity:.55}
   .rule.missing{border-style:dashed;background:#FBFAF6}
   .rule.missing .rname{color:#8C6A2F}
+  .vehblock{margin-top:12px;padding-left:10px;border-left:3px solid #C9C2AC}
+  .vehblock .vehname{font-weight:700;font-size:13.5px;margin:0 0 4px;color:#43594A}
   .rule .rname{font-weight:700;margin:0}
   .rule .rmeta{font-size:12px;color:#6B6455;margin:2px 0 0}
   .rule .racts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -563,94 +565,121 @@
       return a.localeCompare(b);
     });
 
-    // Vehicles is always shown, even with nothing under it, because the
-    // gaps are the point.
-    if (areaNames.indexOf("Vehicles") === -1 && boot_vehicles.length) areaNames.unshift("Vehicles");
+    // Vehicles is rendered differently from every other area: as the
+    // WHOLE vehicle list, always, one block per vehicle in registration
+    // order — Mark, 2026-09-12: "once a schedule has been committed on a
+    // vehicle it must remain visible. so we need the whole vehicle list
+    // present - those that have been allocated and those unallocated."
+    //
+    // Grouping by schedule instead made a vehicle vanish out of the list
+    // the moment it got one, reappearing above as a row named after the
+    // schedule. The list he is working down is a list of VEHICLES, and it
+    // has to stay one.
+    if (boot_vehicles.length) {
+      // Archived ones are kept in the vehicle's block, greyed, so
+      // Restore stays reachable — everywhere else on this page a removed
+      // schedule is still visible, and a vehicle should be no different.
+      var vehSched = {};
+      (byArea["Vehicles"] || []).forEach(function (r) {
+        if (r.target_vehicle_id) (vehSched[r.target_vehicle_id] = vehSched[r.target_vehicle_id] || []).push(r);
+      });
+      var general = (byArea["Vehicles"] || []).filter(function (r) {
+        return !r.target_vehicle_id && !r.archived;
+      });
+      var liveFor = function (id) {
+        return (vehSched[id] || []).filter(function (r) { return !r.archived; });
+      };
+      var withCount = boot_vehicles.filter(function (v) { return liveFor(v.id).length; }).length;
+
+      h += '<div class="area-group"><p class="area-heading">Vehicles</p>';
+      h += '<p class="rmeta" style="margin:0 0 8px">' + withCount + ' of ' + boot_vehicles.length +
+        ' vehicles have a schedule.</p>';
+
+      general.forEach(function (r) { h += ruleRow(r); });
+
+      boot_vehicles.slice().sort(function (a, b) {
+        return (a.registration || a.label).localeCompare(b.registration || b.label, undefined, { numeric: true });
+      }).forEach(function (v) {
+        var mine = vehSched[v.id] || [];
+        h += '<div class="vehblock"><p class="vehname">' + esc(v.label) + '</p>';
+        if (!liveFor(v.id).length) {
+          mine.forEach(function (r) { h += ruleRow(r); });   // any archived ones, so Restore is reachable
+          h += '<div class="rule missing"><p class="rmeta">No schedule yet.</p>' +
+            (me && me.is_manager
+              ? '<div class="racts"><button onclick="startAddFor(\'' + v.id + '\')">+ Add a schedule</button></div>'
+              : "") + '</div>';
+        } else {
+          mine.sort(function (x, y) { return x.name.localeCompare(y.name); }).forEach(function (r) {
+            h += ruleRow(r);
+          });
+          if (me && me.is_manager) {
+            h += '<div class="racts" style="margin:4px 0 0"><button onclick="startAddFor(\'' + v.id +
+              '\')">+ Add another</button></div>';
+          }
+        }
+        h += '</div>';
+      });
+      h += '</div>';
+      areaNames = areaNames.filter(function (a) { return a !== "Vehicles"; });
+    }
 
     areaNames.forEach(function (areaName) {
       h += '<div class="area-group"><p class="area-heading">' + esc(areaName) + '</p>';
-
-      if (areaName === "Vehicles") {
-        var withSchedule = {};
-        (byArea["Vehicles"] || []).forEach(function (r) {
-          if (r.target_vehicle_id && !r.archived) withSchedule[r.target_vehicle_id] = true;
-        });
-        var missing = boot_vehicles.filter(function (v) { return !withSchedule[v.id]; });
-        if (missing.length) {
-          h += '<p class="rmeta" style="margin:0 0 8px">' + missing.length + ' of ' +
-            boot_vehicles.length + ' vehicles have no schedule yet.</p>';
-        }
-      }
-      // By target — which for Vehicles means by registration, since the
-      // label starts with it. Schedules with no target sort first, being
-      // the area's own general obligations.
       byArea[areaName].sort(function (x, y) {
         var tx = x.target || "", ty = y.target || "";
         if (tx !== ty) return tx.localeCompare(ty, undefined, { numeric: true });
         return x.name.localeCompare(y.name);
-      }).forEach(function (r) {
-      h += '<div class="rule' + (r.archived ? " archived" : "") + '">' +
-        '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
-        '<p class="rmeta">' + esc(r.describes) +
-        (r.reminder_days != null
-            ? " · shows " + (r.reminder_days % 7 === 0 && r.reminder_days >= 7
-                ? (r.reminder_days / 7) + " week" + (r.reminder_days === 7 ? "" : "s")
-                : r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s")) + " ahead"
-            : r.meter_reminder != null
-              ? " · alerts " + Number(r.meter_reminder).toLocaleString() + " " + (r.meter_unit || "km") + " ahead" +
-                (r.last_meter_value != null
-                  ? " · last done at " + Number(r.last_meter_value).toLocaleString() + " " + (r.meter_unit || "km")
-                  : " · never done")
-              : "") +
-        (r.target ? " · " + esc(r.target) : "") +
-        (r.default_department ? " · always " + esc(r.default_department) : "") +
-        (r.last_completed ? " · last done " +
-          new Date(r.last_completed).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "") +
-        (r.change_count ? " · " + r.change_count + " entr" + (r.change_count === 1 ? "y" : "ies") : "") +
-        '</p>';
-      if (editingId === r.id) { h += ruleForm(r); }
-
-      else {
-        h += '<div class="racts">';
-        if (r.change_count) h += '<button onclick="showHistory(\'' + r.id + '\')">' +
-          (historyFor === r.id ? "Hide history" : "History") + '</button>';
-        if (me && me.is_manager && r.editable) {
-          if (r.archived) h += '<button onclick="archiveRule(\'' + r.id + '\', true)">Restore</button>';
-          else h += '<button onclick="startEdit(\'' + r.id + '\')">Edit</button>';
-        }
-        h += '</div>';
-      }
-      if (historyFor === r.id) {
-        h += '<div class="hist">' + (historyRows.length ? historyRows.map(function (c) {
-          return '<p><span class="act">' + esc(c.action) + '</span> ' + esc(c.summary || "") +
-            ' <span style="color:#A8A192">— ' + new Date(c.at).toLocaleString() + '</span></p>' +
-            (c.notes ? '<p class="cnote">“' + esc(c.notes) + '”</p>' : "");
-        }).join("") : "<p>No changes recorded.</p>") + '</div>';
-      }
-      h += '</div>';
-      });
-
-      // The vehicles nobody has set a schedule for, listed so the gap is
-      // visible rather than having to be noticed.
-      if (areaName === "Vehicles") {
-        var have = {};
-        (byArea["Vehicles"] || []).forEach(function (r) {
-          if (r.target_vehicle_id && !r.archived) have[r.target_vehicle_id] = true;
-        });
-        boot_vehicles.filter(function (v) { return !have[v.id]; }).forEach(function (v) {
-          h += '<div class="rule missing">' +
-            '<p class="rname">' + esc(v.label) + '</p>' +
-            '<p class="rmeta">No schedule yet.</p>' +
-            (me && me.is_manager
-              ? '<div class="racts"><button onclick="startAddFor(\'' + v.id + '\')">+ Add a service schedule</button></div>'
-              : "") +
-            '</div>';
-        });
-      }
-
+      }).forEach(function (r) { h += ruleRow(r); });
       h += '</div>';
     });
     return h;
+  }
+
+  // One schedule, wherever it is being listed — inside a vehicle's block
+  // or under an ordinary area heading.
+  function ruleRow(r) {
+    var h = '<div class="rule' + (r.archived ? " archived" : "") + '">' +
+      '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
+      '<p class="rmeta">' + esc(r.describes) +
+      (r.reminder_days != null
+          ? " · alerts " + (r.reminder_days % 7 === 0 && r.reminder_days >= 7
+              ? (r.reminder_days / 7) + " week" + (r.reminder_days === 7 ? "" : "s")
+              : r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s")) + " ahead"
+          : r.meter_reminder != null
+            ? " · alerts " + Number(r.meter_reminder).toLocaleString() + " " + (r.meter_unit || "km") + " ahead" +
+              (r.last_meter_value != null
+                ? " · last done at " + Number(r.last_meter_value).toLocaleString() + " " + (r.meter_unit || "km")
+                : " · never done")
+            : "") +
+      (r.next_due_date && r.trigger === "recurring"
+        ? " · next " + new Date(r.next_due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "") +
+      (r.default_department ? " · always " + esc(r.default_department) : "") +
+      (r.last_completed ? " · last done " +
+        new Date(r.last_completed).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "") +
+      (r.change_count ? " · " + r.change_count + " entr" + (r.change_count === 1 ? "y" : "ies") : "") +
+      '</p>';
+
+    if (editingId === r.id) { h += ruleForm(r); }
+    else {
+      h += '<div class="racts">';
+      if (r.change_count) h += '<button onclick="showHistory(\'' + r.id + '\')">' +
+        (historyFor === r.id ? "Hide history" : "History") + '</button>';
+      if (me && me.is_manager && r.editable) {
+        if (r.archived) h += '<button onclick="archiveRule(\'' + r.id + '\', true)">Restore</button>';
+        else h += '<button onclick="startEdit(\'' + r.id + '\')">Edit</button>';
+      }
+      h += '</div>';
+    }
+
+    if (historyFor === r.id) {
+      h += '<div class="hist">' + (historyRows.length ? historyRows.map(function (c) {
+        return '<p><span class="act">' + esc(c.action) + '</span> ' + esc(c.summary || "") +
+          ' <span style="color:#A8A192">— ' + new Date(c.at).toLocaleString() + '</span></p>' +
+          (c.notes ? '<p class="cnote">“' + esc(c.notes) + '”</p>' : "");
+      }).join("") : "<p>No changes recorded.</p>") + '</div>';
+    }
+    return h + '</div>';
   }
 
   function card(s) {
