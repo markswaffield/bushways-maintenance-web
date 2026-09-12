@@ -159,7 +159,10 @@
           (me.department && s.assigned_department === me.department);
         if (!isMine) return false;
       }
-      if (filterDept && s.assigned_department !== filterDept) return false;
+      // Unassigned is the one worth finding deliberately — work nobody
+      // owes is work nobody does. Mark, 2026-09-12.
+      if (filterDept === "__unassigned__") { if (s.assigned_department) return false; }
+      else if (filterDept && s.assigned_department !== filterDept) return false;
       if (filterPerson && s.assigned_person_id !== filterPerson) return false;
       var d = new Date(s.due_date);
       if (from && d < new Date(from)) return false;
@@ -200,8 +203,11 @@
         '<input type="checkbox" id="mine" onchange="onMine()" style="width:auto"' + (mine ? " checked" : "") + '>' +
         'Mine — me or ' + esc(me.department || "my department") + '</label>';
     }
+    var unassignedCount = all.filter(function (x) { return !x.assigned_department; }).length;
     html += '<label>Department</label><select id="fDept" onchange="onFilterDept()">' +
       '<option value="">All departments</option>' +
+      '<option value="__unassigned__"' + (filterDept === "__unassigned__" ? " selected" : "") + '>' +
+        'Unassigned' + (unassignedCount ? " (" + unassignedCount + ")" : "") + '</option>' +
       departments.map(function (d) {
         return '<option value="' + esc(d.name) + '"' + (filterDept === d.name ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select>';
