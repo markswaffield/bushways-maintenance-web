@@ -208,7 +208,7 @@
     html += '<div style="margin-top:28px"></div>' + rulesSection();
 
     document.getElementById("app").innerHTML = html;
-    if (document.getElementById("f_arrives")) onFirstDue();
+    if (document.getElementById("f_arrives")) onLead();
   }
 
   // The six date intervals Mark named, plus a free one for anything else.
@@ -236,9 +236,14 @@
       name: document.getElementById("f_name").value,
       interval_kind: kind,
       default_department_id: document.getElementById("f_dept").value || null,
-      reminder_days: document.getElementById("f_reminder").value,
-      next_due_date: document.getElementById("f_firstdue").value || null,
     };
+    if (kind === "date") {
+      body.reminder_days = document.getElementById("f_lead").value === "" ? null : leadInDays();
+      body.next_due_date = document.getElementById("f_firstdue").value || null;
+    } else {
+      var mr = document.getElementById("f_meterreminder").value;
+      body.meter_reminder = mr === "" ? null : Number(mr);
+    }
     if (kind === "date") {
       var preset = document.getElementById("f_preset").value;
       if (preset === "__custom__") {
@@ -256,9 +261,15 @@
 
   window.saveRule = function (id, btn) {
     if (saving) return;
+    var body = formValues();
+    // Mark, 2026-09-12: "a schedule cannot be saved until an alert rule
+    // is inserted." A schedule nobody is warned about is one nobody does.
+    if (body.interval_kind === "date" ? body.reminder_days == null : body.meter_reminder == null) {
+      alert("Set an alert first — how far before it is due you want to be told. A schedule with no alert is one nobody hears about.");
+      return;
+    }
     saving = true;
     if (btn) btn.disabled = true;
-    var body = formValues();
     var action = id === "__new__" ? "create_schedule" : "update_schedule";
     if (id !== "__new__") body.schedule_id = id;
     fetch(FN.replace("action=dashboard", "action=" + action), {
@@ -360,16 +371,37 @@
       '</div>' +
       // Mark, 2026-09-12: "we need to be able to indicate when we want
       // the schedule to arrive onto the Due list, which will also trigger
-      // the first alert." Set the date the work is first due; the lead
-      // below decides how far ahead of that it appears. Both are shown
-      // together with the resulting arrival date spelled out, so there is
-      // no arithmetic to do in your head.
-      '<label>First due on</label>' +
-      '<input type="date" id="f_firstdue" onchange="onFirstDue()" value="' +
-        esc(isNew ? new Date().toISOString().slice(0,10)
-                  : (rule.next_due_date ? rule.next_due_date.slice(0,10) : "")) + '">' +
-      '<label>Show in Due how many days ahead?</label>' +
-      '<input type="number" id="f_reminder" min="0" onchange="onFirstDue()" oninput="onFirstDue()" value="' + esc(isNew ? "" : (rule.reminder_days == null ? "" : rule.reminder_days)) + '" placeholder="blank = only once due">' +
+      // the first alert" — and then, on what that lead looks like: "so
+      // this would be - 1 week before, or 500km before, or 10hrs before".
+      //
+      // So the lead is asked for in the SAME units as the interval. A
+      // date schedule takes a first-due date and a lead in days or weeks;
+      // a usage-based one has no date at all, and its lead is in the very
+      // kilometres or hours it counts.
+      '<div id="f_daterow" ' + (kind === "date" ? "" : "hidden") + '>' +
+        '<label>First due on</label>' +
+        '<input type="date" id="f_firstdue" onchange="onLead()" value="' +
+          esc(isNew ? new Date().toISOString().slice(0,10)
+                    : (rule.next_due_date ? rule.next_due_date.slice(0,10) : "")) + '">' +
+        '<label>Alert — how far before it is due?</label>' +
+        '<div class="row2">' +
+          '<input type="number" id="f_lead" min="0" oninput="onLead()" value="' +
+            esc(isNew ? "" : leadNumber(rule)) + '" placeholder="e.g. 1">' +
+          '<select id="f_leadunit" onchange="onLead()">' +
+            ["days","weeks","months"].map(function (u) {
+              return '<option value="' + u + '"' + (leadUnit(rule) === u ? " selected" : "") + '>' + u + '</option>';
+            }).join("") +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div id="f_meterlead" ' + (kind === "date" ? "hidden" : "") + '>' +
+        '<label>Alert — how far before it is due?</label>' +
+        '<div class="row2">' +
+          '<input type="number" id="f_meterreminder" min="0" oninput="onLead()" value="' +
+            esc(isNew ? "" : (rule.meter_reminder == null ? "" : rule.meter_reminder)) + '" placeholder="e.g. 500">' +
+          '<input type="text" id="f_meterleadunit" value="' + esc(kind === "hours" ? "hours" : "km") + '" disabled>' +
+        '</div>' +
+      '</div>' +
       '<p class="rmeta" style="margin-top:4px" id="f_arrives"></p>' +
       '<label>Always belongs to (optional)</label><select id="f_dept">' +
       '<option value="">Nobody in particular</option>' +
@@ -384,12 +416,58 @@
   }
 
   window.onKindPick = function () {
-    onFirstDue();
     var k = document.getElementById("f_kind").value;
     document.getElementById("f_date").hidden = k !== "date";
     document.getElementById("f_meterrow").hidden = k === "date";
+    document.getElementById("f_daterow").hidden = k !== "date";
+    document.getElementById("f_meterlead").hidden = k === "date";
+    document.getElementById("f_meterleadunit").value = k === "hours" ? "hours" : "km";
+    onLead();
   };
   // Spell out the arrival date rather than leaving it to be worked out.
+  function leadNumber(rule) {
+    var d = rule && rule.reminder_days;
+    if (d == null) return "";
+    if (d % 30 === 0 && d >= 30) return d / 30;
+    if (d % 7 === 0 && d >= 7) return d / 7;
+    return d;
+  }
+  function leadUnit(rule) {
+    var d = rule && rule.reminder_days;
+    if (d == null) return "days";
+    if (d % 30 === 0 && d >= 30) return "months";
+    if (d % 7 === 0 && d >= 7) return "weeks";
+    return "days";
+  }
+  function leadInDays() {
+    var n = Number(document.getElementById("f_lead").value || 0);
+    var u = document.getElementById("f_leadunit").value;
+    return u === "weeks" ? n * 7 : u === "months" ? n * 30 : n;
+  }
+
+  window.onLead = function () {
+    var el2 = document.getElementById("f_arrives");
+    if (!el2) return;
+    var k = document.getElementById("f_kind").value;
+    if (k !== "date") {
+      var m = document.getElementById("f_meterreminder").value;
+      var unit = k === "hours" ? "hours" : "km";
+      el2.textContent = m
+        ? "Alerts and appears on the Due list " + Number(m).toLocaleString() + " " + unit + " before it is due."
+        : "Required — how far ahead to alert. 500 km or 10 hours is usual.";
+      return;
+    }
+    var d = document.getElementById("f_firstdue").value;
+    var lead = leadInDays();
+    if (!d) { el2.textContent = "Required — how far ahead to alert. A six-monthly job wants about a month; a weekly one, a couple of days."; return; }
+    var arrive = new Date(d + "T00:00:00");
+    arrive.setDate(arrive.getDate() - lead);
+    el2.textContent = lead
+      ? "Alerts and appears on the Due list from " +
+        arrive.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + "."
+      : "Required — set how far ahead to alert.";
+  };
+
   window.onFirstDue = function () {
     var el2 = document.getElementById("f_arrives");
     if (!el2) return;
@@ -430,7 +508,13 @@
       h += '<div class="rule' + (r.archived ? " archived" : "") + '">' +
         '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
         '<p class="rmeta">' + esc(r.describes) +
-        (r.reminder_days != null ? " · shows " + r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s") + " ahead" : "") +
+        (r.reminder_days != null
+            ? " · shows " + (r.reminder_days % 7 === 0 && r.reminder_days >= 7
+                ? (r.reminder_days / 7) + " week" + (r.reminder_days === 7 ? "" : "s")
+                : r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s")) + " ahead"
+            : r.meter_reminder != null
+              ? " · shows " + Number(r.meter_reminder).toLocaleString() + " " + (r.meter_unit || "km") + " ahead"
+              : "") +
         (r.target ? " · " + esc(r.target) : "") +
         (r.default_department ? " · always " + esc(r.default_department) : "") +
         (r.last_completed ? " · last done " +
