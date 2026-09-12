@@ -241,7 +241,7 @@
       interval_kind: kind,
       default_department_id: document.getElementById("f_dept").value || null,
       area_id: document.getElementById("f_area").value || null,
-      target_vehicle_id: isVehicleArea(document.getElementById("f_area").value)
+      target_vehicle_id: (kind !== "date" || isVehicleArea(document.getElementById("f_area").value))
         ? (document.getElementById("f_vehicle").value || null) : null,
     };
     if (kind === "date") {
@@ -273,6 +273,12 @@
     // is inserted." A schedule nobody is warned about is one nobody does.
     if (body.interval_kind === "date" ? body.reminder_days == null : body.meter_reminder == null) {
       alert("Set an alert first — how far before it is due you want to be told. A schedule with no alert is one nobody hears about.");
+      return;
+    }
+    // Every vehicle has its own servicing schedule now, so one measured
+    // in km or hours has to say whose meter it is measuring.
+    if (body.interval_kind !== "date" && !body.target_vehicle_id) {
+      alert("Choose which vehicle this schedule is for. Different vehicles have different servicing intervals, so each one carries its own.");
       return;
     }
     saving = true;
@@ -423,9 +429,9 @@
         return '<option value="' + esc(a.id) + '"' +
           (!isNew && rule.area_id === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
       }).join("") + '</select>' +
-      '<div id="f_vehrow" ' + (isVehicleArea(isNew ? null : rule.area_id) ? "" : "hidden") + '>' +
+      '<div id="f_vehrow" ' + ((kind !== "date" || isVehicleArea(isNew ? null : rule.area_id)) ? "" : "hidden") + '>' +
         '<label>Which vehicle?</label><select id="f_vehicle">' +
-        '<option value="">All vehicles</option>' +
+        '<option value="">Choose a vehicle…</option>' +
         (boot_vehicles || []).map(function (v) {
           return '<option value="' + esc(v.id) + '"' +
             (!isNew && rule.target_vehicle_id === v.id ? " selected" : "") + '>' + esc(v.label) + '</option>';
@@ -450,6 +456,11 @@
     document.getElementById("f_daterow").hidden = k !== "date";
     document.getElementById("f_meterlead").hidden = k === "date";
     document.getElementById("f_meterleadunit").value = k === "hours" ? "hours" : "km";
+    // A meter-based schedule is always about one machine, so the picker
+    // shows regardless of what the area box says, and the area follows.
+    var vr = document.getElementById("f_vehrow");
+    if (vr) vr.hidden = (k === "date") && !isVehicleArea(document.getElementById("f_area").value);
+    if (k !== "date" && VEHICLE_AREA_ID) document.getElementById("f_area").value = VEHICLE_AREA_ID;
     onLead();
   };
   // Spell out the arrival date rather than leaving it to be worked out.
@@ -499,7 +510,8 @@
 
   window.onAreaPick = function () {
     var row = document.getElementById("f_vehrow");
-    if (row) row.hidden = !isVehicleArea(document.getElementById("f_area").value);
+    var k = document.getElementById("f_kind").value;
+    if (row) row.hidden = (k === "date") && !isVehicleArea(document.getElementById("f_area").value);
   };
 
   window.onPresetPick = function () {
@@ -542,6 +554,9 @@
 
     areaNames.forEach(function (areaName) {
       h += '<div class="area-group"><p class="area-heading">' + esc(areaName) + '</p>';
+      // By target — which for Vehicles means by registration, since the
+      // label starts with it. Schedules with no target sort first, being
+      // the area's own general obligations.
       byArea[areaName].sort(function (x, y) {
         var tx = x.target || "", ty = y.target || "";
         if (tx !== ty) return tx.localeCompare(ty, undefined, { numeric: true });
@@ -555,7 +570,10 @@
                 ? (r.reminder_days / 7) + " week" + (r.reminder_days === 7 ? "" : "s")
                 : r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s")) + " ahead"
             : r.meter_reminder != null
-              ? " · shows " + Number(r.meter_reminder).toLocaleString() + " " + (r.meter_unit || "km") + " ahead"
+              ? " · alerts " + Number(r.meter_reminder).toLocaleString() + " " + (r.meter_unit || "km") + " ahead" +
+                (r.last_meter_value != null
+                  ? " · last done at " + Number(r.last_meter_value).toLocaleString() + " " + (r.meter_unit || "km")
+                  : " · never done")
               : "") +
         (r.target ? " · " + esc(r.target) : "") +
         (r.default_department ? " · always " + esc(r.default_department) : "") +
