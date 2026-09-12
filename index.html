@@ -41,6 +41,22 @@
   .assign-row{display:flex;gap:6px;margin-top:8px}
   .assign-row select{flex:1;padding:6px;font-size:13px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit}
   .assign-row button{padding:6px 11px;font-size:13px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
+  .rule{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 13px;margin-top:6px}
+  .rule.archived{opacity:.55}
+  .rule .rname{font-weight:700;margin:0}
+  .rule .rmeta{font-size:12px;color:#6B6455;margin:2px 0 0}
+  .rule .racts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .rule button,.form button{padding:5px 10px;font-size:12.5px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
+  .rule button.danger,.form button.danger{border-color:#A8502F;color:#A8502F}
+  .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
+  .form label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:9px 0 4px}
+  .form label:first-child{margin-top:0}
+  .form input,.form select{width:100%;padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .form .row2{display:flex;gap:8px}
+  .form .row2 > *{flex:1}
+  .hist{margin-top:8px;border-top:1px solid #F1EDE4;padding-top:8px}
+  .hist p{font-size:12px;color:#6B6455;margin:3px 0}
+  .hist .act{font-weight:700;color:#43594A;text-transform:uppercase;font-size:10.5px;letter-spacing:.03em}
   .group{margin-top:20px}
   .group .heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
@@ -67,6 +83,7 @@
   var kind = "";   // "" all · room · vehicle · recurring
   var mine = false;
   var me = null, people = [], departments = [];
+  var rules = [], showRules = false, editingId = null, historyFor = null, historyRows = [];
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -186,7 +203,168 @@
         html += "</div>";
       });
     }
+    html += '<div style="margin-top:28px"></div>' + rulesSection();
+
     document.getElementById("app").innerHTML = html;
+  }
+
+  // The six date intervals Mark named, plus a free one for anything else.
+  var PRESETS = [
+    ["1|days", "Daily"], ["1|weeks", "Weekly"], ["1|months", "Monthly"],
+    ["3|months", "Every 3 months"], ["6|months", "Every 6 months"], ["1|years", "Annually"],
+  ];
+
+  window.toggleRules = function () { showRules = !showRules; render(); };
+  window.startEdit = function (id) { editingId = id; historyFor = null; render(); };
+  window.cancelEdit = function () { editingId = null; render(); };
+  window.startAdd = function () { editingId = "__new__"; render(); };
+
+  window.showHistory = function (id) {
+    if (historyFor === id) { historyFor = null; render(); return; }
+    fetch(FN.replace("action=dashboard", "action=schedule_history") + "&schedule=" + id)
+      .then(function (r) { return r.json(); })
+      .then(function (out) { historyFor = id; historyRows = out.history || []; render(); });
+  };
+
+  function formValues() {
+    var kind = document.getElementById("f_kind").value;
+    var body = {
+      by_person_id: me && me.id,
+      name: document.getElementById("f_name").value,
+      interval_kind: kind,
+      default_department_id: document.getElementById("f_dept").value || null,
+    };
+    if (kind === "date") {
+      var preset = document.getElementById("f_preset").value;
+      if (preset === "__custom__") {
+        body.recurrence_interval = document.getElementById("f_num").value;
+        body.recurrence_unit = document.getElementById("f_unit").value;
+      } else {
+        body.recurrence_interval = preset.split("|")[0];
+        body.recurrence_unit = preset.split("|")[1];
+      }
+    } else {
+      body.meter_interval = document.getElementById("f_meter").value;
+    }
+    return body;
+  }
+
+  window.saveRule = function (id) {
+    var body = formValues();
+    var action = id === "__new__" ? "create_schedule" : "update_schedule";
+    if (id !== "__new__") body.schedule_id = id;
+    fetch(FN.replace("action=dashboard", "action=" + action), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      editingId = null;
+      reload();
+    });
+  };
+
+  window.archiveRule = function (id, restore) {
+    if (!restore && !confirm("Remove this schedule? It stops raising anything, but it is kept with its full history and can be restored.")) return;
+    fetch(FN.replace("action=dashboard", "action=archive_schedule"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ schedule_id: id, restore: !!restore, by_person_id: me && me.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      reload();
+    });
+  };
+
+  function ruleForm(rule) {
+    var isNew = !rule;
+    var kind = isNew ? "date" : (rule.interval_kind || "date");
+    var presetKey = !isNew && rule.trigger === "recurring"
+      ? rule.recurrence_interval + "|" + rule.recurrence_unit : "1|months";
+    var known = PRESETS.some(function (p) { return p[0] === presetKey; });
+
+    var h = '<div class="form">' +
+      '<label>Name</label><input type="text" id="f_name" value="' + esc(isNew ? "" : rule.name) + '" placeholder="e.g. Generator service">' +
+      '<label>Interval</label><select id="f_kind" onchange="onKindPick()">' +
+      '<option value="date"' + (kind === "date" ? " selected" : "") + '>By date</option>' +
+      '<option value="hours"' + (kind === "hours" ? " selected" : "") + '>By hours run</option>' +
+      '<option value="km"' + (kind === "km" ? " selected" : "") + '>By kilometres</option>' +
+      '</select>' +
+      '<div id="f_date" ' + (kind === "date" ? "" : "hidden") + '>' +
+        '<label>How often</label><select id="f_preset" onchange="onPresetPick()">' +
+        PRESETS.map(function (pr) {
+          return '<option value="' + pr[0] + '"' + (known && presetKey === pr[0] ? " selected" : "") + '>' + pr[1] + '</option>';
+        }).join("") +
+        '<option value="__custom__"' + (!known && !isNew && rule.trigger === "recurring" ? " selected" : "") + '>Something else…</option>' +
+        '</select>' +
+        '<div id="f_customrow" class="row2" style="margin-top:8px" ' + ((!known && !isNew && rule.trigger === "recurring") ? "" : "hidden") + '>' +
+          '<input type="number" id="f_num" min="1" value="' + esc(isNew ? 1 : (rule.recurrence_interval || 1)) + '">' +
+          '<select id="f_unit">' + ["days", "weeks", "months", "years"].map(function (u) {
+            return '<option value="' + u + '"' + (!isNew && rule.recurrence_unit === u ? " selected" : "") + '>' + u + '</option>';
+          }).join("") + '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div id="f_meterrow" ' + (kind === "date" ? "hidden" : "") + '>' +
+        '<label>Every how many</label>' +
+        '<input type="number" id="f_meter" min="1" value="' + esc(isNew ? "" : (rule.meter_interval || "")) + '" placeholder="e.g. 100">' +
+      '</div>' +
+      '<label>Always belongs to (optional)</label><select id="f_dept">' +
+      '<option value="">Nobody in particular</option>' +
+      departments.map(function (d) {
+        return '<option value="' + esc(d.id) + '"' + (!isNew && rule.default_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select>' +
+      '<div class="racts"><button onclick="saveRule(\'' + (isNew ? "__new__" : rule.id) + '\')">Save</button>' +
+      '<button onclick="cancelEdit()">Cancel</button></div></div>';
+    return h;
+  }
+
+  window.onKindPick = function () {
+    var k = document.getElementById("f_kind").value;
+    document.getElementById("f_date").hidden = k !== "date";
+    document.getElementById("f_meterrow").hidden = k === "date";
+  };
+  window.onPresetPick = function () {
+    document.getElementById("f_customrow").hidden = document.getElementById("f_preset").value !== "__custom__";
+  };
+
+  function rulesSection() {
+    var h = '<h2>Schedules <span class="count">' + rules.filter(function (r) { return !r.archived; }).length +
+      '</span></h2>';
+    h += '<p class="order-note">The rules themselves, not what is due off them. ' +
+      (me && me.is_manager ? "" : "Management can add, edit and remove these.") + '</p>';
+    if (me && me.is_manager && editingId !== "__new__") {
+      h += '<div class="racts" style="margin-top:8px"><button onclick="startAdd()">+ Add a schedule</button></div>';
+    }
+    if (editingId === "__new__") h += ruleForm(null);
+
+    rules.forEach(function (r) {
+      h += '<div class="rule' + (r.archived ? " archived" : "") + '">' +
+        '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
+        '<p class="rmeta">' + esc(r.describes) +
+        (r.target ? " · " + esc(r.target) : "") +
+        (r.default_department ? " · always " + esc(r.default_department) : "") +
+        (r.change_count ? " · " + r.change_count + " change" + (r.change_count === 1 ? "" : "s") : "") +
+        '</p>';
+      if (editingId === r.id) { h += ruleForm(r); }
+      else {
+        h += '<div class="racts">';
+        if (r.change_count) h += '<button onclick="showHistory(\'' + r.id + '\')">' +
+          (historyFor === r.id ? "Hide history" : "History") + '</button>';
+        if (me && me.is_manager && r.editable) {
+          if (r.archived) h += '<button onclick="archiveRule(\'' + r.id + '\', true)">Restore</button>';
+          else {
+            h += '<button onclick="startEdit(\'' + r.id + '\')">Edit</button>';
+            h += '<button class="danger" onclick="archiveRule(\'' + r.id + '\')">Remove</button>';
+          }
+        }
+        h += '</div>';
+      }
+      if (historyFor === r.id) {
+        h += '<div class="hist">' + (historyRows.length ? historyRows.map(function (c) {
+          return '<p><span class="act">' + esc(c.action) + '</span> ' + esc(c.summary || "") +
+            ' <span style="color:#A8A192">— ' + new Date(c.at).toLocaleString() + '</span></p>';
+        }).join("") : "<p>No changes recorded.</p>") + '</div>';
+      }
+      h += '</div>';
+    });
+    return h;
   }
 
   function card(s) {
@@ -218,8 +396,13 @@
   }
 
   function reload() {
-    return fetch(FN).then(function (r) { return r.json(); }).then(function (d) {
-      lastData = d; departments = d.departments || []; render();
+    return Promise.all([
+      fetch(FN).then(function (r) { return r.json(); }),
+      fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
+    ]).then(function (res) {
+      lastData = res[0]; departments = res[0].departments || [];
+      rules = res[1].schedules || [];
+      render();
     });
   }
 
