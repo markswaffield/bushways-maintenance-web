@@ -255,7 +255,7 @@
     html += '<div style="margin-top:28px"></div>' + rulesSection();
 
     document.getElementById("app").innerHTML = html;
-    if (document.getElementById("f_arrives")) onLead();
+    if (document.getElementById("f_arrives")) { onLead(); onKindPick(); }
   }
 
   // The six date intervals Mark named, plus a free one for anything else.
@@ -499,8 +499,15 @@
       '<label>Which department does this belong to?</label><select id="f_dept">' +
       '<option value="">Choose a department…</option>' +
       departments.map(function (d) {
-        return '<option value="' + esc(d.id) + '"' + (!isNew && rule.default_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+        // Servicing is Management's — they book the workshop and pay for
+        // it (Mark, 2026-09-12). Preselected on a km or hours schedule,
+        // not forced: a camp that services its own can change it.
+        var sel = isNew
+          ? (kind !== "date" && d.name === "Management")
+          : (rule.default_department_id === d.id);
+        return '<option value="' + esc(d.id) + '"' + (sel ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select>' +
+      '<p class="rmeta" style="margin-top:4px" id="f_depthint"></p>' +
       '<div class="racts"><button onclick="saveRule(\'' + (isNew ? "__new__" : rule.id) + '\', this)">Save changes</button>' +
       '<button onclick="cancelEdit()">Discard changes</button>' +
       (isNew ? "" : '<button class="danger" onclick="archiveRule(\'' + rule.id + '\')">Delete schedule</button>') +
@@ -515,6 +522,9 @@
     document.getElementById("f_daterow").hidden = k !== "date";
     document.getElementById("f_meterlead").hidden = k === "date";
     document.getElementById("f_meterleadunit").value = k === "hours" ? "hours" : "km";
+    var dh = document.getElementById("f_depthint");
+    if (dh) dh.textContent = k === "date" ? ""
+      : "Servicing is normally Management's — they arrange and pay for it.";
     // A meter-based schedule is always about one machine, so the picker
     // shows regardless of what the area box says, and the area follows.
     var vr = document.getElementById("f_vehrow");
