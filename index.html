@@ -96,7 +96,7 @@
     var v = boot_vehicles.filter(function (x) { return x.id === id; })[0];
     return v ? (v.registration || v.label) : "";
   }
-  var rules = [], showRules = false, editingId = null, completingId = null, historyFor = null, historyRows = [];
+  var rules = [], showRules = false, showRemoved = false, editingId = null, completingId = null, historyFor = null, historyRows = [];
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -230,6 +230,11 @@
   ];
 
   window.toggleRules = function () { showRules = !showRules; render(); };
+  // Removed schedules are out of the way by default and reachable on
+  // purpose — Mark, 2026-09-12: "if a schedule is deleted or removed -
+  // then i want it to fall out of the visible list. we can have an
+  // option to view 'removed schedules' if we want to see them."
+  window.toggleRemoved = function () { showRemoved = !showRemoved; render(); };
   window.startEdit = function (id) { editingId = id; historyFor = null; render(); };
   window.cancelEdit = function () { editingId = null; render(); };
   window.startAdd = function () { editingId = "__new__"; addForVehicle = null; render(); };
@@ -554,8 +559,18 @@
     // the same Area -> Target shape the to-do list and Fix a Fault use.
     // Camp-wide (no area) sorts last rather than alphabetically among
     // real area names.
+    var removedCount = rules.filter(function (r) { return r.archived; }).length;
+    var visible = showRemoved ? rules : rules.filter(function (r) { return !r.archived; });
+
+    if (removedCount) {
+      h += '<p class="order-note" style="margin-top:6px">' +
+        '<a href="#" onclick="toggleRemoved();return false;">' +
+        (showRemoved ? "Hide" : "View") + " " + removedCount + " removed schedule" +
+        (removedCount === 1 ? "" : "s") + '</a></p>';
+    }
+
     var byArea = {};
-    rules.forEach(function (r) {
+    visible.forEach(function (r) {
       var a = r.area || "Camp-wide";
       (byArea[a] = byArea[a] || []).push(r);
     });
@@ -603,7 +618,8 @@
         var mine = vehSched[v.id] || [];
         h += '<div class="vehblock"><p class="vehname">' + esc(v.label) + '</p>';
         if (!liveFor(v.id).length) {
-          mine.forEach(function (r) { h += ruleRow(r); });   // any archived ones, so Restore is reachable
+          // Removed ones appear here only while "View removed" is on.
+          mine.forEach(function (r) { h += ruleRow(r); });
           h += '<div class="rule missing"><p class="rmeta">No schedule yet.</p>' +
             (me && me.is_manager
               ? '<div class="racts"><button onclick="startAddFor(\'' + v.id + '\')">+ Add a schedule</button></div>'
