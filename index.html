@@ -41,6 +41,8 @@
   .assign-row{display:flex;gap:6px;margin-top:8px}
   .assign-row select{flex:1;padding:6px;font-size:13px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit}
   .assign-row button{padding:6px 11px;font-size:13px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
+  .area-group{margin-top:18px}
+  .area-group .area-heading{font-size:13.5px;font-weight:700;color:#43594A;margin:0 0 6px;padding-bottom:3px;border-bottom:2px solid #43594A}
   .rule{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 13px;margin-top:6px}
   .rule.archived{opacity:.55}
   .rule .rname{font-weight:700;margin:0}
@@ -83,7 +85,9 @@
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
   var mine = false;
-  var me = null, people = [], departments = [];
+  var me = null, people = [], departments = [], areas = [], boot_vehicles = [];
+  var VEHICLE_AREA_ID = null;
+  function isVehicleArea(id) { return !!id && id === VEHICLE_AREA_ID; }
   var rules = [], showRules = false, editingId = null, completingId = null, historyFor = null, historyRows = [];
 
   function esc(s) {
@@ -236,6 +240,9 @@
       name: document.getElementById("f_name").value,
       interval_kind: kind,
       default_department_id: document.getElementById("f_dept").value || null,
+      area_id: document.getElementById("f_area").value || null,
+      target_vehicle_id: isVehicleArea(document.getElementById("f_area").value)
+        ? (document.getElementById("f_vehicle").value || null) : null,
     };
     if (kind === "date") {
       body.reminder_days = document.getElementById("f_lead").value === "" ? null : leadInDays();
@@ -403,6 +410,27 @@
         '</div>' +
       '</div>' +
       '<p class="rmeta" style="margin-top:4px" id="f_arrives"></p>' +
+      // Mark, 2026-09-12: schedules group by area and target, and
+      // "For vehicles i would actually like a drop down menu to be able
+      // to seclect the vehicle that we want to apply a schedule to. This
+      // is the only area that will need this function." So the vehicle
+      // picker appears only when the area is Vehicles — nothing else
+      // needs one, and offering one everywhere would invite a schedule
+      // pinned to a room that should apply to all of them.
+      '<label>Maintenance area</label><select id="f_area" onchange="onAreaPick()">' +
+      '<option value="">Camp-wide — no one area</option>' +
+      areas.map(function (a) {
+        return '<option value="' + esc(a.id) + '"' +
+          (!isNew && rule.area_id === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>' +
+      '<div id="f_vehrow" ' + (isVehicleArea(isNew ? null : rule.area_id) ? "" : "hidden") + '>' +
+        '<label>Which vehicle?</label><select id="f_vehicle">' +
+        '<option value="">All vehicles</option>' +
+        (boot_vehicles || []).map(function (v) {
+          return '<option value="' + esc(v.id) + '"' +
+            (!isNew && rule.target_vehicle_id === v.id ? " selected" : "") + '>' + esc(v.label) + '</option>';
+        }).join("") + '</select>' +
+      '</div>' +
       '<label>Always belongs to (optional)</label><select id="f_dept">' +
       '<option value="">Nobody in particular</option>' +
       departments.map(function (d) {
@@ -469,6 +497,11 @@
   };
 
 
+  window.onAreaPick = function () {
+    var row = document.getElementById("f_vehrow");
+    if (row) row.hidden = !isVehicleArea(document.getElementById("f_area").value);
+  };
+
   window.onPresetPick = function () {
     document.getElementById("f_customrow").hidden = document.getElementById("f_preset").value !== "__custom__";
   };
@@ -492,7 +525,28 @@
     }
     if (editingId === "__new__") h += ruleForm(null);
 
+    // Grouped by maintenance area, then by target within it, which is
+    // the same Area -> Target shape the to-do list and Fix a Fault use.
+    // Camp-wide (no area) sorts last rather than alphabetically among
+    // real area names.
+    var byArea = {};
     rules.forEach(function (r) {
+      var a = r.area || "Camp-wide";
+      (byArea[a] = byArea[a] || []).push(r);
+    });
+    var areaNames = Object.keys(byArea).sort(function (a, b) {
+      if (a === "Camp-wide" && b !== "Camp-wide") return 1;
+      if (b === "Camp-wide" && a !== "Camp-wide") return -1;
+      return a.localeCompare(b);
+    });
+
+    areaNames.forEach(function (areaName) {
+      h += '<div class="area-group"><p class="area-heading">' + esc(areaName) + '</p>';
+      byArea[areaName].sort(function (x, y) {
+        var tx = x.target || "", ty = y.target || "";
+        if (tx !== ty) return tx.localeCompare(ty, undefined, { numeric: true });
+        return x.name.localeCompare(y.name);
+      }).forEach(function (r) {
       h += '<div class="rule' + (r.archived ? " archived" : "") + '">' +
         '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
         '<p class="rmeta">' + esc(r.describes) +
@@ -528,6 +582,8 @@
             (c.notes ? '<p class="cnote">“' + esc(c.notes) + '”</p>' : "");
         }).join("") : "<p>No changes recorded.</p>") + '</div>';
       }
+      h += '</div>';
+      });
       h += '</div>';
     });
     return h;
@@ -575,6 +631,10 @@
       fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
     ]).then(function (res) {
       lastData = res[0]; departments = res[0].departments || [];
+      areas = (res[0].areas || []).filter(function (a) { return !a.parent_area_id; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name); });
+      var v = areas.filter(function (a) { return a.name === "Vehicles"; })[0];
+      VEHICLE_AREA_ID = v ? v.id : null;
       rules = res[1].schedules || [];
       render();
     });
@@ -585,6 +645,7 @@
   var BOOT = FN.replace("?action=dashboard", "");
   fetch(BOOT).then(function (r) { return r.json(); }).then(function (b) {
     people = b.people || [];
+    boot_vehicles = b.vehicles || [];
     var sel = document.getElementById("who");
     sel.innerHTML = '<option value="">— nobody —</option>' + people.map(function (p) {
       return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
