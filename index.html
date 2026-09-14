@@ -1,5 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <title>Chobe Elephant Camp — Schedule</title>
 <!--
   The Schedule — split out of the to-do list and made the landing page,
@@ -818,5 +820,15 @@
   }).catch(function (e) {
     document.getElementById("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>';
   });
+</script>
+<script>
+  /* Root D-023. Registered on every page so each one is saved on the phone
+     as it is visited. Failure is deliberately silent: an older browser with
+     no service worker must still get a perfectly working online page. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    });
+  }
 </script>
 </body></html>

@@ -1,0 +1,16 @@
+{
+  "name": "Bush Ways Checks",
+  "short_name": "Checks",
+  "description": "Lodge and vehicle inspections for Bush Ways Safaris.",
+  "start_url": "./inspection.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F5F0",
+  "theme_color": "#122d31",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

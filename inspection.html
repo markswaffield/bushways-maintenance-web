@@ -1,5 +1,8 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
 <title>Chobe Elephant Camp</title>
 <style>
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
@@ -779,5 +782,15 @@
     e.preventDefault();
     location.reload();
   };
+</script>
+<script>
+  /* Root D-023. Registered on every page so each one is saved on the phone
+     as it is visited. Failure is deliberately silent: an older browser with
+     no service worker must still get a perfectly working online page. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    });
+  }
 </script>
 </body></html>
