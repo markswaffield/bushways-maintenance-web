@@ -1,0 +1,319 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Chobe Elephant Camp — Edit Checklists</title>
+<!--
+  Edit Checklists — an Administrator's own screen for changing a
+  lodge's own copy of a checklist. Never touches a master (those stay
+  reviewed the deliberate way: Checklists/master-drafts/, then a
+  migration) and never deletes anything outright — the same rule
+  Assets already follows.
+
+  Built 2026-09-15, per Mark: "I want another Department -
+  Administrator. only Administrators will have access to the edit
+  sheet to change the checklists" — and, the same day, on access from
+  a shared office computer: "managers often share a computer - we
+  need a mechanism where managers can login using a unique ID so that
+  all actions carried out by management can be recorded to the person
+  who was signed in."
+
+  That second point is why this page's sign-in is deliberately NOT
+  the phone's long-lived device session (root D-017) — this is a PIN,
+  checked every time someone opens this page, kept only in
+  sessionStorage so it clears the moment the tab or browser closes.
+  Whoever is sitting at a shared computer has to prove it's them
+  before anything here records their name.
+
+  Same honest caveat as every other sign-in stand-in in this tool: an
+  Administrator's PIN is set the first time with no PIN of their own
+  to check against yet — bootstrapping trust the same way the very
+  first WhatsApp-code enrolment will have to. Fine while only a
+  handful of real Administrators exist; revisit if that ever grows.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:22px 0 6px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:13px;margin:10px 0 0}
+  .nav b{color:#43594A}
+  select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
+  textarea{min-height:64px;resize:vertical}
+  label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 3px}
+  button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
+  button.primary{background:#43594A;color:#fff}
+  button.danger{border-color:#A8502F;color:#A8502F}
+  button.ghost{border-color:#C9C2AC;color:#5B5344}
+  button:disabled{opacity:.5;cursor:default}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0 0;padding:10px 12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
+  .bar>div{flex:1;min-width:160px}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 13px;margin-top:8px}
+  .card.archived{opacity:.55;border-style:dashed}
+  .card .hd{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+  .card .hd b{font-size:14px}
+  .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .item{border-top:1px solid #EFECE3;padding-top:8px;margin-top:8px}
+  .item:first-child{border-top:none;padding-top:0;margin-top:0}
+  .tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.03em;background:#F4E3D3;color:#8C6A2F;border-radius:4px;padding:2px 6px;margin-left:6px}
+  .who{font-size:12px;color:#6B6455;margin-top:2px}
+  .err{color:#A8502F;font-size:13px;margin:8px 0}
+  .center{max-width:640px;margin:60px auto;text-align:center}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<div id="login" class="center">
+  <h1>Edit Checklists</h1>
+  <p class="sub">Administrators only. Sign in every time — this page never stays signed in on a shared computer.</p>
+  <div class="bar" style="text-align:left">
+    <div>
+      <label>Who are you?</label>
+      <select id="loginPerson"><option value="">Loading…</option></select>
+    </div>
+    <div>
+      <label>PIN</label>
+      <input type="password" id="loginPin" inputmode="numeric" maxlength="6" placeholder="4–6 digits">
+    </div>
+  </div>
+  <div class="acts" style="justify-content:center">
+    <button class="primary" id="loginBtn">Sign in</button>
+  </div>
+  <p id="loginErr" class="err" hidden></p>
+  <div id="setPinBox" hidden style="margin-top:20px">
+    <p class="sub">No PIN set yet for this name — set one now, then sign in with it.</p>
+    <div class="bar" style="text-align:left">
+      <div><label>New PIN (4–6 digits)</label><input type="password" id="newPin" inputmode="numeric" maxlength="6"></div>
+    </div>
+    <div class="acts" style="justify-content:center"><button class="primary" id="setPinBtn">Set PIN</button></div>
+  </div>
+</div>
+
+<div id="app" hidden>
+<h1>Edit Checklists</h1>
+<p class="sub">Signed in as <b id="whoAmI"></b> · <a href="#" id="signOut">Sign out</a></p>
+<p class="nav"><a href="./dashboard.html">← Back to the to-do list</a></p>
+
+<h2>Pick a lodge</h2>
+<div class="bar">
+  <div><label>Lodge</label><select id="lodgePicker"><option value="">Select a lodge</option></select></div>
+</div>
+
+<div id="templateListBox" hidden>
+  <h2>Pick a checklist</h2>
+  <div id="templateList"></div>
+</div>
+
+<div id="editorBox" hidden>
+  <h2><span id="editorTitle"></span></h2>
+  <div id="sections"></div>
+  <div class="acts">
+    <button class="ghost" id="addSectionBtn">+ Add a section</button>
+  </div>
+</div>
+
+<h2>Bring a checklist to a lodge that doesn't have it yet</h2>
+<div class="bar">
+  <div><label>Master checklist</label><select id="masterPicker"><option value="">Select a master</option></select></div>
+  <div><label>Lodge</label><select id="applyLodgePicker"><option value="">Select a lodge</option></select></div>
+</div>
+<div class="acts"><button class="primary" id="applyMasterBtn">Apply</button></div>
+<p id="applyMsg" class="who"></p>
+</div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  var me = null; // { id, name }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function api(action, opts) {
+    opts = opts || {};
+    var url = FN + "?action=" + action + (opts.qs ? "&" + opts.qs : "");
+    var init = opts.body
+      ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(opts.body) }
+      : {};
+    return fetch(url, init).then(function (r) { return r.json(); });
+  }
+
+  // ---- sign-in ----
+  api("admin_bootstrap").then(function (d) {
+    var sel = document.getElementById("loginPerson");
+    sel.innerHTML = '<option value="">Select your name</option>' +
+      d.administrators.map(function (a) {
+        return '<option value="' + a.id + '" data-pin-set="' + a.pin_set + '">' + esc(a.name) + '</option>';
+      }).join("");
+    var lodges = d.locations.map(function (l) { return '<option value="' + l.id + '">' + esc(l.name) + '</option>'; }).join("");
+    document.getElementById("lodgePicker").innerHTML += lodges;
+    document.getElementById("applyLodgePicker").innerHTML += lodges;
+  });
+  api("admin_masters").then(function (d) {
+    document.getElementById("masterPicker").innerHTML += d.masters.map(function (m) {
+      return '<option value="' + m.id + '">' + esc(m.name) + (m.area ? " (" + esc(m.area) + ")" : "") + '</option>';
+    }).join("");
+  });
+
+  document.getElementById("loginPerson").onchange = function () {
+    var opt = this.selectedOptions[0];
+    document.getElementById("setPinBox").hidden = !opt || opt.dataset.pinSet !== "false";
+  };
+  document.getElementById("setPinBtn").onclick = function () {
+    var personId = document.getElementById("loginPerson").value;
+    var pin = document.getElementById("newPin").value;
+    api("admin_set_pin", { body: { person_id: personId, pin: pin } }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      document.getElementById("setPinBox").hidden = true;
+      document.getElementById("loginPin").value = pin;
+      alert("PIN set. Sign in below.");
+    });
+  };
+  document.getElementById("loginBtn").onclick = function () {
+    var personId = document.getElementById("loginPerson").value;
+    var pin = document.getElementById("loginPin").value;
+    var err = document.getElementById("loginErr");
+    err.hidden = true;
+    if (!personId || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
+    api("admin_login", { body: { person_id: personId, pin: pin } }).then(function (out) {
+      if (out.error) { err.textContent = out.error; err.hidden = false; return; }
+      me = { id: out.person_id, name: out.name };
+      sessionStorage.setItem("bw_admin", JSON.stringify(me));
+      showApp();
+    });
+  };
+  document.getElementById("signOut").onclick = function (e) {
+    e.preventDefault();
+    sessionStorage.removeItem("bw_admin");
+    location.reload();
+  };
+
+  (function tryResume() {
+    try {
+      var saved = sessionStorage.getItem("bw_admin");
+      if (saved) { me = JSON.parse(saved); showApp(); }
+    } catch (e) {}
+  })();
+
+  function showApp() {
+    document.getElementById("login").hidden = true;
+    document.getElementById("app").hidden = false;
+    document.getElementById("whoAmI").textContent = me.name;
+  }
+
+  // ---- lodge -> checklist list ----
+  document.getElementById("lodgePicker").onchange = function () {
+    var loc = this.value;
+    document.getElementById("editorBox").hidden = true;
+    var box = document.getElementById("templateListBox");
+    if (!loc) { box.hidden = true; return; }
+    api("admin_templates", { qs: "location=" + loc }).then(function (d) {
+      box.hidden = false;
+      var list = document.getElementById("templateList");
+      if (!d.templates.length) { list.innerHTML = "<p class='who'>No checklists at this lodge yet — apply one from a master below.</p>"; return; }
+      list.innerHTML = d.templates.map(function (t) {
+        return '<div class="card" style="cursor:pointer" data-id="' + t.id + '" data-name="' + esc(t.name) + '"><b>' + esc(t.name) + '</b>' +
+          (t.area ? '<span class="who">' + esc(t.area) + '</span>' : '') + '</div>';
+      }).join("");
+      Array.prototype.forEach.call(list.querySelectorAll(".card"), function (c) {
+        c.onclick = function () { loadTemplate(c.dataset.id, c.dataset.name); };
+      });
+    });
+  };
+
+  // ---- editing one template ----
+  var currentTemplateId = null;
+  function loadTemplate(id, name) {
+    currentTemplateId = id;
+    document.getElementById("editorTitle").textContent = name;
+    document.getElementById("editorBox").hidden = false;
+    api("admin_template", { qs: "template=" + id }).then(renderSections);
+  }
+
+  function renderSections(d) {
+    var box = document.getElementById("sections");
+    box.innerHTML = d.sections.map(sectionHtml).join("") || "<p class='who'>No sections yet.</p>";
+    Array.prototype.forEach.call(box.querySelectorAll("[data-act]"), wireAction);
+  }
+
+  function sectionHtml(s) {
+    return '<div class="card' + (s.archived ? ' archived' : '') + '" data-section="' + s.id + '">' +
+      '<div class="hd"><b contenteditable="true" data-act="rename-section" data-id="' + s.id + '">' + esc(s.name) + '</b>' +
+      (s.archived ? '<span class="tag">Archived</span>' : '') + '</div>' +
+      s.items.map(itemHtml).join("") +
+      '<div class="acts">' +
+      '<button class="ghost" data-act="add-item" data-section="' + s.id + '">+ Add an item</button>' +
+      (s.archived
+        ? '<button class="ghost" data-act="restore-section" data-id="' + s.id + '">Restore section</button>'
+        : '<button class="danger" data-act="archive-section" data-id="' + s.id + '">Archive section</button>') +
+      '</div></div>';
+  }
+
+  function itemHtml(i) {
+    return '<div class="item' + (i.archived ? ' archived' : '') + '" data-item="' + i.id + '">' +
+      '<textarea data-act="edit-item" data-id="' + i.id + '">' + esc(i.instruction_text) + '</textarea>' +
+      (i.archived ? '<span class="tag">Archived</span>' : '') +
+      '<div class="acts">' +
+      '<button class="ghost" data-act="save-item" data-id="' + i.id + '">Save</button>' +
+      (i.archived
+        ? '<button class="ghost" data-act="restore-item" data-id="' + i.id + '">Restore</button>'
+        : '<button class="danger" data-act="archive-item" data-id="' + i.id + '">Archive</button>') +
+      '</div></div>';
+  }
+
+  function reload() { loadTemplate(currentTemplateId, document.getElementById("editorTitle").textContent); }
+
+  function wireAction(el) {
+    var act = el.dataset.act;
+    if (act === "save-item") {
+      el.onclick = function () {
+        var ta = document.querySelector('textarea[data-id="' + el.dataset.id + '"]');
+        api("admin_save_item", { body: { admin_person_id: me.id, item_id: el.dataset.id, instruction_text: ta.value } })
+          .then(function (out) { if (out.error) alert(out.error); else reload(); });
+      };
+    } else if (act === "archive-item" || act === "restore-item") {
+      el.onclick = function () {
+        api("admin_archive_item", { body: { admin_person_id: me.id, item_id: el.dataset.id, restore: act === "restore-item" } })
+          .then(function (out) { if (out.error) alert(out.error); else reload(); });
+      };
+    } else if (act === "add-item") {
+      el.onclick = function () {
+        var text = prompt("New item text:");
+        if (!text) return;
+        api("admin_save_item", { body: { admin_person_id: me.id, section_id: el.dataset.section, instruction_text: text } })
+          .then(function (out) { if (out.error) alert(out.error); else reload(); });
+      };
+    } else if (act === "archive-section" || act === "restore-section") {
+      el.onclick = function () {
+        api("admin_archive_section", { body: { admin_person_id: me.id, section_id: el.dataset.id, restore: act === "restore-section" } })
+          .then(function (out) { if (out.error) alert(out.error); else reload(); });
+      };
+    } else if (act === "rename-section") {
+      el.onblur = function () {
+        var name = el.textContent.trim();
+        if (!name) return;
+        api("admin_save_section", { body: { admin_person_id: me.id, section_id: el.dataset.id, name: name } })
+          .then(function (out) { if (out.error) alert(out.error); });
+      };
+    }
+  }
+
+  document.getElementById("addSectionBtn").onclick = function () {
+    var name = prompt("New section name:");
+    if (!name) return;
+    api("admin_save_section", { body: { admin_person_id: me.id, template_id: currentTemplateId, name: name } })
+      .then(function (out) { if (out.error) alert(out.error); else reload(); });
+  };
+
+  document.getElementById("applyMasterBtn").onclick = function () {
+    var masterId = document.getElementById("masterPicker").value;
+    var locId = document.getElementById("applyLodgePicker").value;
+    var msg = document.getElementById("applyMsg");
+    if (!masterId || !locId) { msg.textContent = "Pick both a master checklist and a lodge."; return; }
+    api("admin_apply_master", { body: { admin_person_id: me.id, master_id: masterId, location_id: locId } })
+      .then(function (out) {
+        msg.textContent = out.error ? out.error : "Applied — reload the lodge picker above to see it.";
+      });
+  };
+</script>
+</body></html>
