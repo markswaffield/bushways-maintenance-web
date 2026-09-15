@@ -243,38 +243,18 @@
 
   function renderSections(d) {
     var box = document.getElementById("sections");
-    // Archived sections are old, superseded content kept only for the
-    // real history behind them (Mark, 2026-09-15: "the edit sheet is
-    // showing a combination of the old and new checklists" — they were
-    // both rendering in the one list, told apart only by a small tag,
-    // which reads exactly like that combination). The current sheet
-    // shows active sections only; archived ones sit behind their own
-    // toggle, clearly a separate, historical thing, not mixed in.
+    // Archived sections are old, superseded content, kept in the
+    // database only so real history stays intact — never deleted, but
+    // this editing screen has no reason to show them at all. Per Mark,
+    // 2026-09-15, after a first attempt that hid them behind a toggle
+    // still read as "showing the duplication": this page now shows
+    // active sections only, full stop. Nothing archived ever renders
+    // here — if a real need to look at old checklist wording ever
+    // comes up, that's a database question, not something this editor
+    // needs to surface.
     var active = d.sections.filter(function (s) { return !s.archived; });
-    var archived = d.sections.filter(function (s) { return s.archived; });
 
     box.innerHTML = '<div class="sheet">' + (active.map(sectionHtml).join("") || "<p class='who' style='padding:10px'>No sections yet.</p>") + '</div>';
-
-    if (archived.length) {
-      var archivedBox = document.createElement("div");
-      archivedBox.style.marginTop = "14px";
-      var toggle = document.createElement("button");
-      toggle.className = "ghost";
-      toggle.textContent = "Show " + archived.length + " archived section" + (archived.length === 1 ? "" : "s") + " (old, kept for history — not part of the live checklist)";
-      var archivedSheet = document.createElement("div");
-      archivedSheet.className = "sheet";
-      archivedSheet.hidden = true;
-      archivedSheet.style.marginTop = "8px";
-      archivedSheet.innerHTML = archived.map(sectionHtml).join("");
-      toggle.onclick = function () {
-        archivedSheet.hidden = !archivedSheet.hidden;
-        toggle.textContent = (archivedSheet.hidden ? "Show " : "Hide ") + archived.length + " archived section" + (archived.length === 1 ? "" : "s") + " (old, kept for history — not part of the live checklist)";
-        Array.prototype.forEach.call(archivedSheet.querySelectorAll("textarea[data-act='edit-item']"), autosize);
-      };
-      archivedBox.appendChild(toggle);
-      archivedBox.appendChild(archivedSheet);
-      box.appendChild(archivedBox);
-    }
 
     Array.prototype.forEach.call(box.querySelectorAll("[data-act]"), wireAction);
     // Grow every item box to its own full content once, right after
