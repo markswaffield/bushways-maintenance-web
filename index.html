@@ -98,6 +98,7 @@
     var v = boot_vehicles.filter(function (x) { return x.id === id; })[0];
     return v ? (v.registration || v.label) : "";
   }
+  var handovers = [], handoverPeople = [], raisingHandover = false, signingId = null;
   var rules = [], showRules = false, showRemoved = false, editingId = null, completingId = null, historyFor = null, historyRows = [];
 
   function esc(s) {
@@ -254,6 +255,7 @@
         html += "</div>";
       });
     }
+    html += '<div style="margin-top:28px"></div>' + handoversSection();
     html += '<div style="margin-top:28px"></div>' + rulesSection();
 
     document.getElementById("app").innerHTML = html;
@@ -589,6 +591,109 @@
     document.getElementById("f_customrow").hidden = document.getElementById("f_preset").value !== "__custom__";
   };
 
+  // -- Handovers -------------------------------------------------------
+  // One checklist, two signatures. Shown as their own section because a
+  // handover is an event with a person waiting on it, not a rule.
+  window.startRaiseHandover = function () { raisingHandover = true; signingId = null; render(); };
+  window.cancelHandover = function () { raisingHandover = false; signingId = null; render(); };
+  window.startSign = function (id) { signingId = id; raisingHandover = false; render(); };
+
+  window.doRaiseHandover = function (btn) {
+    if (btn) btn.disabled = true;
+    fetch(FN.replace("action=dashboard", "action=raise_handover"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        by_person_id: me && me.id,
+        vehicle_id: document.getElementById("ho_vehicle").value,
+        from_person_id: document.getElementById("ho_from").value,
+        to_person_id: document.getElementById("ho_to").value,
+        handover_on: document.getElementById("ho_on").value,
+        to_location_id: document.getElementById("ho_lodge").value || null,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      raisingHandover = false; reload();
+    });
+  };
+
+  window.doSign = function (id, btn) {
+    if (btn) btn.disabled = true;
+    fetch(FN.replace("action=dashboard", "action=receive_handover"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ handover_id: id, by_person_id: me && me.id,
+                             notes: document.getElementById("ho_notes").value }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      if (out.transferred) {
+        alert("Signed. The vehicle has moved lodge, taking " + out.transferred.issues +
+              " open fault(s), " + out.transferred.schedules + " schedule(s) and " +
+              out.transferred.checks + " open check(s) with it.");
+      }
+      signingId = null; reload();
+    });
+  };
+
+  function personOptions(sel) {
+    return handoverPeople.map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (sel === p.id ? " selected" : "") + '>' +
+        esc(p.name) + (p.department ? " · " + esc(p.department) : "") +
+        (p.lodge ? " · " + esc(p.lodge) : "") + '</option>';
+    }).join("");
+  }
+
+  function handoverForm() {
+    var today = new Date().toISOString().slice(0, 10);
+    return '<div class="form">' +
+      '<label>Vehicle</label><select id="ho_vehicle">' +
+      boot_vehicles.map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.label) + '</option>'; }).join("") +
+      '</select>' +
+      '<label>Handed over by</label><select id="ho_from"><option value="">Choose…</option>' + personOptions(null) + '</select>' +
+      '<label>Received by</label><select id="ho_to"><option value="">Choose…</option>' + personOptions(null) + '</select>' +
+      '<label>On</label><input type="date" id="ho_on" value="' + today + '">' +
+      '<label>Ending up at</label><select id="ho_lodge">' +
+      '<option value="">Staying at this lodge</option>' +
+      (lastData.locations || []).map(function (l) {
+        return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>';
+      }).join("") + '</select>' +
+      '<p class="rmeta" style="margin-top:4px">If it ends up at a different lodge, signing for it moves the vehicle there — ' +
+      'with its open faults, schedules and open checks.</p>' +
+      '<div class="racts"><button onclick="doRaiseHandover(this)">Raise handover</button>' +
+      '<button onclick="cancelHandover()">Cancel</button></div></div>';
+  }
+
+  function handoversSection() {
+    var open = handovers.filter(function (h) { return h.stage !== "done"; });
+    var h = '<h2>Handovers <span class="count">' + open.length + " open</span></h2>";
+    h += '<p class="order-note">One checklist, two signatures. The check stays open until the person receiving the vehicle has signed for it.</p>';
+
+    if (me && me.is_manager && !raisingHandover) {
+      h += '<div class="racts" style="margin-top:8px"><button onclick="startRaiseHandover()">+ Raise a handover</button></div>';
+    }
+    if (raisingHandover) h += handoverForm();
+
+    handovers.slice(0, 20).forEach(function (x) {
+      var stageText = x.stage === "done" ? "Complete"
+        : x.stage === "awaiting_receipt" ? "Waiting on " + esc(x.to) + " to sign"
+        : "Waiting on " + esc(x.from) + " to complete the checklist";
+      h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + '">' +
+        '<p class="rname">' + esc(x.vehicle) + ' · ' + esc(x.from) + " → " + esc(x.to) + '</p>' +
+        '<p class="rmeta">' + esc(x.on) +
+          (x.moves_lodge ? " · " + esc(x.from_lodge) + " → " + esc(x.to_lodge) : "") +
+          " · " + stageText +
+          (x.received_notes ? ' · “' + esc(x.received_notes) + '”' : "") + '</p>';
+      if (signingId === x.id) {
+        h += '<div class="form"><label>Anything to note on accepting it</label>' +
+          '<textarea id="ho_notes" rows="2" placeholder="Faults you disagree with should be flagged on the checklist itself"></textarea>' +
+          '<div class="racts"><button onclick="doSign(\'' + x.id + '\', this)">Sign for it</button>' +
+          '<button onclick="cancelHandover()">Cancel</button></div></div>';
+      } else if (x.stage === "awaiting_receipt" && me && me.id === x.to_person_id) {
+        h += '<div class="racts"><button onclick="startSign(\'' + x.id + '\')">Sign for it</button></div>';
+      }
+      h += '</div>';
+    });
+    return h;
+  }
+
   function rulesSection() {
     var live = rules.filter(function (r) { return !r.archived; }).length;
     // Collapsed by default — Mark, 2026-09-12: "We can actually collapse
@@ -794,7 +899,10 @@
     return Promise.all([
       fetch(FN).then(function (r) { return r.json(); }),
       fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
+      fetch(FN.replace("action=dashboard", "action=handovers")).then(function (r) { return r.json(); }),
     ]).then(function (res) {
+      handovers = res[2].handovers || [];
+      handoverPeople = res[2].people || [];
       lastData = res[0]; departments = res[0].departments || [];
       areas = (res[0].areas || []).filter(function (a) { return !a.parent_area_id; })
         .sort(function (a, b) { return a.name.localeCompare(b.name); });
