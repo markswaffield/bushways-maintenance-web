@@ -39,7 +39,6 @@
   .nav{font-size:13px;margin:10px 0 0}
   .nav b{color:#43594A}
   select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
-  textarea{min-height:64px;resize:vertical}
   label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 3px}
   button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
   button.primary{background:#43594A;color:#fff}
@@ -48,14 +47,26 @@
   button:disabled{opacity:.5;cursor:default}
   .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0 0;padding:10px 12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
   .bar>div{flex:1;min-width:160px}
+  /* One "sheet": a template's sections, laid out the way the real
+     spreadsheet is — a dark section band, a bordered grid of rows,
+     each row showing its full text with no scrolling, the same way
+     Checklists/master-drafts/ reads in Excel. */
+  .sheet{border:1px solid #999;border-radius:0;overflow:hidden;margin-top:10px;background:#fff}
+  .section-band{display:flex;gap:8px;align-items:baseline;justify-content:space-between;background:#D9D9D9;padding:7px 10px;border-top:1px solid #999}
+  .sheet .section-band:first-child{border-top:none}
+  .section-band b{font-size:14px;flex:1;outline:none;min-width:0}
+  .section-band b:focus{background:#fff;box-shadow:0 0 0 2px #43594A inset}
+  .row-grid{display:grid;grid-template-columns:1fr auto;border-top:1px solid #999}
+  .row-grid textarea{border:none;border-right:1px solid #999;border-radius:0;resize:none;overflow:hidden;line-height:1.35;padding:8px 10px;font-size:14px}
+  .row-grid textarea:focus{background:#FFFDF6}
+  .row-grid .rowActs{display:flex;flex-direction:column;gap:4px;padding:6px;justify-content:center;min-width:96px}
+  .row-grid.archived{opacity:.5;background:#F7F5F0}
+  .rowActs button{padding:4px 8px;font-size:11px}
+  .tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.03em;background:#F4E3D3;color:#8C6A2F;border-radius:4px;padding:2px 6px;flex:none}
+  .sheetActs{border-top:1px solid #999;padding:8px 10px;background:#fff}
   .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 13px;margin-top:8px}
   .card.archived{opacity:.55;border-style:dashed}
-  .card .hd{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
-  .card .hd b{font-size:14px}
   .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-  .item{border-top:1px solid #EFECE3;padding-top:8px;margin-top:8px}
-  .item:first-child{border-top:none;padding-top:0;margin-top:0}
-  .tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.03em;background:#F4E3D3;color:#8C6A2F;border-radius:4px;padding:2px 6px;margin-left:6px}
   .who{font-size:12px;color:#6B6455;margin-top:2px}
   .err{color:#A8502F;font-size:13px;margin:8px 0}
   .center{max-width:640px;margin:60px auto;text-align:center}
@@ -232,28 +243,37 @@
 
   function renderSections(d) {
     var box = document.getElementById("sections");
-    box.innerHTML = d.sections.map(sectionHtml).join("") || "<p class='who'>No sections yet.</p>";
+    box.innerHTML = '<div class="sheet">' + (d.sections.map(sectionHtml).join("") || "<p class='who' style='padding:10px'>No sections yet.</p>") + '</div>';
     Array.prototype.forEach.call(box.querySelectorAll("[data-act]"), wireAction);
+    // Grow every item box to its own full content once, right after
+    // it's actually in the page — the whole point of this layout is
+    // reading it the way the spreadsheet does, nothing clipped or
+    // scrolled inside a small box.
+    Array.prototype.forEach.call(box.querySelectorAll("textarea[data-act='edit-item']"), autosize);
+  }
+
+  function autosize(ta) {
+    ta.style.height = "auto";
+    ta.style.height = (ta.scrollHeight + 2) + "px";
   }
 
   function sectionHtml(s) {
-    return '<div class="card' + (s.archived ? ' archived' : '') + '" data-section="' + s.id + '">' +
-      '<div class="hd"><b contenteditable="true" data-act="rename-section" data-id="' + s.id + '">' + esc(s.name) + '</b>' +
-      (s.archived ? '<span class="tag">Archived</span>' : '') + '</div>' +
-      s.items.map(itemHtml).join("") +
-      '<div class="acts">' +
-      '<button class="ghost" data-act="add-item" data-section="' + s.id + '">+ Add an item</button>' +
+    return '<div class="section-band" data-section="' + s.id + '">' +
+      '<b contenteditable="true" data-act="rename-section" data-id="' + s.id + '">' + esc(s.name) + '</b>' +
+      (s.archived ? '<span class="tag">Archived</span>' : '') +
       (s.archived
         ? '<button class="ghost" data-act="restore-section" data-id="' + s.id + '">Restore section</button>'
         : '<button class="danger" data-act="archive-section" data-id="' + s.id + '">Archive section</button>') +
-      '</div></div>';
+      '</div>' +
+      s.items.map(itemHtml).join("") +
+      '<div class="sheetActs"><button class="ghost" data-act="add-item" data-section="' + s.id + '">+ Add an item to this section</button></div>';
   }
 
   function itemHtml(i) {
-    return '<div class="item' + (i.archived ? ' archived' : '') + '" data-item="' + i.id + '">' +
-      '<textarea data-act="edit-item" data-id="' + i.id + '">' + esc(i.instruction_text) + '</textarea>' +
+    return '<div class="row-grid' + (i.archived ? ' archived' : '') + '" data-item="' + i.id + '">' +
+      '<textarea data-act="edit-item" data-id="' + i.id + '" rows="1">' + esc(i.instruction_text) + '</textarea>' +
+      '<div class="rowActs">' +
       (i.archived ? '<span class="tag">Archived</span>' : '') +
-      '<div class="acts">' +
       '<button class="ghost" data-act="save-item" data-id="' + i.id + '">Save</button>' +
       (i.archived
         ? '<button class="ghost" data-act="restore-item" data-id="' + i.id + '">Restore</button>'
@@ -265,7 +285,9 @@
 
   function wireAction(el) {
     var act = el.dataset.act;
-    if (act === "save-item") {
+    if (act === "edit-item") {
+      el.oninput = function () { autosize(el); };
+    } else if (act === "save-item") {
       el.onclick = function () {
         var ta = document.querySelector('textarea[data-id="' + el.dataset.id + '"]');
         api("admin_save_item", { body: { admin_person_id: me.id, item_id: el.dataset.id, instruction_text: ta.value } })
