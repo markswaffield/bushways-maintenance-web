@@ -163,22 +163,40 @@
     }
     var area = state.areas.find(function (x) { return x.id === areaVal; });
     if (area && area.available) {
-      // Vehicles and Guest Rooms are the two areas with a real screen.
-      // Same step, same checklist machinery — only what is being picked
-      // differs (2026-09-11, Mark: "please build the vehicle inspection
-      // screen for the maintenance tool").
-      targetType = area.name === "Vehicles" ? "vehicle" : "room";
-      var list = targetType === "vehicle" ? state.vehicles : state.rooms;
-      document.getElementById("targetTitle").textContent =
-        targetType === "vehicle" ? "Vehicle Check" : "Guest Room Inspection";
-      document.getElementById("targetSub").textContent = "Chobe Elephant Camp — which "
-        + (targetType === "vehicle" ? "vehicle" : "room") + " are you checking?";
-      document.getElementById("targetLabel").textContent =
-        targetType === "vehicle" ? "Which vehicle?" : "Which room?";
-      document.getElementById("room").innerHTML =
-        '<option value="">Select one</option>' +
-        list.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
-      enterRoomStep();
+      if (area.name === "Vehicles" || area.name === "Guest Rooms") {
+        // The two areas with something specific to pick first — a
+        // vehicle, or a room. Same step, same checklist machinery
+        // either way (2026-09-11, Mark: "please build the vehicle
+        // inspection screen for the maintenance tool").
+        targetType = area.name === "Vehicles" ? "vehicle" : "room";
+        var list = targetType === "vehicle" ? state.vehicles : state.rooms;
+        document.getElementById("targetTitle").textContent =
+          targetType === "vehicle" ? "Vehicle Check" : "Guest Room Inspection";
+        document.getElementById("targetSub").textContent = "Chobe Elephant Camp — which "
+          + (targetType === "vehicle" ? "vehicle" : "room") + " are you checking?";
+        document.getElementById("targetLabel").textContent =
+          targetType === "vehicle" ? "Which vehicle?" : "Which room?";
+        document.getElementById("room").innerHTML =
+          '<option value="">Select one</option>' +
+          list.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
+        enterRoomStep();
+      } else {
+        // Every other real area — Pathways, Pool Area, and so on — is a
+        // whole-area check with nothing to pick first, per Mark,
+        // 2026-09-16: all 15 areas have confirmed content behind them
+        // now, so "coming soon" was only ever standing in for a target
+        // type this screen didn't know how to run yet. Straight to the
+        // checklist itself.
+        targetType = "area";
+        pendingRoomId = area.id;
+        fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + area.id + "&target_type=area")
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) { alert(data.error); return; }
+            renderChecklist(data, myPersonId, area.id);
+          })
+          .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+      }
     } else {
       document.getElementById("unavailableMsg").textContent =
         (area ? area.name : "This area") + " doesn't have a digital checklist yet — coming soon. For now, you can still flag anything here as a fault.";
@@ -586,10 +604,13 @@
     };
 
     var isVeh = data.target_type === "vehicle";
+    var isArea = data.target_type === "area";
     var html = '<h1>' + (isVeh
         ? 'Vehicle Inspection — <b>' + esc(data.target_label) + '</b>'
+        : isArea
+        ? esc(data.target_label) + ' Inspection'
         : 'Guest Room Inspection') + '</h1>' +
-      '<p class="sub">Chobe Elephant Camp' + (isVeh ? "" : ", " + esc(data.room_label)) +
+      '<p class="sub">Chobe Elephant Camp' + (isVeh || isArea ? "" : ", " + esc(data.room_label)) +
       ' — leave an item alone if it\'s fine (tool-local D-023)</p>' +
       // The odometer, on a vehicle check only. Captured through the
       // ordinary checklist rather than as a separate step nobody
