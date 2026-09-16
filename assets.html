@@ -207,7 +207,7 @@ function render(){
         h += '<button onclick="startEdit(\'' + kind + '\',\'' + a.id + '\')">Edit</button>';
         if (movable && !a.retired) h += '<button onclick="startTransfer(\'' + kind + '\',\'' + a.id + '\')">Transfer</button>';
         if (movable) h += '<button onclick="showHistory(\'' + kind + '\',\'' + a.id + '\')">' +
-          (historyFor === a.id ? "Hide moves" : "Moves") + '</button>';
+          (historyFor === a.id ? "Hide history" : "History") + '</button>';
         h += a.retired
           ? '<button onclick="retire(\'' + kind + '\',\'' + a.id + '\',true)">Restore</button>'
           : '<button class="danger" onclick="retire(\'' + kind + '\',\'' + a.id + '\')">Retire</button>';
