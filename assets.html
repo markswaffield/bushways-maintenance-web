@@ -25,8 +25,19 @@
   h1{font-size:19px;margin:0 0 4px}
   h2{font-size:15px;margin:24px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
-  .nav{font-size:13px;margin:10px 0 0}
-  .nav b{color:#43594A}
+  /* Real tap targets, not plain inline text — Mark, 2026-09-16:
+     "Schedule Inspection etc are very small for fingers to hit on a
+     phone," applied identically on every page (schedule.html first). */
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  #who{font-size:15px;padding:8px 10px}
+  @media (max-width:700px){
+    .nav{font-size:16px;gap:8px}
+    .nav a,.nav b{padding:11px 15px}
+    #who{font-size:17px;padding:10px 12px}
+  }
   select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
   button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
   button.primary{background:#43594A;color:#fff}
@@ -50,7 +61,7 @@
 
 <h1>Assets — Chobe Elephant Camp</h1>
 <p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
-<p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a> · <b>Assets</b></p>
+<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><b>Assets</b></p>
 
 <div class="bar">
   <div><label for="who">You are</label><select id="who"></select></div>

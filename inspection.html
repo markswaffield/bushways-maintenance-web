@@ -23,7 +23,17 @@
   .note{color:#8C6A2F;font-size:12px;margin-top:2px}
   .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
   .confirm .transcript{font-style:italic;margin-top:8px}
-  .nav{font-size:13px;margin:10px 0 0}
+  /* Real tap targets, not plain inline text — Mark, 2026-09-16:
+     "Schedule Inspection etc are very small for fingers to hit on a
+     phone," applied identically on every page (schedule.html first). */
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  @media (max-width:700px){
+    .nav{font-size:16px;gap:8px}
+    .nav a,.nav b{padding:11px 15px}
+  }
   .review-card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
   .review-line{font-size:14px;margin:0 0 6px}
   .review-line .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
@@ -44,7 +54,7 @@
 <div id="start">
   <h1>Chobe Elephant Camp</h1>
   <p class="sub">Pick your name, then what you'd like to do.</p>
-  <p class="nav"><a href="./">Schedule</a> · <b>Inspection</b> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a> · <a href="./assets.html">Assets</a></p>
+  <p class="nav"><a href="./">Schedule</a><b>Inspection</b><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a></p>
   <label>Who are you?</label>
   <select id="person"><option value="">Loading…</option></select>
   <label>What would you like to do?</label>
