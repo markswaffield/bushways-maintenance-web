@@ -79,10 +79,15 @@ function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function el(id){return document.getElementById(id);}
 
+// Rooms removed, 2026-09-16 — Mark: "now the rooms are back on -
+// please remvove them." A room was always the one kind here that
+// could never move between lodges in the first place (real rooms are
+// still real data, managed elsewhere — this page is for moveable
+// equipment specifically, per the same day's own Backup Generator
+// conversation).
 var KINDS = [
   ["vehicle", "Vehicles", true],
   ["trailer", "Trailers", true],
-  ["room", "Rooms", false],       // a room does not move between lodges
   ["asset", "Other equipment", true],
 ];
 
