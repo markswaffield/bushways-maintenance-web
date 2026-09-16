@@ -58,10 +58,14 @@
   .badge.overdue{background:#F4CFC2;color:#A8502F}
   .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
   .badge.upcoming{background:#E3DFD3;color:#5B5344}
+  .badge.handover{background:#D9E6DC;color:#2F6B45;margin-right:6px}
   .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .who{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-top:4px}
   .who.dept{background:#E3DFD3;color:#5B5344}
   .who.none{background:#F1EDE4;color:#A8A192;font-weight:400;font-style:italic}
+  .who.pending{background:#F4E3D3;color:#8C6A2F}
+  .ho-parties{margin:4px 0 0}
+  .ho-parties .arrow{color:#8C6A2F;margin:0 4px;font-size:11.5px}
   .assign-row{display:flex;gap:6px;margin-top:8px}
   .assign-row select{flex:1;padding:6px;font-size:13px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit}
   .assign-row button{padding:6px 11px;font-size:13px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
@@ -139,7 +143,13 @@
   // Which kind of obligation this is, read off the name the API builds.
   function kindOf(s) {
     if (s.name.indexOf("Room Inspection") === 0) return "room";
-    if (s.name.indexOf("Vehicle Check") === 0) return "vehicle";
+    // A Handover is still a vehicle's own obligation — grouped with the
+    // ordinary daily check under "Vehicle checks" so filtering by kind
+    // shows everything due on a vehicle together. card() gives it its
+    // own badge so the two are never mistaken for each other. Missed
+    // before today: a Handover fell through to "recurring maintenance"
+    // instead, unnoticed until Mark asked to tell them apart.
+    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0) return "vehicle";
     return "recurring";
   }
   function kindLabel(k) {
@@ -698,14 +708,22 @@
     if (raisingHandover) h += handoverForm();
 
     handovers.slice(0, 20).forEach(function (x) {
-      var stageText = x.stage === "done" ? "Complete"
-        : x.stage === "awaiting_receipt" ? "Waiting on " + esc(x.to) + " to sign"
-        : "Waiting on " + esc(x.from) + " to complete the checklist";
+      // Both parties, each with their own status — not one combined
+      // sentence. Per Mark, 2026-09-16: "show both parties that need
+      // to check, and highlight when one has checked and the other is
+      // still outstanding." handed_over_at/received_at are exactly
+      // that per-person signature, already tracked, just not shown
+      // this plainly before.
+      var fromDone = !!x.handed_over_at, toDone = !!x.received_at;
       h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + '">' +
-        '<p class="rname">' + esc(x.vehicle) + ' · ' + esc(x.from) + " → " + esc(x.to) + '</p>' +
+        '<p class="rname">' + esc(x.vehicle) + '</p>' +
+        '<p class="ho-parties">' +
+          '<span class="who' + (fromDone ? "" : " pending") + '">' + esc(x.from) + (fromDone ? " ✓ checked" : " — outstanding") + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="who' + (toDone ? "" : " pending") + '">' + esc(x.to) + (toDone ? " ✓ checked" : " — outstanding") + '</span>' +
+        '</p>' +
         '<p class="rmeta">' + esc(x.on) +
           (x.moves_lodge ? " · " + esc(x.from_lodge) + " → " + esc(x.to_lodge) : "") +
-          " · " + stageText +
           (x.received_notes ? ' · “' + esc(x.received_notes) + '”' : "") + '</p>';
       if (signingId === x.id) {
         h += '<div class="form"><label>Anything to note on accepting it</label>' +
@@ -892,8 +910,17 @@
         esc([s.assigned_department, s.assigned_person].filter(Boolean).join(" — ")) + '</span>'
       : s.is_task ? '<span class="who none">Unassigned</span>' : "";
 
+    // A standard daily check and a handover both show up as "vehicle"
+    // work (kindOf), but they're not the same job — a handover needs
+    // two people, not one. Per Mark, 2026-09-16: "can we highlight if
+    // a vehicle needs a standard check or handover check." s.name
+    // already starts "Handover — ..." (built server-side); this just
+    // makes it visible without having to read the whole line.
+    var isHandover = s.name.indexOf("Handover") === 0;
     var h = '<div class="card"><div class="sched-row"><div>' +
-      '<p style="font-weight:700;margin:0">' + esc(s.name) + '</p>' +
+      '<p style="font-weight:700;margin:0">' +
+      (isHandover ? '<span class="badge handover">Handover</span> ' : "") +
+      esc(s.name) + '</p>' +
       '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
       who +
       '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
