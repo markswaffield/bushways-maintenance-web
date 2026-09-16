@@ -21,9 +21,31 @@
   h2{font-size:15px;margin:26px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline}
   h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
-  .nav{font-size:13px;margin:10px 0 0}
-  .nav b{color:#43594A}
-  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:10px;background:#fff}
+  #whoRow{display:flex;align-items:center;gap:8px}
+  #who{font-size:15px;padding:6px 10px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit}
+  /* Schedule / Inspection / To-do list / Fix a fault / Completed /
+     Assets, and the "You are" sign-in above it — real tap targets now,
+     not plain inline text. Per Mark, 2026-09-16: "Schedule Inspection
+     etc are very small for fingers to hit on a phone." */
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  @media (max-width:700px){
+    #who{font-size:17px;padding:10px 14px}
+    .nav{font-size:16px;gap:8px}
+    .nav a,.nav b{padding:11px 15px}
+  }
+  /* Side by side on a laptop, stacked on a phone — Mark, 2026-09-16:
+     "for the computer version for Order Who Kind to sit side by side
+     on the laptop but below each other on the phone." Mobile-first:
+     stacked is the default, a wide screen switches to a row. */
+  .filters{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  @media (min-width:700px){
+    .filters{flex-direction:row}
+    .filter-section{flex:1;margin-top:0}
+  }
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff}
   .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   .filter-section label:first-of-type{margin-top:0}
@@ -77,7 +99,7 @@
 <h1>Schedule — Chobe Elephant Camp</h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
 <p class="sub" id="whoRow" hidden>You are <select id="who" onchange="onWho()"></select></p>
-<p class="nav"><b>Schedule</b> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a> · <a href="./assets.html">Assets</a></p>
+<p class="nav"><b>Schedule</b><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
@@ -181,6 +203,8 @@
       all.length + " showing" +
       (overdue ? " · " + overdue + " of those shown " + (overdue === 1 ? "is" : "are") + " overdue" : "") + '.</p>';
 
+    html += '<div class="filters">';
+
     html += '<div class="filter-section"><div class="title">Order</div>' +
       '<label>By due date</label><select id="direction" onchange="onDirection()">' +
       '<option value="newest"' + (direction === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
@@ -232,6 +256,8 @@
       '<option value="vehicle"' + (kind === "vehicle" ? " selected" : "") + '>Vehicle checks</option>' +
       '<option value="recurring"' + (kind === "recurring" ? " selected" : "") + '>Recurring maintenance</option>' +
       '</select></div>';
+
+    html += '</div>'; // .filters
 
     html += '<h2>Due <span class="count">' + shown.length +
       (shown.length !== all.length ? " of " + all.length : "") + '</span></h2>';
