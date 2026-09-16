@@ -559,6 +559,7 @@
   // reached via the area picker above instead of its own start screen.
   // ------------------------------------------------------------------
   var pendingOdometer = null;
+  var pendingHours = null;
 
   function renderChecklist(data, personId, roomId) {
     var c = document.getElementById("checklist");
@@ -626,6 +627,20 @@
           (data.service_interval_km
             ? " Serviced every " + Number(data.service_interval_km).toLocaleString() + " km."
             : " No service interval set, so no service will be raised.") +
+          '</p></div>'
+        : "") +
+      // Same idea, on an area check with a real hour-metered asset
+      // behind it — the Backup Generator, the Boat. Per Mark,
+      // 2026-09-16: "for the generator and boat inspection pages - we
+      // need a block to record the hours - same as the odometer
+      // reading for the cars."
+      (isArea && data.meter_asset_id
+        ? '<div class="odo"><label>Hours reading</label>' +
+          '<input type="number" inputmode="numeric" id="hours" min="0" step="0.1" placeholder="e.g. 1240.5">' +
+          '<p class="odo-note">' +
+          (data.meter_last_reading != null
+            ? "Last recorded: " + Number(data.meter_last_reading).toLocaleString() + " hours."
+            : "No reading recorded yet.") +
           '</p></div>'
         : "");
     data.sections.forEach(function (s) {
@@ -695,6 +710,13 @@
             " km) is lower than the last one recorded (" + Number(data.odometer).toLocaleString() +
             " km). Record it anyway?")) return;
       }
+      var hoursInput = document.getElementById("hours");
+      pendingHours = hoursInput && hoursInput.value !== "" ? Number(hoursInput.value) : null;
+      if (pendingHours !== null && data.meter_last_reading != null && pendingHours < Number(data.meter_last_reading)) {
+        if (!confirm("That hours reading (" + pendingHours.toLocaleString() +
+            ") is lower than the last one recorded (" + Number(data.meter_last_reading).toLocaleString() +
+            "). Record it anyway?")) return;
+      }
       showReview(results);
     };
 
@@ -714,6 +736,10 @@
       if (pendingOdometer !== null) {
         html += '<div class="review-card"><p class="review-line">Odometer: <b>' +
           pendingOdometer.toLocaleString() + ' km</b></p></div>';
+      }
+      if (pendingHours !== null) {
+        html += '<div class="review-card"><p class="review-line">Hours: <b>' +
+          pendingHours.toLocaleString() + '</b></p></div>';
       }
 
       if (!flagged.length && !readings.length) {
@@ -755,6 +781,7 @@
             room_id: targetType === "room" ? roomId : null,
             target_id: roomId, target_type: targetType,
             odometer: pendingOdometer,
+            hours: pendingHours,
             template_id: data.template_id, results: results,
           }),
         }).then(function (resp) { return resp.json(); }).then(function (out) {
@@ -770,6 +797,7 @@
               "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
               (out.issues_raised ? "<p>" + out.issues_raised + " issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
               (out.odometer_recorded != null ? "<p>Odometer recorded: " + Number(out.odometer_recorded).toLocaleString() + " km.</p>" : "") +
+              (out.hours_recorded != null ? "<p>Hours recorded: " + Number(out.hours_recorded).toLocaleString() + ".</p>" : "") +
               (out.service_raised ? "<p><b>A service is now due for this vehicle</b> — it's on the schedule.</p>" : "") +
               (uploaded ? "<p>" + uploaded + " photo" + (uploaded === 1 ? "" : "s") + " attached.</p>" : "") +
               (failed ? "<p class='note'>" + failed + " photo" + (failed === 1 ? "" : "s") + " didn't upload — the inspection itself is still safely recorded.</p>" : "") +
