@@ -178,7 +178,12 @@ function render(){
   var h = "";
   KINDS.forEach(function(k){
     var kind = k[0], title = k[1], movable = k[2];
-    var all = data[kind] || [];
+    // This page is for moveable equipment, not what's fixed to a
+    // lodge — per Mark, 2026-09-16: "this page must reflect moveable
+    // assets not fixed assets. so we can remove them from the asset
+    // sheet." A row's own movable flag (only "Other equipment" can be
+    // either) wins over the kind's own default.
+    var all = (data[kind] || []).filter(function(a){ return a.movable !== false; });
     var list = showRetired ? all : all.filter(function(a){ return !a.retired; });
     var retiredCount = all.filter(function(a){ return a.retired; }).length;
 
