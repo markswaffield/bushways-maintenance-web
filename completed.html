@@ -117,10 +117,14 @@
     var areas = data.areas || [];
     var departments = data.departments || [];
 
-    var html = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own history ' +
+    // Built separately from the three boxes below, per Mark, 2026-09-17
+    // — the note was landing inside the same flex row as the boxes
+    // (both built into one "html" string, then wrapped together),
+    // pushing them right instead of sitting on its own line above.
+    var note = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own history ' +
       (dateDirection === "oldest" ? "oldest resolved first" : "newest resolved first") + '.</p>';
 
-    html += '<div class="filter-section"><div class="title">Date resolved</div>' +
+    var html = '<div class="filter-section"><div class="title">Date resolved</div>' +
       '<label>Order (within each target)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
       '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
       '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
@@ -154,9 +158,10 @@
         return '<option value="' + d.id + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select></div>';
 
+    var wrapped = '<div id="filtersRow">' + note + '<div class="filters">' + html + '</div></div>';
     var existing = document.getElementById("filtersRow");
-    if (existing) { existing.outerHTML = '<div id="filtersRow" class="filters">' + html + '</div>'; }
-    else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow" class="filters">' + html + '</div>'); }
+    if (existing) { existing.outerHTML = wrapped; }
+    else { document.getElementById("app").insertAdjacentHTML("beforebegin", wrapped); }
   }
 
   window.onDateDirectionChange = function () {

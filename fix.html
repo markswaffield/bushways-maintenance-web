@@ -34,6 +34,10 @@
   .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
   .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  /* The sign-in box, same look as the filter boxes above — Mark,
+     2026-09-17: "for the sign in on all necessary pages i would like
+     the same look as we did for the ordering filters." */
+  @media (min-width:700px){ .signin-box{max-width:420px} }
   .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
   .area-group{margin-top:22px}
   .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
@@ -70,20 +74,23 @@
   <h1>Fix a Fault</h1>
   <p class="sub">Chobe Elephant Camp — mark faults fixed, or assign them</p>
   <p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p>
-  <label>Department</label>
-  <select id="personDept"><option value="">Loading…</option></select>
-  <label>Who are you?</label>
-  <select id="person"><option value="">Loading…</option></select>
-  <div id="setPinBox" hidden>
-    <p class="sub">No PIN set yet for this name — set one now (4–6 digits), then sign in with it.</p>
-    <label>New PIN</label>
-    <input type="password" id="newPin" inputmode="numeric" maxlength="6">
-    <button id="setPinBtn" style="width:100%;margin-top:10px">Set PIN</button>
+  <div class="filter-section signin-box">
+    <div class="title">Sign in</div>
+    <label>Department</label>
+    <select id="personDept"><option value="">Loading…</option></select>
+    <label>Who are you?</label>
+    <select id="person"><option value="">Loading…</option></select>
+    <div id="setPinBox" hidden>
+      <p class="sub">No PIN set yet for this name — set one now (4–6 digits), then sign in with it.</p>
+      <label>New PIN</label>
+      <input type="password" id="newPin" inputmode="numeric" maxlength="6">
+      <button id="setPinBtn" class="secondary" style="width:100%;margin-top:10px">Set PIN</button>
+    </div>
+    <label>PIN</label>
+    <input type="password" id="personPin" inputmode="numeric" maxlength="6" placeholder="4–6 digits">
+    <button id="startBtn" style="width:100%;margin-top:16px">Sign in</button>
+    <p class="sub" id="startErr" style="color:#A8502F" hidden></p>
   </div>
-  <label>PIN</label>
-  <input type="password" id="personPin" inputmode="numeric" maxlength="6" placeholder="4–6 digits">
-  <button id="startBtn" style="width:100%;margin-top:16px">Sign in</button>
-  <p class="sub" id="startErr" style="color:#A8502F" hidden></p>
 </div>
 
 <div id="list" hidden></div>
@@ -219,9 +226,19 @@
     loadIssues();
   }
 
+  // Same box look as the sign-in picker it replaces, and the same look
+  // the ordering filters below use — Mark, 2026-09-17: "for the sign
+  // in on all necessary pages i would like the same look as we did
+  // for the ordering filters."
+  function signedInBoxHtml() {
+    return '<div class="filter-section signin-box"><div class="title">Signed in</div>' +
+      '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") +
+      ' · <a href="#" onclick="signOut();return false;">Sign out</a></p></div>';
+  }
+
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + ' · <a href="#" onclick="signOut();return false;">Sign out</a></p><p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p><p class="loading">Loading…</p>';
+    list.innerHTML = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       renderList(applyFilters());
@@ -322,7 +339,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + ' · <a href="#" onclick="signOut();return false;">Sign out</a></p><p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p>';
+    var html = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p>';
 
     html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';

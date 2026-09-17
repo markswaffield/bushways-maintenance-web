@@ -21,8 +21,6 @@
   h2{font-size:15px;margin:26px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline}
   h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
-  #whoRow{display:flex;align-items:center;gap:8px}
-  #who,#whoDept{font-size:15px;padding:6px 10px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit}
   /* Schedule / Inspection / To-do list / Fix a fault / Completed /
      Assets, and the "You are" sign-in above it — real tap targets now,
      not plain inline text. Per Mark, 2026-09-16: "Schedule Inspection
@@ -32,10 +30,17 @@
   .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
   .nav a{color:#232019;text-decoration:none}
   @media (max-width:700px){
-    #who,#whoDept{font-size:17px;padding:10px 14px}
     .nav{font-size:16px;gap:8px}
     .nav a,.nav b{padding:11px 15px}
   }
+  /* The sign-in box, same look as the Order/Who/Kind filter boxes
+     below — Mark, 2026-09-17: "for the sign in on all necessary pages
+     i would like the same look as we did for the ordering filters."
+     Same .filter-section card; capped width on a wide screen (via
+     .signin-box) so it reads as one compact box, not a full-width bar
+     with nothing in the rest of it. */
+  #whoRow{margin:10px 0 0}
+  @media (min-width:700px){ .signin-box{max-width:420px} }
   /* Side by side on a laptop, stacked on a phone — Mark, 2026-09-16:
      "for the computer version for Order Who Kind to sit side by side
      on the laptop but below each other on the phone." Mobile-first:
@@ -109,15 +114,22 @@
 
 <h1>Schedule — Chobe Elephant Camp</h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
-<div class="sub" id="whoRow" hidden>
-  <span id="whoSignedIn" hidden>Signed in as <b id="whoName"></b> · <a href="#" onclick="signOut();return false;">Sign out</a></span>
-  <span id="whoPicker">You are <select id="whoDept" onchange="onWhoDept()"></select>
-    <select id="who"></select>
-    <input type="password" id="whoPin" inputmode="numeric" maxlength="6" placeholder="PIN" style="width:70px;display:inline-block">
-    <button onclick="doWhoLogin()" style="padding:6px 10px;font-size:13px">Sign in</button>
-    <span id="whoSetPin" hidden><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6" placeholder="New PIN" style="width:80px;display:inline-block">
-    <button onclick="doWhoSetPin()" style="padding:6px 10px;font-size:13px">Set PIN</button></span>
-    <span id="whoErr" style="color:#A8502F;font-size:12.5px" hidden></span></span>
+<div id="whoRow" hidden>
+  <div class="filter-section signin-box" id="whoSignedIn" hidden>
+    <div class="title">Signed in</div>
+    <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
+    <p style="margin:6px 0 0;font-size:13px"><a href="#" onclick="signOut();return false;">Sign out</a></p>
+  </div>
+  <div class="filter-section signin-box" id="whoPicker">
+    <div class="title">Sign in</div>
+    <label>Department</label><select id="whoDept" onchange="onWhoDept()"></select>
+    <label>You are</label><select id="who"></select>
+    <label>PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6" placeholder="4–6 digits">
+    <span id="whoSetPin" hidden><label>New PIN</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6">
+      <button onclick="doWhoSetPin()" style="width:100%;margin-top:8px;padding:8px;font-size:13px;font-weight:600;border:1px solid #C9C2AC;border-radius:6px;background:#fff;color:#5B5344;cursor:pointer">Set PIN</button></span>
+    <button onclick="doWhoLogin()" style="width:100%;margin-top:10px;padding:9px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;cursor:pointer">Sign in</button>
+    <p style="color:#A8502F;font-size:12.5px;margin:8px 0 0" id="whoErr" hidden></p>
+  </div>
 </div>
 <p class="nav"><b>Schedule</b><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p>
 

@@ -128,10 +128,17 @@
     var areas = data.areas || [];
     var departments = data.departments || [];
 
-    var html = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
+    // The note was landing inside the same flex row as the three boxes
+    // below (both built into one "html" string, then wrapped together)
+    // — Mark, 2026-09-17: "it pushes the boxes to the right of the
+    // screen on the computer - i would like [them] to start on the
+    // left." Built separately now so it sits on its own line above
+    // the row, not as an unintended fourth flex item shrunk to the
+    // left of it.
+    var note = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
 
-    html += '<div class="filter-section"><div class="title">Date</div>' +
+    var html = '<div class="filter-section"><div class="title">Date</div>' +
       '<label>Order (within each target)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
       '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
       '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
@@ -165,9 +172,10 @@
         return '<option value="' + d.id + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select></div>';
 
+    var wrapped = '<div id="filtersRow">' + note + '<div class="filters">' + html + '</div></div>';
     var existing = document.getElementById("filtersRow");
-    if (existing) { existing.outerHTML = '<div id="filtersRow" class="filters">' + html + '</div>'; }
-    else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow" class="filters">' + html + '</div>'); }
+    if (existing) { existing.outerHTML = wrapped; }
+    else { document.getElementById("app").insertAdjacentHTML("beforebegin", wrapped); }
   }
 
   window.onDateDirectionChange = function () {
