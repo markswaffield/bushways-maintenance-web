@@ -82,8 +82,9 @@
 
 <div class="filter-section signin-box" id="whoSignedIn" hidden>
   <div class="title">Signed in</div>
-  <p style="margin:0;font-size:13.5px">As <b id="whoName"></b> · <a href="#" onclick="signOut();return false;">Sign out</a></p>
-  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px"><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label>
+  <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
+  <button class="primary" onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button>
+  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px;margin-top:10px"><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label>
 </div>
 <div class="filter-section signin-box" id="whoPicker">
   <div class="title">Sign in</div>

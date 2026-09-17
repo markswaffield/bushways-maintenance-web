@@ -232,8 +232,8 @@
   // for the ordering filters."
   function signedInBoxHtml() {
     return '<div class="filter-section signin-box"><div class="title">Signed in</div>' +
-      '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") +
-      ' · <a href="#" onclick="signOut();return false;">Sign out</a></p></div>';
+      '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + '</p>' +
+      '<button onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button></div>';
   }
 
   function loadIssues() {
