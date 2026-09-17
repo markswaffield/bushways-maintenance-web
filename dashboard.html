@@ -79,9 +79,11 @@
   // the server, so their fetch fell back to Chobe regardless of where
   // they actually work. location_id stays conditional on camp.
   var CAMP_PARAM = me ? ("&person_id=" + encodeURIComponent(me.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")) : "";
-  if (camp && me && me.locations && me.locations.length > 1) {
-    document.getElementById("campTitle").textContent = camp.name;
-  }
+  // The title always names the real camp — a single-camp person's own
+  // home (me.locations[0]) used to be silently ignored here, same bug
+  // as the person_id one above (docs/decisions.md D-055's follow-up).
+  var shownCamp = camp || (me && me.locations && me.locations[0]);
+  if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard" + CAMP_PARAM;
   var lastData = null;
   // Rebuilt 2026-09-09, per Mark's own sketch: "Default Order" groups

@@ -277,10 +277,20 @@
   };
   function showSignedIn() {
     document.getElementById("whoName").textContent = me.name;
+    // The title always names the real camp this page is showing — not
+    // just for a multi-camp person who's switched. 2026-09-18, fixed
+    // alongside the person_id bug above: a single-camp person's own
+    // home camp (me.locations[0], now correctly THEIRS since D-055's
+    // follow-up fix) used to be silently ignored here, leaving the
+    // hardcoded HTML default "Chobe Elephant Camp" showing regardless
+    // of where they actually work.
+    var shownCamp = camp || (me.locations && me.locations[0]);
+    if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
+    // "Camp: X · Change camp" itself stays multi-camp-only — nowhere to
+    // switch to if you only ever work at one lodge.
     if (camp && me.locations && me.locations.length > 1) {
       document.getElementById("campName").textContent = camp.name;
       document.getElementById("campLine").hidden = false;
-      document.getElementById("campTitle").textContent = camp.name;
     }
     // No render() here — its only caller (below) calls reload() right
     // after this, and reload() renders itself once lastData actually

@@ -198,6 +198,15 @@
   // the ordering filters below use — Mark, 2026-09-17: "for the sign
   // in on all necessary pages i would like the same look as we did
   // for the ordering filters."
+  // The title always names the real camp being shown — not just for a
+  // multi-camp person who's switched. 2026-09-18: a single-camp person's
+  // own home camp (me.locations[0], now correctly theirs) used to be
+  // silently left off the title entirely, same underlying bug as the
+  // other pages' hardcoded "Chobe Elephant Camp" default.
+  function shownCampName() {
+    var c = camp || (me.locations && me.locations[0]);
+    return c ? c.name : "";
+  }
   function signedInBoxHtml() {
     return '<div class="filter-section signin-box"><div class="title">Signed in</div>' +
       '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + '</p>' +
@@ -209,7 +218,7 @@
 
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault' + (camp && me.locations && me.locations.length > 1 ? ' — ' + esc(camp.name) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p><p class="loading">Loading…</p>';
+    list.innerHTML = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues" + campParam()).then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       renderList(applyFilters());
@@ -310,7 +319,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault' + (camp && me.locations && me.locations.length > 1 ? ' — ' + esc(camp.name) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>';
+    var html = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>';
 
     html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';

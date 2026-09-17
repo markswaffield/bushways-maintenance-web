@@ -151,8 +151,15 @@
   function campParam() {
     return signedInAs ? ("&person_id=" + encodeURIComponent(signedInAs.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")) : "";
   }
+  // Always the real camp being shown — a single-camp person's own home
+  // (signedInAs.locations[0]) used to be silently ignored here, same
+  // bug as the person_id one above (docs/decisions.md D-055's
+  // follow-up): the hardcoded HTML default ("Chobe Elephant Camp")
+  // just stayed put for anyone whose one camp wasn't Chobe.
   function campName() {
-    return (signedInAs && camp && signedInAs.locations && signedInAs.locations.length > 1) ? camp.name : "Chobe Elephant Camp";
+    if (camp) return camp.name;
+    if (signedInAs && signedInAs.locations && signedInAs.locations[0]) return signedInAs.locations[0].name;
+    return "Chobe Elephant Camp";
   }
   if (signedInAs) {
     document.getElementById("whoAmI").textContent = signedInAs.name;
@@ -162,10 +169,8 @@
       sessionStorage.removeItem("bw_camp");
       location.href = "./";
     };
-  }
-  if (signedInAs && camp && signedInAs.locations && signedInAs.locations.length > 1) {
-    document.getElementById("campTitle").textContent = camp.name;
-    document.getElementById("reportSub").textContent = camp.name + ' — say or type the room or department first, then what\'s wrong, e.g. "Room 5, towel rail loose" or "Guest kitchen, light bulbs broken."';
+    document.getElementById("campTitle").textContent = campName();
+    document.getElementById("reportSub").textContent = campName() + ' — say or type the room or department first, then what\'s wrong, e.g. "Room 5, towel rail loose" or "Guest kitchen, light bulbs broken."';
   }
   var mediaRecorder, chunks = [], recordedBlob = null, timerInterval, seconds = 0;
   var MAX_SECONDS = 120; // a voice note, not a long recording — keeps uploads small
