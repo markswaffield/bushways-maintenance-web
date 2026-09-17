@@ -55,27 +55,45 @@
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   .filter-section label:first-of-type{margin-top:0}
   .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  /* The PIN field was falling back to the bare browser default here —
+     this page's own input rule above only ever covered select and
+     input[type=date], never password. Mark: "the area to fill in the
+     Pin is very small on some of the sheets and bigger on others -
+     please make them all the same bigger size," then: "use the sizing
+     of the sign in box that are on the asset and staff pages" —
+     8px/14px is their real reference size, matched exactly rather
+     than a new size invented here. */
+  input[type=password]{width:100%;padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
   /* A checkbox row (Mine, below) needs the same real tap target as
      everything else — Mark, 2026-09-17: "there is a small block for
      Mine - this needs to be a bit bigger too - too small to see
-     easily or hit with your finger." A bare browser checkbox stays
-     ~13px regardless of anything around it, so the box itself is
-     enlarged, not just its label. */
+     easily or hit with your finger." */
   .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
-  /* Bigger still wasn't enough on a computer — Mark: "still
-     very small and not easy to see (not a lot of contrast) on the
-     computer." Size alone was the phone fix; a mouse-and-monitor screen
-     needed real contrast too, which a bare checkbox doesn't have at any
-     size — accent-color tints both the fill and the outline. */
-  /* accent-color alone leans on the browser's own unchecked-state
-     rendering, which stays pale on some computers even once tinted —
-     Mark: "still small and little contrast on the computer - fine on
-     the phone." A real border guarantees the outline is visible
-     regardless, on top of the size and colour. */
-  .filter-section label.check input[type=checkbox]{width:24px;height:24px;flex:none;accent-color:#43594A;border:2px solid #43594A;border-radius:4px}
+  /* Size, then accent-color, then a border — none of it reliable, all
+     on the same underlying problem: a native checkbox's own rendering
+     is the OS/browser's call, not CSS's, no matter what gets layered
+     on top of it. Mark, after the border still wasn't enough: "the
+     same problem still exists for the checkboxes." Native rendering
+     turned off entirely (appearance:none) and replaced with a plain
+     square and a hand-drawn tick — nothing left for a browser to
+     under-render, because there's no native widget left in the
+     picture at all. */
+  .filter-section label.check input[type=checkbox]{
+    appearance:none;-webkit-appearance:none;margin:0;
+    width:24px;height:24px;flex:none;box-sizing:border-box;
+    border:2px solid #43594A;border-radius:4px;
+    background:#fff;cursor:pointer;position:relative;
+  }
+  .filter-section label.check input[type=checkbox]:checked{background:#43594A}
+  .filter-section label.check input[type=checkbox]:checked::after{
+    content:"";position:absolute;left:7px;top:3px;
+    width:6px;height:12px;border:solid #fff;border-width:0 2px 2px 0;
+    transform:rotate(45deg);
+  }
   @media (max-width:700px){
     .filter-section label.check{font-size:16px;padding:6px 0}
     .filter-section label.check input[type=checkbox]{width:28px;height:28px}
+    .filter-section label.check input[type=checkbox]:checked::after{left:9px;top:4px;width:7px;height:14px}
   }
   .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}

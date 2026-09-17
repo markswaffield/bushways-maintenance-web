@@ -53,22 +53,30 @@
   /* A checkbox row needs the same real tap target as everything else
      — Mark, 2026-09-17, on the schedule page's Mine checkbox: "too
      small to see easily or hit with your finger," applied the same
-     way here. A bare browser checkbox stays tiny regardless of its
-     label, so the box itself is enlarged, not just the text. */
+     way here. */
   .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
-  /* Bigger still wasn't enough on a computer — Mark: "still
-     very small and not easy to see (not a lot of contrast) on the
-     computer." Size alone was the phone fix; accent-color tints both
-     the fill and the outline, which a bare checkbox has neither of. */
-  /* accent-color alone leans on the browser's own unchecked-state
-     rendering, which stays pale on some computers even once tinted —
-     Mark: "still small and little contrast on the computer - fine on
-     the phone." A real border guarantees the outline is visible
-     regardless, on top of the size and colour. */
-  .filter-section label.check input[type=checkbox]{width:24px;height:24px;flex:none;accent-color:#43594A;border:2px solid #43594A;border-radius:4px}
+  /* Size, then accent-color, then a border — none of it reliable, all
+     on the same underlying problem: a native checkbox's own rendering
+     is the OS/browser's call, not CSS's. Mark, after the border still
+     wasn't enough: "the same problem still exists for the checkboxes."
+     Native rendering turned off entirely (appearance:none) and
+     replaced with a plain square and a hand-drawn tick instead. */
+  .filter-section label.check input[type=checkbox]{
+    appearance:none;-webkit-appearance:none;margin:0;
+    width:24px;height:24px;flex:none;box-sizing:border-box;
+    border:2px solid #43594A;border-radius:4px;
+    background:#fff;cursor:pointer;position:relative;
+  }
+  .filter-section label.check input[type=checkbox]:checked{background:#43594A}
+  .filter-section label.check input[type=checkbox]:checked::after{
+    content:"";position:absolute;left:7px;top:3px;
+    width:6px;height:12px;border:solid #fff;border-width:0 2px 2px 0;
+    transform:rotate(45deg);
+  }
   @media (max-width:700px){
     .filter-section label.check{font-size:16px;padding:6px 0}
     .filter-section label.check input[type=checkbox]{width:28px;height:28px}
+    .filter-section label.check input[type=checkbox]:checked::after{left:9px;top:4px;width:7px;height:14px}
   }
   @media (min-width:700px){ .signin-box{max-width:420px} }
   .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}

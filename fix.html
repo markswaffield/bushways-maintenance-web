@@ -32,6 +32,15 @@
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   .filter-section label:first-of-type{margin-top:0}
   .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  /* The PIN field was falling back to the bare browser default here —
+     the general input rule below only ever covered input[type=text],
+     never password. Mark: "the area to fill in the Pin is very small
+     on some of the sheets and bigger on others - please make them all
+     the same bigger size," then: "use the sizing of the sign in box
+     that are on the asset and staff pages" — 8px/14px is their real
+     reference size, matched exactly rather than a new size invented
+     here. */
+  input[type=password]{width:100%;padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
   .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
   /* The sign-in box, same look as the filter boxes above — Mark,
