@@ -1,0 +1,249 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Bush Ways — Staff</title>
+<!--
+  Staff — every real person across the group, editable. Per Mark,
+  2026-09-17, right after the real group staff list (227 people,
+  notes/BW Group Staff Names.xlsx, D-043) was loaded: "we also need an
+  option to be able to edit these lists - both the names and
+  departments if possible."
+
+  Same two rules every other real catalogue here already follows:
+   - NOTHING IS EVER DELETED. Retiring keeps every inspection and every
+     fixed fault on record, restorable, the same as an asset leaving.
+   - A new hire or a real name correction shouldn't need a migration —
+     staff are data, the same argument root D-012 made about locations
+     and D-012's own asset lifecycle made about equipment.
+
+  is_administrator is deliberately not editable here — D-037's own
+  gate was raised carefully, one flag at a time, by Mark himself; a
+  generic edit form is not the place to quietly grant it. Ask, or edit
+  the database directly with Mark's own confirmation, the same way the
+  6 real Administrators were set.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:20px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;gap:6px}
+  h2 .count{font-weight:400;color:#8C6A2F;text-transform:none;letter-spacing:0;font-size:13px}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  #who{font-size:15px;padding:8px 10px}
+  @media (max-width:700px){
+    .nav{font-size:16px;gap:8px}
+    .nav a,.nav b{padding:11px 15px}
+    #who{font-size:17px;padding:10px 12px}
+  }
+  select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
+  button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
+  button.primary{background:#43594A;color:#fff}
+  button.danger{border-color:#A8502F;color:#A8502F}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0 0;padding:10px 12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
+  .bar label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
+  .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
+  .row.retired{opacity:.5;border-style:dashed}
+  .row .nm{font-weight:700;margin:0}
+  .row .mt{font-size:12px;color:#6B6455;margin:2px 0 0}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-left:6px}
+  .tag.admin{background:#F4E3D3;color:#8C6A2F}
+  .acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
+  .form label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:9px 0 4px}
+  .form label:first-child{margin-top:0}
+  .form .row2{display:flex;gap:8px}
+  .form .row2 > *{flex:1}
+  .note{font-size:12.5px;color:#6B6455;margin:6px 0 0}
+  .loading{color:#6B6455;margin-top:18px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1>Staff — Bush Ways</h1>
+<p class="sub">Every real person across the group. Nothing here is ever deleted — retiring keeps the history.</p>
+<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><b>Staff</b></p>
+
+<div class="bar">
+  <div><label for="who">You are</label><select id="who"></select></div>
+  <div style="align-self:center"><label><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label></div>
+</div>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+var me = null, bootPeople = [], data = null, showRetired = false;
+var editing = null;
+// Collapsed by default — 227 people across 8 locations would otherwise
+// be one very long scroll. Click a location's own heading to open it.
+var openLocations = {};
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function el(id){return document.getElementById(id);}
+
+function post(action, body){
+  return fetch(FN + "?action=" + action, {
+    method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify(Object.assign({ by_person_id: me && me.id }, body))
+  }).then(function(r){return r.json();});
+}
+
+window.toggleLocation = function(id){
+  openLocations[id] = !openLocations[id]; render();
+};
+
+window.startAdd = function(locationId){
+  editing = { home_location_id: locationId }; render();
+};
+window.startEdit = function(id){
+  var p = data.people.filter(function(x){ return x.id === id; })[0];
+  editing = Object.assign({}, p); render();
+};
+window.cancel = function(){ editing = null; render(); };
+
+window.savePerson = function(){
+  post("save_person", {
+    id: editing.id || null,
+    name: el("f_name").value,
+    phone: el("f_phone").value,
+    home_location_id: el("f_loc").value,
+    department_id: el("f_dept").value || null,
+    is_manager: el("f_mgr").checked,
+  }).then(function(out){
+    if (out.error) { alert(out.error); return; }
+    editing = null; load();
+  });
+};
+
+window.retire = function(id, restore){
+  var reason = restore ? null : prompt("Why are they leaving? (resigned, contract ended, transferred…)");
+  if (!restore && reason === null) return;
+  post("retire_person", { id: id, restore: !!restore, reason: reason })
+    .then(function(out){ if (out.error) alert(out.error); load(); });
+};
+
+// Every shared department first, then this location's own — an
+// <optgroup> per source so the dropdown reads as what it is instead of
+// one flat, unexplained list. Per Mark, 2026-09-17: "is it possible to
+// create departments per location, and not a one size fits all?"
+function deptOptions(forLocationId, selected){
+  var shared = data.departments.filter(function(d){ return !d.location_id; });
+  var local = data.departments.filter(function(d){ return d.location_id === forLocationId; });
+  function opts(list){
+    return list.map(function(d){
+      return '<option value="' + esc(d.id) + '"' + (selected === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+    }).join("");
+  }
+  var h = '<option value="">No department</option>';
+  h += '<optgroup label="Shared, every lodge">' + opts(shared) + '</optgroup>';
+  if (local.length) {
+    var locName = (data.locations.filter(function(l){ return l.id === forLocationId; })[0] || {}).name || "This location";
+    h += '<optgroup label="' + esc(locName) + ' only">' + opts(local) + '</optgroup>';
+  }
+  return h;
+}
+
+function personForm(){
+  var isNew = !editing.id;
+  return '<div class="form">' +
+    '<label>Name</label><input type="text" id="f_name" value="' + esc(editing.name || "") + '" placeholder="What colleagues actually call them">' +
+    '<div class="row2">' +
+    '<div><label>Phone</label><input type="text" id="f_phone" value="' + esc(editing.phone || "") + '" placeholder="+267 71234567"></div>' +
+    '<div><label>Home lodge</label><select id="f_loc" onchange="editing.home_location_id=this.value;render()">' +
+    data.locations.map(function(l){
+      return '<option value="' + esc(l.id) + '"' + (editing.home_location_id === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
+    }).join("") + '</select></div>' +
+    '</div>' +
+    '<label>Department</label><select id="f_dept">' + deptOptions(editing.home_location_id, editing.department_id) + '</select>' +
+    '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px;margin-top:10px">' +
+    '<input type="checkbox" id="f_mgr" style="width:auto"' + (editing.is_manager ? " checked" : "") + '> Management</label>' +
+    '<div class="acts"><button class="primary" onclick="savePerson()">' + (isNew ? "Add" : "Save changes") + '</button>' +
+    '<button onclick="cancel()">Cancel</button></div></div>';
+}
+
+function personRow(p){
+  var h = '<div class="row' + (p.retired ? " retired" : "") + '">' +
+    '<p class="nm">' + esc(p.name) +
+    (p.department ? '<span class="tag">' + esc(p.department) + '</span>' : "") +
+    (p.is_administrator ? '<span class="tag admin">Administrator</span>' : "") +
+    (p.retired ? " · retired" : "") + '</p>' +
+    '<p class="mt">' + (p.phone ? esc(p.phone) : "no number on file") + '</p>' +
+    (p.retired && p.retired_reason ? '<p class="mt">' + esc(p.retired_reason) + '</p>' : "");
+  if (editing && editing.id === p.id) { h += personForm(); }
+  else if (me && me.is_manager) {
+    h += '<div class="acts">';
+    h += '<button onclick="startEdit(\'' + p.id + '\')">Edit</button>';
+    h += p.retired
+      ? '<button onclick="retire(\'' + p.id + '\',true)">Restore</button>'
+      : '<button class="danger" onclick="retire(\'' + p.id + '\')">Retire</button>';
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+function render(){
+  var h = "";
+  var byLoc = {};
+  (data.people || []).forEach(function(p){
+    (byLoc[p.home_location_id] = byLoc[p.home_location_id] || []).push(p);
+  });
+  data.locations.forEach(function(loc){
+    var all = byLoc[loc.id] || [];
+    if (!all.length) return; // no real staff there yet (Kalahari Adventures)
+    var list = showRetired ? all : all.filter(function(p){ return !p.retired; });
+    var retiredCount = all.filter(function(p){ return p.retired; }).length;
+    list.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    var open = !!openLocations[loc.id];
+
+    h += '<h2 onclick="toggleLocation(\'' + loc.id + '\')">' + (open ? "▾" : "▸") + ' ' + esc(loc.name) +
+      ' <span class="count">' + list.length +
+      (retiredCount && !showRetired ? " · " + retiredCount + " retired" : "") +
+      (open ? "" : " — tap to open") + '</span></h2>';
+    if (!open) return;
+
+    if (me && me.is_manager && !(editing && !editing.id && editing.home_location_id === loc.id)) {
+      h += '<div class="acts"><button onclick="startAdd(\'' + loc.id + '\')">+ Add</button></div>';
+    }
+    if (editing && !editing.id && editing.home_location_id === loc.id) h += personForm();
+
+    list.forEach(function(p){ h += personRow(p); });
+    if (!list.length) h += '<p class="note">None' + (retiredCount ? " showing" : "") + '.</p>';
+  });
+  el("app").innerHTML = h;
+}
+
+function load(){
+  return fetch(FN + "?action=staff_list").then(function(r){return r.json();}).then(function(d){
+    data = d; render();
+  });
+}
+
+el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
+
+fetch(FN).then(function(r){return r.json();}).then(function(b){
+  bootPeople = b.people || [];
+  el("who").innerHTML = '<option value="">— nobody —</option>' + bootPeople.map(function(p){
+    return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
+  }).join("");
+  el("who").addEventListener("change", function(){
+    me = bootPeople.filter(function(p){ return p.id === this.value; }.bind(this))[0] || null;
+    render();
+  });
+  return load();
+}).catch(function(e){ el("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>'; });
+</script>
+<script>
+  /* Root D-023. Registered on every page so each one is saved on the phone
+     as it is visited. Failure is deliberately silent: an older browser with
+     no service worker must still get a perfectly working online page. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    });
+  }
+</script>
+</body></html>

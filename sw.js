@@ -4,7 +4,7 @@
    (a different origin) — the local copy of checklist content and the
    upload queue are separate pieces, not built yet.
    Bump VERSION on every change, or phones keep the old worker. */
-var VERSION = "2026-09-17d";
+var VERSION = "2026-09-17e";
 var CACHE = "bw-shell-" + VERSION;
 
 var SHELL = [
@@ -16,6 +16,7 @@ var SHELL = [
   "./completed.html",
   "./fix.html",
   "./assets.html",
+  "./staff.html",
   "./admin-checklists.html",
   "./day-sheet.html",
   "./manifest.webmanifest",
