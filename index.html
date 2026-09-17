@@ -22,7 +22,7 @@
   h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
   .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
   #whoRow{display:flex;align-items:center;gap:8px}
-  #who{font-size:15px;padding:6px 10px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit}
+  #who,#whoDept{font-size:15px;padding:6px 10px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit}
   /* Schedule / Inspection / To-do list / Fix a fault / Completed /
      Assets, and the "You are" sign-in above it — real tap targets now,
      not plain inline text. Per Mark, 2026-09-16: "Schedule Inspection
@@ -32,7 +32,7 @@
   .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
   .nav a{color:#232019;text-decoration:none}
   @media (max-width:700px){
-    #who{font-size:17px;padding:10px 14px}
+    #who,#whoDept{font-size:17px;padding:10px 14px}
     .nav{font-size:16px;gap:8px}
     .nav a,.nav b{padding:11px 15px}
   }
@@ -109,7 +109,7 @@
 
 <h1>Schedule — Chobe Elephant Camp</h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
-<p class="sub" id="whoRow" hidden>You are <select id="who" onchange="onWho()"></select></p>
+<p class="sub" id="whoRow" hidden>You are <select id="whoDept" onchange="onWhoDept()"></select> <select id="who" onchange="onWho()"></select></p>
 <p class="nav"><b>Schedule</b><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
@@ -183,6 +183,22 @@
   };
   window.onKind = function () { kind = document.getElementById("kind").value; render(); };
   window.clearRange = function () { from = ""; to = ""; render(); };
+  // Department first, then name — per Mark, 2026-09-17, once the real
+  // staff list made this dropdown long: "the list is very long - i
+  // think we need some filter options to shorten the list. department
+  // picker - then name picker." Filters which names #who offers; never
+  // hides anyone with no department set, since that's worth noticing.
+  window.onWhoDept = function () {
+    renderWhoOptions(document.getElementById("whoDept").value);
+  };
+  function renderWhoOptions(deptFilter) {
+    var sel = document.getElementById("who");
+    var shown = !deptFilter ? people
+      : people.filter(function (p) { return p.department === deptFilter; });
+    sel.innerHTML = '<option value="">— nobody —</option>' + shown.map(function (p) {
+      return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
+    }).join("");
+  }
   window.onWho = function () {
     me = people.filter(function (p) { return p.id === document.getElementById("who").value; })[0] || null;
     render();
@@ -1088,10 +1104,12 @@
   fetch(BOOT).then(function (r) { return r.json(); }).then(function (b) {
     people = b.people || [];
     boot_vehicles = b.vehicles || [];
-    var sel = document.getElementById("who");
-    sel.innerHTML = '<option value="">— nobody —</option>' + people.map(function (p) {
-      return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
-    }).join("");
+    var deptSel = document.getElementById("whoDept");
+    var deptNames = (b.departments || []).map(function (d) { return d.name; })
+      .filter(function (n) { return people.some(function (p) { return p.department === n; }); });
+    deptSel.innerHTML = '<option value="">All departments</option>' +
+      deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
+    renderWhoOptions("");
     document.getElementById("whoRow").hidden = false;
     return reload();
   }).catch(function (e) {

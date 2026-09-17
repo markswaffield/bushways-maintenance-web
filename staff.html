@@ -67,6 +67,7 @@
 <p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><b>Staff</b></p>
 
 <div class="bar">
+  <div><label for="whoDept">Department</label><select id="whoDept"></select></div>
   <div><label for="who">You are</label><select id="who"></select></div>
   <div style="align-self:center"><label><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label></div>
 </div>
@@ -224,11 +225,25 @@ function load(){
 
 el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
 
-fetch(FN).then(function(r){return r.json();}).then(function(b){
-  bootPeople = b.people || [];
-  el("who").innerHTML = '<option value="">— nobody —</option>' + bootPeople.map(function(p){
+// Department first, then name — per Mark, 2026-09-17, once the real
+// staff list made this dropdown long: "the list is very long - i think
+// we need some filter options to shorten the list. department picker -
+// then name picker." Never hides anyone with no department set.
+function renderWhoOptions(deptFilter){
+  var shown = !deptFilter ? bootPeople : bootPeople.filter(function(p){ return p.department === deptFilter; });
+  el("who").innerHTML = '<option value="">— nobody —</option>' + shown.map(function(p){
     return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
   }).join("");
+}
+
+fetch(FN).then(function(r){return r.json();}).then(function(b){
+  bootPeople = b.people || [];
+  var deptNames = (b.departments || []).map(function(d){ return d.name; })
+    .filter(function(n){ return bootPeople.some(function(p){ return p.department === n; }); });
+  el("whoDept").innerHTML = '<option value="">All departments</option>' +
+    deptNames.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
+  el("whoDept").addEventListener("change", function(){ renderWhoOptions(this.value); });
+  renderWhoOptions("");
   el("who").addEventListener("change", function(){
     me = bootPeople.filter(function(p){ return p.id === this.value; }.bind(this))[0] || null;
     render();

@@ -55,6 +55,8 @@
   <h1>Chobe Elephant Camp</h1>
   <p class="sub">Pick your name, then what you'd like to do.</p>
   <p class="nav"><a href="./">Schedule</a><b>Inspection</b><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p>
+  <label>Department</label>
+  <select id="personDept"><option value="">Loading…</option></select>
   <label>Who are you?</label>
   <select id="person"><option value="">Loading…</option></select>
   <label>What would you like to do?</label>
@@ -141,12 +143,30 @@
     });
   }
 
+  // Department first, then name — per Mark, 2026-09-17, once the real
+  // staff list made the name dropdown long: "the list is very long -
+  // i think we need some filter options to shorten the list. department
+  // picker - then name picker." renderPersonOptions re-filters the name
+  // list whenever the department changes; it never hides anyone with no
+  // department, since a real gap there is worth noticing, not burying.
+  function renderPersonOptions(deptFilter) {
+    var p = document.getElementById("person");
+    var shown = !deptFilter ? state.people
+      : state.people.filter(function (x) { return x.department === deptFilter; });
+    p.innerHTML = '<option value="">Select your name</option>' +
+      shown.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
+  }
+
   fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
     state.people = data.people; state.rooms = data.rooms; state.areas = data.areas;
     state.vehicles = data.vehicles || [];
-    var p = document.getElementById("person");
-    p.innerHTML = '<option value="">Select your name</option>' +
-      data.people.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
+    var deptSel = document.getElementById("personDept");
+    var deptNames = (data.departments || []).map(function (d) { return d.name; })
+      .filter(function (n) { return state.people.some(function (x) { return x.department === n; }); });
+    deptSel.innerHTML = '<option value="">All departments</option>' +
+      deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
+    deptSel.onchange = function () { renderPersonOptions(deptSel.value); };
+    renderPersonOptions("");
     var r = document.getElementById("room");
     r.innerHTML = '<option value="">Select a room</option>' +
       data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
