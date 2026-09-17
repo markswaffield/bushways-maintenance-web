@@ -30,10 +30,21 @@
   never to the roll-up.
 -->
 <style>
-  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
-  h1{font-size:19px;margin:0 0 4px}
+  /* The background photo — Mark, 2026-09-18: "i have added an image
+     into notes - it is a hyena. would it be possible to have this
+     sitting behind the sign in block and dashboard block on those
+     pages? and can we set it up that we can change the image at a
+     later date?" Same file, same treatment as landing.html — see the
+     comment there for the source and how to swap it later.
+     TO CHANGE IT LATER: replace supabase/web/images/hero.jpg (both
+     this page and landing.html reference that one filename — keep
+     them in sync if it's ever swapped). */
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;color:#F7F5F0;
+    background:linear-gradient(rgba(18,45,49,.72),rgba(18,45,49,.72)),url('./images/hero.jpg') top center/cover no-repeat;
+    background-color:#122d31;min-height:100vh}
+  h1{font-size:19px;margin:0 0 4px;color:#fff}
   h2{font-size:14px;margin:0 0 6px;color:#43594A}
-  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .sub{color:#D8D2C4;font-size:13px;margin:0 0 4px}
   .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
   .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
   .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
@@ -60,7 +71,7 @@
   .choice h2{margin:0 0 6px}
   .choice p{font-size:13px;color:#6B6455;margin:0 0 14px}
   .choice .letter{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;font-size:12px;font-weight:700;border-radius:50%;background:#EAF1EC;color:#43594A;margin-right:6px}
-  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
+  .empty{color:#E8C892;font-size:13.5px;font-style:italic;margin-top:10px}
   [hidden]{display:none!important}
 </style></head><body>
 
