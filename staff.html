@@ -57,6 +57,17 @@
   .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   .filter-section label:first-of-type{margin-top:0}
+  /* A checkbox row needs the same real tap target as everything else
+     — Mark, 2026-09-17, on the schedule page's Mine checkbox: "too
+     small to see easily or hit with your finger," applied the same
+     way here. A bare browser checkbox stays tiny regardless of its
+     label, so the box itself is enlarged, not just the text. */
+  .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
+  .filter-section label.check input[type=checkbox]{width:20px;height:20px;flex:none}
+  @media (max-width:700px){
+    .filter-section label.check{font-size:16px;padding:6px 0}
+    .filter-section label.check input[type=checkbox]{width:24px;height:24px}
+  }
   @media (min-width:700px){ .signin-box{max-width:420px} }
   .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
   .row.retired{opacity:.5;border-style:dashed}
@@ -84,7 +95,7 @@
   <div class="title">Signed in</div>
   <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
   <button class="primary" onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button>
-  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px;margin-top:10px"><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label>
+  <label class="check" style="margin-top:10px"><input type="checkbox" id="showRetired"> Show retired</label>
 </div>
 <div class="filter-section signin-box" id="whoPicker">
   <div class="title">Sign in</div>
@@ -94,7 +105,7 @@
   <div id="whoSetPin" hidden><label for="whoNewPin">New PIN (4–6 digits)</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6"></div>
   <div id="whoSetPinBtn" hidden style="margin-top:10px"><button onclick="doWhoSetPin()" style="width:100%">Set PIN</button></div>
   <button class="primary" onclick="doWhoLogin()" style="width:100%;margin-top:10px">Sign in</button>
-  <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px;margin-top:10px"><input type="checkbox" id="showRetired2" style="width:auto"> Show retired</label>
+  <label class="check" style="margin-top:10px"><input type="checkbox" id="showRetired2"> Show retired</label>
   <div style="width:100%"><p class="note" id="whoErr" style="color:#A8502F" hidden></p></div>
 </div>
 
