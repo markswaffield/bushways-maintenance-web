@@ -238,7 +238,7 @@
 
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p><p class="loading">Loading…</p>';
+    list.innerHTML = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       renderList(applyFilters());
@@ -339,7 +339,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p>';
+    var html = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p>';
 
     html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';

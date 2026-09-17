@@ -65,10 +65,14 @@
      the text. Not scoped to .filter-section — the same class marks
      the Management checkbox on the edit-person .form below too. */
   label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
-  label.check input[type=checkbox]{width:20px;height:20px;flex:none}
+  /* Bigger still wasn't enough on a computer — Mark: "still
+     very small and not easy to see (not a lot of contrast) on the
+     computer." Size alone was the phone fix; accent-color tints both
+     the fill and the outline, which a bare checkbox has neither of. */
+  label.check input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:#43594A}
   @media (max-width:700px){
     label.check{font-size:16px;padding:6px 0}
-    label.check input[type=checkbox]{width:24px;height:24px}
+    label.check input[type=checkbox]{width:26px;height:26px}
   }
   @media (min-width:700px){ .signin-box{max-width:420px} }
   .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
