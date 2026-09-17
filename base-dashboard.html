@@ -1,0 +1,444 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Bush Ways — Base Dashboard</title>
+<!--
+  Base Dashboard — the head-office roll-up, queued back on 2026-09-15
+  and finally built 2026-09-18. Per Mark: "1. to be able to access and
+  view all sites - this would require an option to select a site. this
+  is important for oversite purposes. 2. a roll up page showing all
+  outstanding schedules, to-do-lists, and open faults accross all
+  camps with the option to filter by camp and date, area, department
+  etc." One screen answers both — picking a single camp in the Camp
+  filter below is itself "an option to select a site."
+
+  Who sees this: two real tiers, per `?action=base_rollup` server-side
+  (`accessibleLocations()`) — people.is_base_manager (D-048) see every
+  real location; two Concession Managers (Khwai's own, Mababe's own —
+  "Khwai GM and Mababe GM and Concession Managers are the same thing")
+  see exactly the 2 camps `dashboard_location_access` grants them.
+  Everyone else gets a 403 and a plain explanation, same pattern as
+  D-051's Assets/Staff gate — enforced server-side, not just this
+  page's own hiding of it.
+
+  Read `docs/modules/dashboard.md` for the Area→Target grouping and
+  filter shape this reuses (tool-local D-034) — same rules here, with
+  one addition: Camp, since this is the one screen that spans more
+  than one location at a time.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:26px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline}
+  h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  @media (max-width:700px){
+    .nav{font-size:16px;gap:8px}
+    .nav a,.nav b{padding:11px 15px}
+  }
+  select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
+  input[type=password]{padding:8px;font-size:14px}
+  button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
+  button.primary{background:#43594A;color:#fff}
+  .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
+  .filters{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  @media (min-width:700px){
+    .filters{flex-direction:row}
+    .filter-section{flex:1;margin-top:0}
+  }
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff;margin-top:10px}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section label:first-of-type{margin-top:0}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  @media (min-width:700px){ .signin-box{max-width:420px} }
+  .area-group{margin-top:22px}
+  .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
+  .target-group{margin-top:14px}
+  .target-group .target-heading{font-size:13.5px;font-weight:700;color:#5B5344;margin:0 0 6px}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 14px;margin-top:6px}
+  .card .fault-line{font-size:13.5px;margin:0}
+  .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
+  .card .camp{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-right:6px}
+  .card .meta{font-size:12px;color:#6B6455;margin:4px 0 0}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
+  .badge.overdue{background:#F4CFC2;color:#A8502F}
+  .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
+  .badge.upcoming{background:#E3DFD3;color:#5B5344}
+  .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1>Base Dashboard</h1>
+<p class="sub">Every camp Bush Ways operates, rolled up in one place — open faults and outstanding schedules, filterable by camp.</p>
+<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><b>Base Dashboard</b></p>
+
+<div class="filter-section signin-box" id="whoSignedIn" hidden>
+  <div class="title">Signed in</div>
+  <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
+  <button class="primary" onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button>
+</div>
+<div class="filter-section signin-box" id="whoPicker">
+  <div class="title">Sign in</div>
+  <label for="whoDept">Department</label><select id="whoDept"></select>
+  <label for="who">You are</label><select id="who"></select>
+  <label for="whoPin">PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6">
+  <div id="whoSetPin" hidden><label for="whoNewPin">New PIN (4–6 digits)</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6"></div>
+  <div id="whoSetPinBtn" hidden style="margin-top:10px"><button onclick="doWhoSetPin()" style="width:100%">Set PIN</button></div>
+  <button class="primary" onclick="doWhoLogin()" style="width:100%;margin-top:10px">Sign in</button>
+  <p class="note" id="whoErr" style="color:#A8502F;font-size:12.5px;margin:8px 0 0" hidden></p>
+</div>
+
+<div id="app"><p class="loading">Sign in above to view this.</p></div>
+
+<script>
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  var me = null, bootPeople = [], bootDepartments = [];
+  var lastData = null;
+  // Same D-034 grouping and filters the to-do list uses, plus one more
+  // — Camp — since this is the one screen that spans more than one
+  // location at a time. Per Mark, 2026-09-18.
+  var dateDirection = "newest";
+  var dateFrom = "", dateTo = "";
+  var filterAreaId = "", filterTarget = "";
+  var filterDepartmentId = "";
+  var filterLocationId = "";
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function timeAgo(iso) {
+    var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 60) return mins + "m ago";
+    if (mins < 1440) return Math.round(mins / 60) + "h ago";
+    return Math.round(mins / 1440) + "d ago";
+  }
+  function dueText(s) {
+    if (s.days_until < 0) return "overdue by " + Math.abs(s.days_until) + " day" + (Math.abs(s.days_until) === 1 ? "" : "s");
+    if (s.days_until === 0) return "due now";
+    return "due in " + s.days_until + " day" + (s.days_until === 1 ? "" : "s");
+  }
+  function badgeText(status) {
+    return { overdue: "Overdue", due_soon: "Due soon", upcoming: "Upcoming" }[status];
+  }
+
+  // Department first, then name — same picker every other sign-in page
+  // uses, D-045/2026-09-17.
+  function renderPersonOptions(deptFilter) {
+    var sel = document.getElementById("who");
+    var shown = !deptFilter ? bootPeople : bootPeople.filter(function (p) { return p.department === deptFilter; });
+    sel.innerHTML = '<option value="">Select your name</option>' + shown.map(function (p) {
+      return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.department ? " — " + esc(p.department) : "") + '</option>';
+    }).join("");
+    sel.onchange = function () {
+      var opt = sel.selectedOptions[0];
+      var need = !!opt && opt.dataset.pinSet === "false";
+      document.getElementById("whoSetPin").hidden = !need;
+      document.getElementById("whoSetPinBtn").hidden = !need;
+    };
+  }
+
+  window.doWhoSetPin = function () {
+    var id = document.getElementById("who").value;
+    var pin = document.getElementById("whoNewPin").value;
+    fetch(FN + "?action=set_pin", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ person_id: id, pin: pin }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      document.getElementById("whoSetPin").hidden = true;
+      document.getElementById("whoSetPinBtn").hidden = true;
+      document.getElementById("whoPin").value = pin;
+      alert("PIN set. Sign in below.");
+    });
+  };
+  window.doWhoLogin = function () {
+    var id = document.getElementById("who").value;
+    var pin = document.getElementById("whoPin").value;
+    var err = document.getElementById("whoErr");
+    err.hidden = true;
+    if (!id || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
+    fetch(FN + "?action=login", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ person_id: id, pin: pin }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { err.textContent = out.error; err.hidden = false; return; }
+      me = { id: out.person_id, name: out.name, is_manager: out.is_manager, is_administrator: out.is_administrator };
+      sessionStorage.setItem("bw_signin", JSON.stringify(me));
+      showSignedIn();
+    });
+  };
+  window.signOut = function () {
+    sessionStorage.removeItem("bw_signin");
+    location.reload();
+  };
+  function showSignedIn() {
+    document.getElementById("whoPicker").hidden = true;
+    document.getElementById("whoSignedIn").hidden = false;
+    document.getElementById("whoName").textContent = me.name;
+    load();
+  }
+
+  // Visible only to those `?action=base_rollup` actually grants —
+  // enforced server-side (`accessibleLocations()`), not just this
+  // page hiding it, same discipline D-051 set for Assets and Staff.
+  function load() {
+    var app = document.getElementById("app");
+    if (!me) { app.innerHTML = '<p class="empty">Sign in above to view this.</p>'; return; }
+    app.innerHTML = '<p class="loading">Loading…</p>';
+    fetch(FN + "?action=base_rollup&person_id=" + encodeURIComponent(me.id))
+      .then(function (r) { return r.json(); }).then(function (data) {
+        if (data.error) { app.innerHTML = '<p class="empty">' + esc(data.error) + '</p>'; return; }
+        lastData = data;
+        renderFilters(data);
+        renderIssues(applyFilters(data));
+      }).catch(function (e) {
+        app.innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+      });
+  }
+
+  function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
+  function targetsIn(issues, areaId) {
+    var seen = {}, out = [];
+    (issues || []).forEach(function (f) {
+      if (f.target && f.area_id === areaId && !seen[f.target]) { seen[f.target] = true; out.push(f.target); }
+    });
+    return out.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  }
+  // Department filter built from what's actually in the data, not a
+  // server-curated catalogue — different camps have genuinely
+  // different valid departments (D-043), so there's no one "the
+  // department list" that fits every camp at once here.
+  function departmentsPresent(data) {
+    var seen = {}, out = [];
+    (data.issues || []).concat(data.schedules || []).forEach(function (f) {
+      if (f.assigned_department_id && !seen[f.assigned_department_id]) {
+        seen[f.assigned_department_id] = true;
+        out.push({ id: f.assigned_department_id, name: f.assigned_department });
+      }
+    });
+    return out.sort(function (a, b) { return a.name.localeCompare(b.name); });
+  }
+
+  function renderFilters(data) {
+    var areas = data.areas || [];
+    var html = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
+      (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
+
+    html += '<div class="filters">';
+
+    html += '<div class="filter-section"><div class="title">Camp</div>' +
+      '<label>Site</label><select id="locationFilter" onchange="onLocationFilterChange()">' +
+      '<option value="">All camps you can see</option>' +
+      data.locations.map(function (l) {
+        return '<option value="' + esc(l.id) + '"' + (filterLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
+      }).join("") + '</select></div>';
+
+    html += '<div class="filter-section"><div class="title">Date</div>' +
+      '<label>Order (within each target)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
+      '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
+      '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
+      '</select>' +
+      '<label>Custom date range (optional)</label>' +
+      '<div class="daterange">' +
+      '<input type="date" id="dateFrom" value="' + esc(dateFrom) + '" onchange="onDateRangeChange()">' +
+      '<span>to</span>' +
+      '<input type="date" id="dateTo" value="' + esc(dateTo) + '" onchange="onDateRangeChange()">' +
+      '</div></div>';
+
+    var targets = filterAreaId ? targetsIn(data.issues, filterAreaId) : [];
+    html += '<div class="filter-section"><div class="title">Maintenance area</div>' +
+      '<label>Area</label><select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All areas</option>' +
+      topLevelAreas(areas).map(function (a) {
+        return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>';
+    if (filterAreaId && targets.length) {
+      html += '<label>Target</label><select id="targetFilter" onchange="onTargetFilterChange()">' +
+        '<option value="">All targets in this area</option>' +
+        targets.map(function (t) {
+          return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
+        }).join("") + '</select>';
+    }
+    html += '</div>';
+
+    var depts = departmentsPresent(data);
+    html += '<div class="filter-section"><div class="title">Department</div>' +
+      '<label>Department</label><select id="departmentFilter" onchange="onDepartmentFilterChange()">' +
+      '<option value="">All departments</option>' +
+      depts.map(function (d) {
+        return '<option value="' + esc(d.id) + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select></div>';
+
+    html += '</div>'; // .filters
+
+    var existing = document.getElementById("filtersRow");
+    if (existing) { existing.outerHTML = '<div id="filtersRow">' + html + '</div>'; }
+    else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow">' + html + '</div>'); }
+  }
+
+  window.onLocationFilterChange = function () {
+    filterLocationId = document.getElementById("locationFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onDateDirectionChange = function () {
+    dateDirection = document.getElementById("dateDirection").value;
+    renderFilters(lastData);
+    renderIssues(applyFilters(lastData));
+  };
+  window.onDateRangeChange = function () {
+    dateFrom = document.getElementById("dateFrom").value;
+    dateTo = document.getElementById("dateTo").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onAreaFilterChange = function () {
+    filterAreaId = document.getElementById("areaFilter").value;
+    filterTarget = "";
+    renderFilters(lastData);
+    renderIssues(applyFilters(lastData));
+  };
+  window.onTargetFilterChange = function () {
+    filterTarget = document.getElementById("targetFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+  window.onDepartmentFilterChange = function () {
+    filterDepartmentId = document.getElementById("departmentFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
+
+  function applyFilters(data) {
+    var issues = (data.issues || []).filter(function (f) {
+      if (filterLocationId && f.location_id !== filterLocationId) return false;
+      if (filterDepartmentId && f.assigned_department_id !== filterDepartmentId) return false;
+      if (dateFrom && new Date(f.raised_at) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(f.raised_at) > new Date(dateTo + "T23:59:59")) return false;
+      if (filterAreaId && f.area_id !== filterAreaId) return false;
+      if (filterTarget && f.target !== filterTarget) return false;
+      return true;
+    });
+    var schedules = (data.schedules || []).filter(function (s) {
+      if (filterLocationId && s.location_id !== filterLocationId) return false;
+      if (filterDepartmentId && s.assigned_department_id !== filterDepartmentId) return false;
+      return true;
+    });
+    return { issues: issues, schedules: schedules };
+  }
+
+  function sortNamesOtherLast(names, numeric) {
+    return names.slice().sort(function (a, b) {
+      if (a === "Other" && b !== "Other") return 1;
+      if (b === "Other" && a !== "Other") return -1;
+      return numeric ? a.localeCompare(b, undefined, { numeric: true }) : a.localeCompare(b);
+    });
+  }
+
+  function groupForDisplay(issues) {
+    var byArea = {};
+    issues.forEach(function (f) {
+      var areaName = f.area || "Other";
+      if (!byArea[areaName]) byArea[areaName] = {};
+      var targetName = f.target || "Other";
+      if (!byArea[areaName][targetName]) byArea[areaName][targetName] = [];
+      byArea[areaName][targetName].push(f);
+    });
+    return sortNamesOtherLast(Object.keys(byArea), false).map(function (areaName) {
+      var targets = byArea[areaName];
+      return {
+        name: areaName,
+        targets: sortNamesOtherLast(Object.keys(targets), true).map(function (targetName) {
+          var faults = targets[targetName].slice().sort(function (a, b) {
+            return dateDirection === "oldest"
+              ? new Date(a.raised_at) - new Date(b.raised_at)
+              : new Date(b.raised_at) - new Date(a.raised_at);
+          });
+          return { name: targetName, faults: faults };
+        }),
+      };
+    });
+  }
+
+  function renderIssues(data) {
+    var html = "";
+    var faultCount = data.issues.length;
+    var filtered = filterLocationId || filterAreaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
+    html += '<h2>Open faults <span class="count">' + faultCount + '</span></h2>';
+    if (!data.issues.length) {
+      html += '<p class="empty">Nothing open' + (filtered ? " for this filter" : " across every camp you can see") + '.</p>';
+    }
+    groupForDisplay(data.issues).forEach(function (area) {
+      html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
+      area.targets.forEach(function (target) {
+        html += '<div class="target-group"><p class="target-heading">' + esc(target.name) + '</p>';
+        target.faults.forEach(function (f) {
+          html += '<div class="card">' +
+            '<p class="fault-line">' + '<span class="camp">' + esc(f.location) + '</span> ' +
+            (f.urgent ? '<span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span> ' : '') + esc(f.label) +
+            (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
+            (f.action ? ' — ' + esc(f.action) : '') +
+            (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(f.assigned_department) + '</span>' : '') +
+            '</p>' +
+            '<p class="meta">' + esc(f.raised_by) + ', ' + timeAgo(f.raised_at) + '</p>' +
+            '</div>';
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+
+    html += '<h2>Outstanding schedules <span class="count">' + data.schedules.length + '</span></h2>';
+    if (!data.schedules.length) {
+      html += '<p class="empty">Nothing outstanding' + (filtered ? " for this filter" : " across every camp you can see") + '.</p>';
+    }
+    data.schedules.forEach(function (s) {
+      html += '<div class="card sched-row">' +
+        '<div><p class="fault-line"><span class="camp">' + esc(s.location) + '</span> ' + esc(s.name) + '</p>' +
+        '<p class="meta">' + esc(s.interval) + ' · ' + dueText(s) +
+        (s.assigned_department ? ' · ' + esc(s.assigned_department) : (s.assigned_person ? ' · ' + esc(s.assigned_person) : '')) +
+        '</p></div>' +
+        '<span class="badge ' + s.status + '">' + badgeText(s.status) + '</span>' +
+        '</div>';
+    });
+
+    document.getElementById("app").innerHTML = html;
+  }
+
+  fetch(FN + "?action=base_dashboard_people").then(function (r) { return r.json(); }).then(function (b) {
+    bootPeople = b.people || [];
+    bootDepartments = b.departments || [];
+    var deptNames = bootDepartments.map(function (d) { return d.name; })
+      .filter(function (n) { return bootPeople.some(function (p) { return p.department === n; }); });
+    var deptSel = document.getElementById("whoDept");
+    deptSel.innerHTML = '<option value="">All departments</option>' +
+      deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
+    deptSel.onchange = function () { renderPersonOptions(deptSel.value); };
+    renderPersonOptions("");
+    try {
+      var saved = sessionStorage.getItem("bw_signin");
+      if (saved) { me = JSON.parse(saved); showSignedIn(); return; }
+    } catch (e) {}
+    document.getElementById("app").innerHTML = '<p class="empty">Sign in above to view this.</p>';
+  }).catch(function (e) {
+    document.getElementById("app").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+  });
+</script>
+<script>
+  /* Root D-023. Registered on every page so each one is saved on the phone
+     as it is visited. Failure is deliberately silent: an older browser with
+     no service worker must still get a perfectly working online page. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    });
+  }
+</script>
+</body></html>

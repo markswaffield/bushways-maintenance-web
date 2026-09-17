@@ -17,6 +17,7 @@ var SHELL = [
   "./fix.html",
   "./assets.html",
   "./staff.html",
+  "./base-dashboard.html",
   "./admin-checklists.html",
   "./day-sheet.html",
   "./manifest.webmanifest",
