@@ -60,10 +60,15 @@
      very small and not easy to see (not a lot of contrast) on the
      computer." Size alone was the phone fix; accent-color tints both
      the fill and the outline, which a bare checkbox has neither of. */
-  .filter-section label.check input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:#43594A}
+  /* accent-color alone leans on the browser's own unchecked-state
+     rendering, which stays pale on some computers even once tinted —
+     Mark: "still small and little contrast on the computer - fine on
+     the phone." A real border guarantees the outline is visible
+     regardless, on top of the size and colour. */
+  .filter-section label.check input[type=checkbox]{width:24px;height:24px;flex:none;accent-color:#43594A;border:2px solid #43594A;border-radius:4px}
   @media (max-width:700px){
     .filter-section label.check{font-size:16px;padding:6px 0}
-    .filter-section label.check input[type=checkbox]{width:26px;height:26px}
+    .filter-section label.check input[type=checkbox]{width:28px;height:28px}
   }
   @media (min-width:700px){ .signin-box{max-width:420px} }
   .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
