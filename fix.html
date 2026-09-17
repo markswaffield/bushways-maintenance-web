@@ -110,8 +110,13 @@
     } catch (e) { return null; }
   }
   var camp = currentCamp();
+  // person_id every time someone's signed in, not only once a camp is
+  // also set — 2026-09-18, a real bug: sending it only when `camp` was
+  // set meant an ordinary single-camp person's identity never reached
+  // the server, so open_issues fell back to Chobe regardless of where
+  // they actually work. location_id stays conditional on camp.
   function campParam() {
-    return (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+    return me ? ("&person_id=" + encodeURIComponent(me.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")) : "";
   }
   // The same ordering rules as the to-do list, per Mark, 2026-09-12:
   // grouped by maintenance Area, then Target within it, with date only

@@ -192,7 +192,16 @@
     } catch (e) { return null; }
   }
   var camp = currentCamp();
-  var CAMP_PARAM = (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+  // person_id has to go every time someone's signed in, not only once a
+  // camp has been explicitly entered — 2026-09-18, a real bug caught the
+  // same day the sign-in picker became genuinely group-wide (below):
+  // sending it only when `camp` was set meant an ordinary single-camp
+  // person's identity never reached the server at all, so every one of
+  // their fetches fell all the way back to Chobe regardless of where
+  // they actually work. `location_id` stays conditional — only a
+  // multi-camp person who's explicitly entered a camp via Base
+  // Dashboard ever has one to send.
+  var CAMP_PARAM = me ? ("&person_id=" + encodeURIComponent(me.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")) : "";
   var FN = BASE_FN + "?action=dashboard" + CAMP_PARAM;
   var lastData = null;
   // Mark, 2026-09-11: "default must be newest to oldest". For a schedule

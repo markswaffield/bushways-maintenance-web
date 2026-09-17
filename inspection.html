@@ -143,8 +143,13 @@
   var myPersonId = signedInAs && signedInAs.id;
   var camp = null;
   try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+  // person_id every time someone's signed in, not only once a camp is
+  // also set — 2026-09-18, a real bug: sending it only when `camp` was
+  // set meant an ordinary single-camp person's identity never reached
+  // the server, so every fetch here fell back to Chobe regardless of
+  // where they actually work. location_id stays conditional on camp.
   function campParam() {
-    return (signedInAs && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(signedInAs.id) : "";
+    return signedInAs ? ("&person_id=" + encodeURIComponent(signedInAs.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")) : "";
   }
   function campName() {
     return (signedInAs && camp && signedInAs.locations && signedInAs.locations.length > 1) ? camp.name : "Chobe Elephant Camp";
