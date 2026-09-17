@@ -86,29 +86,25 @@
 
 <h1>All Camps</h1>
 <p class="sub">Every camp Bush Ways operates, rolled up in one place — open faults and outstanding schedules, filterable by camp. To go and work at a specific camp instead, use <a href="./base-dashboard.html">Base Dashboard</a>.</p>
-<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
 
-<div class="filter-section signin-box" id="whoSignedIn" hidden>
+<!-- Sign-in itself now happens once, on the landing page (index.html) —
+     Mark, 2026-09-18: "when i click on the app - I want to go to a blank
+     sign in screen... if Base Management I go to the Dashboard with the
+     2 options." This page is one of those 2 options, so it only ever
+     runs for someone already signed in and already Base Management;
+     arriving here with no session sends you back to the landing page. -->
+<div class="filter-section signin-box" id="whoSignedIn">
   <div class="title">Signed in</div>
   <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
   <button class="primary" onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button>
 </div>
-<div class="filter-section signin-box" id="whoPicker">
-  <div class="title">Sign in</div>
-  <label for="whoDept">Department</label><select id="whoDept"></select>
-  <label for="who">You are</label><select id="who"></select>
-  <label for="whoPin">PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6">
-  <div id="whoSetPin" hidden><label for="whoNewPin">New PIN (4–6 digits)</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6"></div>
-  <div id="whoSetPinBtn" hidden style="margin-top:10px"><button onclick="doWhoSetPin()" style="width:100%">Set PIN</button></div>
-  <button class="primary" onclick="doWhoLogin()" style="width:100%;margin-top:10px">Sign in</button>
-  <p class="note" id="whoErr" style="color:#A8502F;font-size:12.5px;margin:8px 0 0" hidden></p>
-</div>
 
-<div id="app"><p class="loading">Sign in above to view this.</p></div>
+<div id="app"><p class="loading">Loading…</p></div>
 
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
-  var me = null, bootPeople = [], bootDepartments = [];
+  var me = null;
   var lastData = null;
   // Same D-034 grouping and filters the to-do list uses, plus one more
   // — Camp — since this is the one screen that spans more than one
@@ -139,62 +135,11 @@
     return { overdue: "Overdue", due_soon: "Due soon", upcoming: "Upcoming" }[status];
   }
 
-  // Department first, then name — same picker every other sign-in page
-  // uses, D-045/2026-09-17.
-  function renderPersonOptions(deptFilter) {
-    var sel = document.getElementById("who");
-    var shown = !deptFilter ? bootPeople : bootPeople.filter(function (p) { return p.department === deptFilter; });
-    sel.innerHTML = '<option value="">Select your name</option>' + shown.map(function (p) {
-      return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.department ? " — " + esc(p.department) : "") + '</option>';
-    }).join("");
-    sel.onchange = function () {
-      var opt = sel.selectedOptions[0];
-      var need = !!opt && opt.dataset.pinSet === "false";
-      document.getElementById("whoSetPin").hidden = !need;
-      document.getElementById("whoSetPinBtn").hidden = !need;
-    };
-  }
-
-  window.doWhoSetPin = function () {
-    var id = document.getElementById("who").value;
-    var pin = document.getElementById("whoNewPin").value;
-    fetch(FN + "?action=set_pin", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ person_id: id, pin: pin }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
-      if (out.error) { alert(out.error); return; }
-      document.getElementById("whoSetPin").hidden = true;
-      document.getElementById("whoSetPinBtn").hidden = true;
-      document.getElementById("whoPin").value = pin;
-      alert("PIN set. Sign in below.");
-    });
-  };
-  window.doWhoLogin = function () {
-    var id = document.getElementById("who").value;
-    var pin = document.getElementById("whoPin").value;
-    var err = document.getElementById("whoErr");
-    err.hidden = true;
-    if (!id || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
-    fetch(FN + "?action=login", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ person_id: id, pin: pin }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
-      if (out.error) { err.textContent = out.error; err.hidden = false; return; }
-      me = { id: out.person_id, name: out.name, is_manager: out.is_manager, is_administrator: out.is_administrator };
-      sessionStorage.setItem("bw_signin", JSON.stringify(me));
-      showSignedIn();
-    });
-  };
   window.signOut = function () {
     sessionStorage.removeItem("bw_signin");
-    location.reload();
+    sessionStorage.removeItem("bw_camp");
+    location.href = "./";
   };
-  function showSignedIn() {
-    document.getElementById("whoPicker").hidden = true;
-    document.getElementById("whoSignedIn").hidden = false;
-    document.getElementById("whoName").textContent = me.name;
-    load();
-  }
 
   // Visible only to those `?action=base_rollup` actually grants —
   // enforced server-side (`accessibleLocations()`), not just this
@@ -430,24 +375,13 @@
     document.getElementById("app").innerHTML = html;
   }
 
-  fetch(FN + "?action=base_dashboard_people").then(function (r) { return r.json(); }).then(function (b) {
-    bootPeople = b.people || [];
-    bootDepartments = b.departments || [];
-    var deptNames = bootDepartments.map(function (d) { return d.name; })
-      .filter(function (n) { return bootPeople.some(function (p) { return p.department === n; }); });
-    var deptSel = document.getElementById("whoDept");
-    deptSel.innerHTML = '<option value="">All departments</option>' +
-      deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
-    deptSel.onchange = function () { renderPersonOptions(deptSel.value); };
-    renderPersonOptions("");
-    try {
-      var saved = sessionStorage.getItem("bw_signin");
-      if (saved) { me = JSON.parse(saved); showSignedIn(); return; }
-    } catch (e) {}
-    document.getElementById("app").innerHTML = '<p class="empty">Sign in above to view this.</p>';
-  }).catch(function (e) {
-    document.getElementById("app").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
-  });
+  try { var saved = sessionStorage.getItem("bw_signin"); if (saved) me = JSON.parse(saved); } catch (e) {}
+  if (!me) {
+    location.href = "./";
+  } else {
+    document.getElementById("whoName").textContent = me.name;
+    load();
+  }
 </script>
 <script>
   /* Root D-023. Registered on every page so each one is saved on the phone

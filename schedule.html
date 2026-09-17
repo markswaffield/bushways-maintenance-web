@@ -1,0 +1,1210 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Chobe Elephant Camp — Schedule</title>
+<!--
+  The Schedule — split out of the to-do list and made the landing page,
+  per Mark, 2026-09-12: "i am also thinking that the schedule should be
+  seperated from the to-do list - i would prefer it to be on its own - it
+  can actually be the landing page".
+  Running order across the tool: schedule > inspection > to-do list >
+  fix a fault > completion.
+
+  Everything here comes from the same `dashboard` action the to-do list
+  uses; this page simply renders the scheduled half of it and the to-do
+  list renders the faults. No API change.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:15px;margin:26px 0 4px;color:#5B5344;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:baseline}
+  h2 .count{font-size:12px;font-weight:400;color:#8C6A2F}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  /* Schedule / Inspection / To-do list / Fix a fault / Completed /
+     Assets, and the "You are" sign-in above it — real tap targets now,
+     not plain inline text. Per Mark, 2026-09-16: "Schedule Inspection
+     etc are very small for fingers to hit on a phone." */
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  @media (max-width:700px){
+    .nav{font-size:16px;gap:8px}
+    .nav a,.nav b{padding:11px 15px}
+  }
+  /* The sign-in box, same look as the Order/Who/Kind filter boxes
+     below — Mark, 2026-09-17: "for the sign in on all necessary pages
+     i would like the same look as we did for the ordering filters."
+     Same .filter-section card; capped width on a wide screen (via
+     .signin-box) so it reads as one compact box, not a full-width bar
+     with nothing in the rest of it. */
+  #whoRow{margin:10px 0 0}
+  @media (min-width:700px){ .signin-box{max-width:420px} }
+  /* Side by side on a laptop, stacked on a phone — Mark, 2026-09-16:
+     "for the computer version for Order Who Kind to sit side by side
+     on the laptop but below each other on the phone." Mobile-first:
+     stacked is the default, a wide screen switches to a row. */
+  .filters{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  @media (min-width:700px){
+    .filters{flex-direction:row}
+    .filter-section{flex:1;margin-top:0}
+  }
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section label:first-of-type{margin-top:0}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  /* The PIN field was falling back to the bare browser default here —
+     this page's own input rule above only ever covered select and
+     input[type=date], never password. Mark: "the area to fill in the
+     Pin is very small on some of the sheets and bigger on others -
+     please make them all the same bigger size," then: "use the sizing
+     of the sign in box that are on the asset and staff pages" —
+     8px/14px is their real reference size, matched exactly rather
+     than a new size invented here. */
+  input[type=password]{width:100%;padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  /* A checkbox row (Mine, below) needs the same real tap target as
+     everything else — Mark, 2026-09-17: "there is a small block for
+     Mine - this needs to be a bit bigger too - too small to see
+     easily or hit with your finger." */
+  .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
+  /* Size, then accent-color, then a border — none of it reliable, all
+     on the same underlying problem: a native checkbox's own rendering
+     is the OS/browser's call, not CSS's, no matter what gets layered
+     on top of it. Mark, after the border still wasn't enough: "the
+     same problem still exists for the checkboxes." Native rendering
+     turned off entirely (appearance:none) and replaced with a plain
+     square and a hand-drawn tick — nothing left for a browser to
+     under-render, because there's no native widget left in the
+     picture at all. */
+  .filter-section label.check input[type=checkbox]{
+    appearance:none;-webkit-appearance:none;margin:0;
+    width:24px;height:24px;flex:none;box-sizing:border-box;
+    border:2px solid #43594A;border-radius:4px;
+    background:#fff;cursor:pointer;position:relative;
+  }
+  .filter-section label.check input[type=checkbox]:checked{background:#43594A}
+  .filter-section label.check input[type=checkbox]:checked::after{
+    content:"";position:absolute;left:7px;top:3px;
+    width:6px;height:12px;border:solid #fff;border-width:0 2px 2px 0;
+    transform:rotate(45deg);
+  }
+  @media (max-width:700px){
+    .filter-section label.check{font-size:16px;padding:6px 0}
+    .filter-section label.check input[type=checkbox]{width:28px;height:28px}
+    .filter-section label.check input[type=checkbox]:checked::after{left:9px;top:4px;width:7px;height:14px}
+  }
+  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 14px;margin-top:6px}
+  .card .meta{font-size:12px;color:#6B6455;margin:4px 0 0}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
+  .badge.overdue{background:#F4CFC2;color:#A8502F}
+  .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
+  .badge.upcoming{background:#E3DFD3;color:#5B5344}
+  .badge.handover{background:#D9E6DC;color:#2F6B45;margin-right:6px}
+  .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .who{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-top:4px}
+  .who.dept{background:#E3DFD3;color:#5B5344}
+  .who.none{background:#F1EDE4;color:#A8A192;font-weight:400;font-style:italic}
+  .who.pending{background:#F4E3D3;color:#8C6A2F}
+  .ho-parties{margin:4px 0 0}
+  .ho-parties .arrow{color:#8C6A2F;margin:0 4px;font-size:11.5px}
+  .ho-faults{font-size:13.5px;margin:4px 0 0}
+  .sign-checklist{max-height:320px;overflow-y:auto;border:1px solid #E3DFD3;border-radius:6px;padding:8px 10px;margin-bottom:10px;background:#fff}
+  .sc-section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#43594A;margin:10px 0 3px}
+  .sc-section:first-child{margin-top:0}
+  .sc-item{font-size:13px;margin:2px 0;color:#5B5344}
+  .sc-item.flagged{color:#A8502F;font-weight:600}
+  .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4CFC2;color:#A8502F;margin:2px 4px 0 0}
+  .assign-row{display:flex;gap:6px;margin-top:8px}
+  .assign-row select{flex:1;padding:6px;font-size:13px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit}
+  .assign-row button{padding:6px 11px;font-size:13px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
+  .area-group{margin-top:18px}
+  .area-group .area-heading{font-size:13.5px;font-weight:700;color:#43594A;margin:0 0 6px;padding-bottom:3px;border-bottom:2px solid #43594A}
+  .rule{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 13px;margin-top:6px}
+  .rule.archived{opacity:.55}
+  .rule.missing{border-style:dashed;background:#FBFAF6}
+  .rule.missing .rname{color:#8C6A2F}
+  .vehblock{margin-top:12px;padding-left:10px;border-left:3px solid #C9C2AC}
+  .vehblock .vehname{font-weight:700;font-size:13.5px;margin:0 0 4px;color:#43594A}
+  .rule .rname{font-weight:700;margin:0}
+  .rule .rmeta{font-size:12px;color:#6B6455;margin:2px 0 0}
+  .rule .racts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .rule button,.form button{padding:5px 10px;font-size:12.5px;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer;font-family:inherit}
+  .rule button.danger,.form button.danger{border-color:#A8502F;color:#A8502F}
+  .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
+  .form label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:9px 0 4px}
+  .form label:first-child{margin-top:0}
+  .form input,.form select,.form textarea{width:100%;padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .hist .cnote{color:#232019;font-style:italic;margin:1px 0 6px 0}
+  .form .row2{display:flex;gap:8px}
+  .form .row2 > *{flex:1}
+  .hist{margin-top:8px;border-top:1px solid #F1EDE4;padding-top:8px}
+  .hist p{font-size:12px;color:#6B6455;margin:3px 0}
+  .hist .act{font-weight:700;color:#43594A;text-transform:uppercase;font-size:10.5px;letter-spacing:.03em}
+  .group{margin-top:20px}
+  .group .heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
+  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+  .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1>Schedule — <span id="campTitle">Chobe Elephant Camp</span></h1>
+<p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
+<!-- Sign-in itself now happens once, on the landing page (index.html) —
+     Mark, 2026-09-18: "when i click on the app - I want to go to a blank
+     sign in screen... anyone else will land on the their lodge page with
+     all the task blocks available." This page only ever runs for someone
+     already signed in; arriving with no session (a bookmark, a stale
+     tab) sends you back to the landing page instead of showing a picker. -->
+<div id="whoRow">
+  <div class="filter-section signin-box" id="whoSignedIn">
+    <div class="title">Signed in</div>
+    <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
+    <p style="margin:6px 0 0;font-size:13.5px" id="campLine" hidden>Camp: <b id="campName"></b> · <a href="./base-dashboard.html">Change camp</a></p>
+    <button onclick="signOut()" style="width:100%;margin-top:10px;padding:9px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;cursor:pointer">Sign out</button>
+  </div>
+</div>
+<p class="nav"><b>Schedule</b><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+  var BASE_FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  // Resumed sign-in and the camp this session is "in," both read
+  // synchronously before the first fetch — Mark, 2026-09-18: "not
+  // having to select a lodge each time you want to access one of the
+  // tasks." Picked once on the Base Dashboard, then carried
+  // automatically here. Only ever meaningful for someone with real
+  // multi-camp access; an ordinary single-camp person's fetches carry
+  // no location_id at all, and every server function already defaults
+  // to Chobe when that's missing (root D-025) — nothing changes for
+  // them.
+  var me = null;
+  try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+  function currentCamp() {
+    try {
+      var saved = sessionStorage.getItem("bw_camp");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) { return null; }
+  }
+  var camp = currentCamp();
+  var CAMP_PARAM = (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+  var FN = BASE_FN + "?action=dashboard" + CAMP_PARAM;
+  var lastData = null;
+  // Mark, 2026-09-11: "default must be newest to oldest". For a schedule
+  // "newest" is the furthest-away due date, so upcoming work sorts above
+  // overdue work — his call, and the other option puts it back.
+  var direction = "newest";
+  var from = "", to = "";
+  var kind = "";   // "" all · room · vehicle · recurring
+  var mine = false, filterDept = "", filterPerson = "";
+  var people = [], departments = [], areas = [], boot_vehicles = [];
+  var VEHICLE_AREA_ID = null, addForVehicle = null;
+  function isVehicleArea(id) { return !!id && id === VEHICLE_AREA_ID; }
+  function vehLabel(id) {
+    var v = boot_vehicles.filter(function (x) { return x.id === id; })[0];
+    return v ? (v.registration || v.label) : "";
+  }
+  var handovers = [], handoverPeople = [], raisingHandover = false, signingId = null;
+  // The outgoing person's own completed checklist, fetched read-only
+  // once signing starts — per Mark, 2026-09-17: "the new person [does
+  // not know] how to do a full check without having a view of a
+  // checklist when signing off... could it open the original check
+  // sheet from the person who did the first check." Not a second
+  // checklist to fill in — see handoversSection()'s own comment.
+  var signChecklist = null, signChecklistLoading = false;
+  // The same reference view, reopenable any time after signing — per
+  // Mark, 2026-09-17: "now when i sign off on it - i want to be able
+  // to see the history of the handover so i can easily see the faults
+  // that each person found." A separate id/cache from signChecklist
+  // (above) on purpose — signing and reviewing history can't share one
+  // state without one clobbering the other.
+  var handoverHistoryFor = null, handoverHistoryChecklist = null, handoverHistoryLoading = false;
+  var rules = [], showRules = false, showRemoved = false, editingId = null, completingId = null, historyFor = null, historyRows = [];
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function badgeText(s) { return s === "overdue" ? "Overdue" : s === "due_soon" ? "Due" : "Upcoming"; }
+  function dueText(s) {
+    var d = new Date(s.due_date);
+    var when = d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    if (s.days_until < 0) return "was due " + when + " (" + Math.abs(s.days_until) + " days ago)";
+    if (s.days_until === 0) return "due today, " + when;
+    return "due " + when + " (in " + s.days_until + " days)";
+  }
+  // Which kind of obligation this is, read off the name the API builds.
+  function kindOf(s) {
+    if (s.name.indexOf("Room Inspection") === 0) return "room";
+    // A Handover is still a vehicle's own obligation — grouped with the
+    // ordinary daily check under "Vehicle checks" so filtering by kind
+    // shows everything due on a vehicle together. card() gives it its
+    // own badge so the two are never mistaken for each other. Missed
+    // before today: a Handover fell through to "recurring maintenance"
+    // instead, unnoticed until Mark asked to tell them apart.
+    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0) return "vehicle";
+    return "recurring";
+  }
+  function kindLabel(k) {
+    return k === "room" ? "Room inspections" : k === "vehicle" ? "Vehicle checks" : "Recurring maintenance";
+  }
+
+  window.onDirection = function () { direction = document.getElementById("direction").value; render(); };
+  window.onRange = function () {
+    from = document.getElementById("from").value; to = document.getElementById("to").value; render();
+  };
+  window.onKind = function () { kind = document.getElementById("kind").value; render(); };
+  window.clearRange = function () { from = ""; to = ""; render(); };
+  window.signOut = function () {
+    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_camp");
+    location.href = "./";
+  };
+  function showSignedIn() {
+    document.getElementById("whoName").textContent = me.name;
+    if (camp && me.locations && me.locations.length > 1) {
+      document.getElementById("campName").textContent = camp.name;
+      document.getElementById("campLine").hidden = false;
+      document.getElementById("campTitle").textContent = camp.name;
+    }
+    render();
+  }
+  window.onMine = function () { mine = document.getElementById("mine").checked; render(); };
+  // The three functions this page used to own for the sign-in picker
+  // itself — onWhoDept/renderWhoOptions/doWhoSetPin/doWhoLogin — moved
+  // to the landing page (index.html), the sole place sign-in happens
+  // now. This page's own copy is gone; see the comment above whoRow.
+  window.onFilterDept = function () {
+    filterDept = document.getElementById("fDept").value; filterPerson = ""; mine = false; render();
+  };
+  window.onFilterPerson = function () {
+    filterPerson = document.getElementById("fPerson").value; filterDept = ""; mine = false; render();
+  };
+  window.clearWhoFilter = function () { filterDept = ""; filterPerson = ""; mine = false; render(); };
+  window.doAssignTask = function (taskId) {
+    var sel = document.getElementById("assign-" + taskId);
+    fetch(FN.replace("action=dashboard", "action=assign_task"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ task_id: taskId, assigned_department_id: sel.value || null, by_person_id: me && me.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      reload();
+    });
+  };
+
+  function render() {
+    var all = (lastData.schedules || []);
+    var shown = all.filter(function (s) {
+      if (kind && kindOf(s) !== kind) return false;
+      if (mine && me) {
+        var isMine = s.assigned_person_id === me.id ||
+          (me.department && s.assigned_department === me.department);
+        if (!isMine) return false;
+      }
+      // Unassigned is the one worth finding deliberately — work nobody
+      // owes is work nobody does. Mark, 2026-09-12.
+      if (filterDept === "__unassigned__") { if (s.assigned_department) return false; }
+      else if (filterDept && s.assigned_department !== filterDept) return false;
+      if (filterPerson && s.assigned_person_id !== filterPerson) return false;
+      var d = new Date(s.due_date);
+      if (from && d < new Date(from)) return false;
+      if (to && d > new Date(to + "T23:59:59")) return false;
+      return true;
+    }).sort(function (a, b) {
+      var da = new Date(a.due_date).getTime(), db = new Date(b.due_date).getTime();
+      return direction === "oldest" ? da - db : db - da;
+    });
+
+    var overdue = shown.filter(function (s) { return s.status === "overdue"; }).length;
+    var html = '<p class="order-note">Only what is coming up. Anything further off lives in Schedules below. ' +
+      all.length + " showing" +
+      (overdue ? " · " + overdue + " of those shown " + (overdue === 1 ? "is" : "are") + " overdue" : "") + '.</p>';
+
+    html += '<div class="filters">';
+
+    html += '<div class="filter-section"><div class="title">Order</div>' +
+      '<label>By due date</label><select id="direction" onchange="onDirection()">' +
+      '<option value="newest"' + (direction === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
+      '<option value="oldest"' + (direction === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
+      '</select>' +
+      '<label>Custom date range (optional)</label>' +
+      '<div class="daterange">' +
+      '<input type="date" id="from" value="' + esc(from) + '" onchange="onRange()">' +
+      '<span>to</span>' +
+      '<input type="date" id="to" value="' + esc(to) + '" onchange="onRange()">' +
+      '</div>' +
+      ((from || to) ? '<p class="order-note" style="margin-top:8px"><a href="#" onclick="clearRange();return false;">Clear the range</a></p>' : "") +
+      '</div>';
+
+    // Who it belongs to — Mark, 2026-09-12: "instead of a Mine option we
+    // need some filters. Mine - Department - Person. This way we can
+    // filter with respect to department. important for meetings to be
+    // able to easily instruct each department what is on their schedule
+    // for the day."
+    html += '<div class="filter-section"><div class="title">Who</div>';
+    if (me) {
+      html += '<label class="check">' +
+        '<input type="checkbox" id="mine" onchange="onMine()"' + (mine ? " checked" : "") + '>' +
+        'Mine — me or ' + esc(me.department || "my department") + '</label>';
+    }
+    var unassignedCount = all.filter(function (x) { return !x.assigned_department; }).length;
+    html += '<label>Department</label><select id="fDept" onchange="onFilterDept()">' +
+      '<option value="">All departments</option>' +
+      '<option value="__unassigned__"' + (filterDept === "__unassigned__" ? " selected" : "") + '>' +
+        'Unassigned' + (unassignedCount ? " (" + unassignedCount + ")" : "") + '</option>' +
+      departments.map(function (d) {
+        return '<option value="' + esc(d.name) + '"' + (filterDept === d.name ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select>';
+    html += '<label>Person</label><select id="fPerson" onchange="onFilterPerson()">' +
+      '<option value="">Anyone</option>' +
+      people.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (filterPerson === p.id ? " selected" : "") + '>' +
+          esc(p.name) + (p.department ? " · " + esc(p.department) : "") + '</option>';
+      }).join("") + '</select>';
+    if (mine || filterDept || filterPerson) {
+      html += '<p class="order-note" style="margin-top:8px"><a href="#" onclick="clearWhoFilter();return false;">Show everything again</a></p>';
+    }
+    html += '</div>';
+
+    html += '<div class="filter-section"><div class="title">Kind</div>' +
+      '<label>Show</label><select id="kind" onchange="onKind()">' +
+      '<option value=""' + (!kind ? " selected" : "") + '>Everything</option>' +
+      '<option value="room"' + (kind === "room" ? " selected" : "") + '>Room inspections</option>' +
+      '<option value="vehicle"' + (kind === "vehicle" ? " selected" : "") + '>Vehicle checks</option>' +
+      '<option value="recurring"' + (kind === "recurring" ? " selected" : "") + '>Recurring maintenance</option>' +
+      '</select></div>';
+
+    html += '</div>'; // .filters
+
+    html += '<h2>Due <span class="count">' + shown.length +
+      (shown.length !== all.length ? " of " + all.length : "") + '</span></h2>';
+
+    if (!shown.length) {
+      html += '<p class="empty">' + (all.length ? "Nothing in that filter." : "Nothing scheduled yet.") + '</p>';
+    }
+
+    // Grouped by kind unless one kind is already chosen, so the three
+    // sorts of obligation don't interleave into one undifferentiated
+    // list — a room inspection before an arrival and a six-monthly
+    // borehole test are not the same sort of job.
+    if (kind) {
+      shown.forEach(function (s) { html += card(s); });
+    } else {
+      ["room", "vehicle", "recurring"].forEach(function (k) {
+        var inKind = shown.filter(function (s) { return kindOf(s) === k; });
+        if (!inKind.length) return;
+        html += '<div class="group"><p class="heading">' + kindLabel(k) + " (" + inKind.length + ")</p>";
+        inKind.forEach(function (s) { html += card(s); });
+        html += "</div>";
+      });
+    }
+    html += '<div style="margin-top:28px"></div>' + handoversSection();
+    html += '<div style="margin-top:28px"></div>' + rulesSection();
+
+    document.getElementById("app").innerHTML = html;
+    if (document.getElementById("f_arrives")) { onLead(); onKindPick(); }
+  }
+
+  // The six date intervals Mark named, plus a free one for anything else.
+  var PRESETS = [
+    ["1|days", "Daily"], ["1|weeks", "Weekly"], ["1|months", "Monthly"],
+    ["3|months", "Every 3 months"], ["6|months", "Every 6 months"], ["1|years", "Annually"],
+  ];
+
+  window.toggleRules = function () { showRules = !showRules; render(); };
+  // Removed schedules are out of the way by default and reachable on
+  // purpose — Mark, 2026-09-12: "if a schedule is deleted or removed -
+  // then i want it to fall out of the visible list. we can have an
+  // option to view 'removed schedules' if we want to see them."
+  window.toggleRemoved = function () { showRemoved = !showRemoved; render(); };
+  window.startEdit = function (id) { editingId = id; historyFor = null; render(); };
+  window.cancelEdit = function () { editingId = null; render(); };
+  window.startAdd = function () { editingId = "__new__"; addForVehicle = null; render(); };
+  // Straight from a vehicle that has none — the form opens already
+  // pointed at it, on a km interval, which is what it is always for.
+  window.startAddFor = function (vehicleId) { editingId = "__new__"; addForVehicle = vehicleId; render(); };
+
+  window.showHistory = function (id) {
+    if (historyFor === id) { historyFor = null; render(); return; }
+    fetch(FN.replace("action=dashboard", "action=schedule_history") + "&schedule=" + id)
+      .then(function (r) { return r.json(); })
+      .then(function (out) { historyFor = id; historyRows = out.history || []; render(); });
+  };
+
+  function formValues() {
+    var kind = document.getElementById("f_kind").value;
+    var body = {
+      by_person_id: me && me.id,
+      // A new rule belongs to whichever camp is currently entered —
+      // Mark, 2026-09-18: "When a Base Manager enters Khwai - he must
+      // be editing or creating in Khwai - not in Chobe." Unused by
+      // updateSchedule (a rule's camp is fixed at creation), harmless
+      // to send either way.
+      location_id: camp ? camp.id : null,
+      name: document.getElementById("f_name").value,
+      interval_kind: kind,
+      default_department_id: document.getElementById("f_dept").value || null,
+      area_id: document.getElementById("f_area").value || null,
+      target_vehicle_id: (kind !== "date" || isVehicleArea(document.getElementById("f_area").value))
+        ? (document.getElementById("f_vehicle").value || null) : null,
+    };
+    if (kind === "date") {
+      body.reminder_days = document.getElementById("f_lead").value === "" ? null : leadInDays();
+      body.next_due_date = document.getElementById("f_firstdue").value || null;
+    } else {
+      var mr = document.getElementById("f_meterreminder").value;
+      body.meter_reminder = mr === "" ? null : Number(mr);
+    }
+    if (kind === "date") {
+      var preset = document.getElementById("f_preset").value;
+      if (preset === "__custom__") {
+        body.recurrence_interval = document.getElementById("f_num").value;
+        body.recurrence_unit = document.getElementById("f_unit").value;
+      } else {
+        body.recurrence_interval = preset.split("|")[0];
+        body.recurrence_unit = preset.split("|")[1];
+      }
+    } else {
+      body.meter_interval = document.getElementById("f_meter").value;
+    }
+    return body;
+  }
+
+  window.saveRule = function (id, btn) {
+    if (saving) return;
+    var body = formValues();
+    // Mark, 2026-09-12: "a schedule cannot be saved until an alert rule
+    // is inserted." A schedule nobody is warned about is one nobody does.
+    if (body.interval_kind === "date" ? body.reminder_days == null : body.meter_reminder == null) {
+      alert("Set an alert first — how far before it is due you want to be told. A schedule with no alert is one nobody hears about.");
+      return;
+    }
+    // Every vehicle has its own servicing schedule now, so one measured
+    // in km or hours has to say whose meter it is measuring.
+    if (body.interval_kind !== "date" && !body.target_vehicle_id) {
+      alert("Choose which vehicle this schedule is for. Different vehicles have different servicing intervals, so each one carries its own.");
+      return;
+    }
+    // The catchall, alongside the alert — Mark, 2026-09-12: "no schedule
+    // gets captured without adding an alert or department."
+    if (!body.default_department_id) {
+      alert("Say which department this belongs to. Work nobody owes is work nobody does.");
+      return;
+    }
+    saving = true;
+    if (btn) btn.disabled = true;
+    var action = id === "__new__" ? "create_schedule" : "update_schedule";
+    if (id !== "__new__") body.schedule_id = id;
+    fetch(FN.replace("action=dashboard", "action=" + action), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      saving = false;
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      editingId = null;
+      reload();
+    }).catch(function (e) { saving = false; if (btn) btn.disabled = false; alert(e); });
+  };
+
+  window.archiveRule = function (id, restore) {
+    if (!restore && !confirm("Remove this schedule? It stops raising anything, but it is kept with its full history and can be restored.")) return;
+    fetch(FN.replace("action=dashboard", "action=archive_schedule"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ schedule_id: id, restore: !!restore, by_person_id: me && me.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      reload();
+    });
+  };
+
+  window.startComplete = function (id) { completingId = id; editingId = null; render(); };
+  window.cancelComplete = function () { completingId = null; render(); };
+  var saving = false;
+  window.saveComplete = function (id, btn) {
+    if (saving) return;
+    var notes = document.getElementById("c_notes").value;
+    if (!notes.trim()) { alert("Say what was done — the note is the only record of this work."); return; }
+    saving = true;
+    if (btn) { btn.disabled = true; btn.textContent = "Recording…"; }
+    fetch(FN.replace("action=dashboard", "action=complete_schedule"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schedule_id: id, by_person_id: me && me.id,
+        completed_on: document.getElementById("c_date").value,
+        notes: notes,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      saving = false;
+      if (out.error) {
+        alert(out.error);
+        if (btn) { btn.disabled = false; btn.textContent = "Record as complete"; }
+        return;
+      }
+      completingId = null;
+      reload();
+    }).catch(function (e) {
+      saving = false;
+      if (btn) { btn.disabled = false; btn.textContent = "Record as complete"; }
+      alert(e);
+    });
+  };
+
+  function completeForm(rule) {
+    var today = new Date().toISOString().slice(0, 10);
+    return '<div class="form">' +
+      '<label>Completed on</label><input type="date" id="c_date" value="' + today + '">' +
+      '<p class="rmeta" style="margin-top:4px">When the work actually happened, which is often not today.</p>' +
+      '<label>What was done</label>' +
+      '<textarea id="c_notes" rows="3" placeholder="e.g. Borehole water test complete — tested 14/5/2026, results back from Kasane Lab"></textarea>' +
+      '<p class="rmeta" style="margin-top:4px">There is no checklist behind this schedule, so this note is the whole record.</p>' +
+      '<div class="racts"><button onclick="saveComplete(\'' + rule.id + '\', this)">Record as complete</button>' +
+      '<button onclick="cancelComplete()">Cancel</button></div></div>';
+  }
+
+  function ruleForm(rule) {
+    var isNew = !rule;
+    var kind = isNew ? (addForVehicle ? "km" : "date") : (rule.interval_kind || "date");
+    var presetKey = !isNew && rule.trigger === "recurring"
+      ? rule.recurrence_interval + "|" + rule.recurrence_unit : "1|months";
+    var known = PRESETS.some(function (p) { return p[0] === presetKey; });
+
+    var h = '<div class="form">' +
+      '<label>Name</label><input type="text" id="f_name" value="' + esc(isNew ? "" : rule.name) + '" placeholder="e.g. Generator service">' +
+      '<label>Interval</label><select id="f_kind" onchange="onKindPick()">' +
+      '<option value="date"' + (kind === "date" ? " selected" : "") + '>By date</option>' +
+      '<option value="hours"' + (kind === "hours" ? " selected" : "") + '>By hours run</option>' +
+      '<option value="km"' + (kind === "km" ? " selected" : "") + '>By kilometres</option>' +
+      '</select>' +
+      '<div id="f_date" ' + (kind === "date" ? "" : "hidden") + '>' +
+        '<label>How often</label><select id="f_preset" onchange="onPresetPick()">' +
+        PRESETS.map(function (pr) {
+          return '<option value="' + pr[0] + '"' + (known && presetKey === pr[0] ? " selected" : "") + '>' + pr[1] + '</option>';
+        }).join("") +
+        '<option value="__custom__"' + (!known && !isNew && rule.trigger === "recurring" ? " selected" : "") + '>Something else…</option>' +
+        '</select>' +
+        '<div id="f_customrow" class="row2" style="margin-top:8px" ' + ((!known && !isNew && rule.trigger === "recurring") ? "" : "hidden") + '>' +
+          '<input type="number" id="f_num" min="1" value="' + esc(isNew ? 1 : (rule.recurrence_interval || 1)) + '">' +
+          '<select id="f_unit">' + ["days", "weeks", "months", "years"].map(function (u) {
+            return '<option value="' + u + '"' + (!isNew && rule.recurrence_unit === u ? " selected" : "") + '>' + u + '</option>';
+          }).join("") + '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div id="f_meterrow" ' + (kind === "date" ? "hidden" : "") + '>' +
+        '<label>Every how many</label>' +
+        '<input type="number" id="f_meter" min="1" value="' + esc(isNew ? "" : (rule.meter_interval || "")) + '" placeholder="e.g. 100">' +
+      '</div>' +
+      // Mark, 2026-09-12: "we need to be able to indicate when we want
+      // the schedule to arrive onto the Due list, which will also trigger
+      // the first alert" — and then, on what that lead looks like: "so
+      // this would be - 1 week before, or 500km before, or 10hrs before".
+      //
+      // So the lead is asked for in the SAME units as the interval. A
+      // date schedule takes a first-due date and a lead in days or weeks;
+      // a usage-based one has no date at all, and its lead is in the very
+      // kilometres or hours it counts.
+      '<div id="f_daterow" ' + (kind === "date" ? "" : "hidden") + '>' +
+        '<label>First due on</label>' +
+        '<input type="date" id="f_firstdue" onchange="onLead()" value="' +
+          esc(isNew ? new Date().toISOString().slice(0,10)
+                    : (rule.next_due_date ? rule.next_due_date.slice(0,10) : "")) + '">' +
+        '<label>Alert — how far before it is due?</label>' +
+        '<div class="row2">' +
+          '<input type="number" id="f_lead" min="0" oninput="onLead()" value="' +
+            esc(isNew ? "" : leadNumber(rule)) + '" placeholder="e.g. 1">' +
+          '<select id="f_leadunit" onchange="onLead()">' +
+            ["days","weeks","months"].map(function (u) {
+              return '<option value="' + u + '"' + (leadUnit(rule) === u ? " selected" : "") + '>' + u + '</option>';
+            }).join("") +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div id="f_meterlead" ' + (kind === "date" ? "hidden" : "") + '>' +
+        '<label>Alert — how far before it is due?</label>' +
+        '<div class="row2">' +
+          '<input type="number" id="f_meterreminder" min="0" oninput="onLead()" value="' +
+            esc(isNew ? "" : (rule.meter_reminder == null ? "" : rule.meter_reminder)) + '" placeholder="e.g. 500">' +
+          '<input type="text" id="f_meterleadunit" value="' + esc(kind === "hours" ? "hours" : "km") + '" disabled>' +
+        '</div>' +
+      '</div>' +
+      '<p class="rmeta" style="margin-top:4px" id="f_arrives"></p>' +
+      // Mark, 2026-09-12: schedules group by area and target, and
+      // "For vehicles i would actually like a drop down menu to be able
+      // to seclect the vehicle that we want to apply a schedule to. This
+      // is the only area that will need this function." So the vehicle
+      // picker appears only when the area is Vehicles — nothing else
+      // needs one, and offering one everywhere would invite a schedule
+      // pinned to a room that should apply to all of them.
+      '<label>Maintenance area</label><select id="f_area" onchange="onAreaPick()">' +
+      '<option value="">Camp-wide — no one area</option>' +
+      areas.map(function (a) {
+        // Adding straight from a vehicle preselects Vehicles, so the
+        // picker below is already showing when the form opens.
+        var sel = isNew ? (!!addForVehicle && a.id === VEHICLE_AREA_ID) : (rule.area_id === a.id);
+        return '<option value="' + esc(a.id) + '"' + (sel ? " selected" : "") + '>' + esc(a.name) + '</option>';
+      }).join("") + '</select>' +
+      '<div id="f_vehrow" ' + ((kind !== "date" || isVehicleArea(isNew ? null : rule.area_id)) ? "" : "hidden") + '>' +
+        '<label>Which vehicle?</label><select id="f_vehicle">' +
+        '<option value="">Choose a vehicle…</option>' +
+        (boot_vehicles || []).map(function (v) {
+          var sel = isNew ? (addForVehicle === v.id) : (rule.target_vehicle_id === v.id);
+          return '<option value="' + esc(v.id) + '"' + (sel ? " selected" : "") + '>' + esc(v.label) + '</option>';
+        }).join("") + '</select>' +
+      '</div>' +
+      '<label>Which department does this belong to?</label><select id="f_dept">' +
+      '<option value="">Choose a department…</option>' +
+      departments.map(function (d) {
+        // Servicing is Management's — they book the workshop and pay for
+        // it (Mark, 2026-09-12). Preselected on a km or hours schedule,
+        // not forced: a camp that services its own can change it.
+        var sel = isNew
+          ? (kind !== "date" && d.name === "Management")
+          : (rule.default_department_id === d.id);
+        return '<option value="' + esc(d.id) + '"' + (sel ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select>' +
+      '<p class="rmeta" style="margin-top:4px" id="f_depthint"></p>' +
+      '<div class="racts"><button onclick="saveRule(\'' + (isNew ? "__new__" : rule.id) + '\', this)">Save changes</button>' +
+      '<button onclick="cancelEdit()">Discard changes</button>' +
+      (isNew ? "" : '<button class="danger" onclick="archiveRule(\'' + rule.id + '\')">Delete schedule</button>') +
+      '</div></div>';
+    return h;
+  }
+
+  window.onKindPick = function () {
+    var k = document.getElementById("f_kind").value;
+    document.getElementById("f_date").hidden = k !== "date";
+    document.getElementById("f_meterrow").hidden = k === "date";
+    document.getElementById("f_daterow").hidden = k !== "date";
+    document.getElementById("f_meterlead").hidden = k === "date";
+    document.getElementById("f_meterleadunit").value = k === "hours" ? "hours" : "km";
+    var dh = document.getElementById("f_depthint");
+    if (dh) dh.textContent = k === "date" ? ""
+      : "Servicing is normally Management's — they arrange and pay for it.";
+    // A meter-based schedule is always about one machine, so the picker
+    // shows regardless of what the area box says, and the area follows.
+    var vr = document.getElementById("f_vehrow");
+    if (vr) vr.hidden = (k === "date") && !isVehicleArea(document.getElementById("f_area").value);
+    if (k !== "date" && VEHICLE_AREA_ID) document.getElementById("f_area").value = VEHICLE_AREA_ID;
+    onLead();
+  };
+  // Spell out the arrival date rather than leaving it to be worked out.
+  function leadNumber(rule) {
+    var d = rule && rule.reminder_days;
+    if (d == null) return "";
+    if (d % 30 === 0 && d >= 30) return d / 30;
+    if (d % 7 === 0 && d >= 7) return d / 7;
+    return d;
+  }
+  function leadUnit(rule) {
+    var d = rule && rule.reminder_days;
+    if (d == null) return "days";
+    if (d % 30 === 0 && d >= 30) return "months";
+    if (d % 7 === 0 && d >= 7) return "weeks";
+    return "days";
+  }
+  function leadInDays() {
+    var n = Number(document.getElementById("f_lead").value || 0);
+    var u = document.getElementById("f_leadunit").value;
+    return u === "weeks" ? n * 7 : u === "months" ? n * 30 : n;
+  }
+
+  window.onLead = function () {
+    var el2 = document.getElementById("f_arrives");
+    if (!el2) return;
+    var k = document.getElementById("f_kind").value;
+    if (k !== "date") {
+      var m = document.getElementById("f_meterreminder").value;
+      var unit = k === "hours" ? "hours" : "km";
+      el2.textContent = m
+        ? "Alerts and appears on the Due list " + Number(m).toLocaleString() + " " + unit + " before it is due."
+        : "Required — how far ahead to alert. 500 km or 10 hours is usual.";
+      return;
+    }
+    var d = document.getElementById("f_firstdue").value;
+    var lead = leadInDays();
+    if (!d) { el2.textContent = "Required — how far ahead to alert. A six-monthly job wants about a month; a weekly one, a couple of days."; return; }
+    var arrive = new Date(d + "T00:00:00");
+    arrive.setDate(arrive.getDate() - lead);
+    el2.textContent = lead
+      ? "Alerts and appears on the Due list from " +
+        arrive.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + "."
+      : "Required — set how far ahead to alert.";
+  };
+
+
+  window.onAreaPick = function () {
+    var row = document.getElementById("f_vehrow");
+    var k = document.getElementById("f_kind").value;
+    if (row) row.hidden = (k === "date") && !isVehicleArea(document.getElementById("f_area").value);
+  };
+
+  window.onPresetPick = function () {
+    document.getElementById("f_customrow").hidden = document.getElementById("f_preset").value !== "__custom__";
+  };
+
+  // -- Handovers -------------------------------------------------------
+  // One checklist, two signatures. Shown as their own section because a
+  // handover is an event with a person waiting on it, not a rule.
+  window.startRaiseHandover = function () { raisingHandover = true; signingId = null; render(); };
+  window.cancelHandover = function () { raisingHandover = false; signingId = null; signChecklist = null; render(); };
+  window.startSign = function (id) {
+    signingId = id; raisingHandover = false; signChecklist = null; render();
+    var ho = handovers.filter(function (h) { return h.id === id; })[0];
+    if (!ho || !ho.inspection_id) return;
+    signChecklistLoading = true;
+    fetch(FN.replace("action=dashboard", "action=handover_checklist") + "&inspection=" + encodeURIComponent(ho.inspection_id))
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        signChecklistLoading = false;
+        if (!out.error) signChecklist = out.sections;
+        render();
+      });
+  };
+
+  window.toggleHandoverHistory = function (id) {
+    if (handoverHistoryFor === id) { handoverHistoryFor = null; render(); return; }
+    handoverHistoryFor = id; handoverHistoryChecklist = null; render();
+    var ho = handovers.filter(function (h) { return h.id === id; })[0];
+    if (!ho || !ho.inspection_id) return;
+    handoverHistoryLoading = true;
+    fetch(FN.replace("action=dashboard", "action=handover_checklist") + "&inspection=" + encodeURIComponent(ho.inspection_id))
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        handoverHistoryLoading = false;
+        if (!out.error) handoverHistoryChecklist = out.sections;
+        render();
+      });
+  };
+
+  window.doRaiseHandover = function (btn) {
+    if (btn) btn.disabled = true;
+    fetch(FN.replace("action=dashboard", "action=raise_handover"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        by_person_id: me && me.id,
+        vehicle_id: document.getElementById("ho_vehicle").value,
+        from_person_id: document.getElementById("ho_from").value,
+        to_person_id: document.getElementById("ho_to").value,
+        handover_on: document.getElementById("ho_on").value,
+        to_location_id: document.getElementById("ho_lodge").value || null,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      raisingHandover = false; reload();
+    });
+  };
+
+  window.doSign = function (id, btn) {
+    if (btn) btn.disabled = true;
+    fetch(FN.replace("action=dashboard", "action=receive_handover"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ handover_id: id, by_person_id: me && me.id,
+                             notes: document.getElementById("ho_notes").value }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      if (out.transferred) {
+        alert("Signed. The vehicle has moved lodge, taking " + out.transferred.issues +
+              " open fault(s), " + out.transferred.schedules + " schedule(s) and " +
+              out.transferred.checks + " open check(s) with it.");
+      }
+      signingId = null; signChecklist = null; reload();
+    });
+  };
+
+  function personOptions(sel) {
+    return handoverPeople.map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (sel === p.id ? " selected" : "") + '>' +
+        esc(p.name) + (p.department ? " · " + esc(p.department) : "") +
+        (p.lodge ? " · " + esc(p.lodge) : "") + '</option>';
+    }).join("");
+  }
+
+  function handoverForm() {
+    var today = new Date().toISOString().slice(0, 10);
+    return '<div class="form">' +
+      '<label>Vehicle</label><select id="ho_vehicle">' +
+      boot_vehicles.map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.label) + '</option>'; }).join("") +
+      '</select>' +
+      '<label>Handed over by</label><select id="ho_from"><option value="">Choose…</option>' + personOptions(null) + '</select>' +
+      '<label>Received by</label><select id="ho_to"><option value="">Choose…</option>' + personOptions(null) + '</select>' +
+      '<label>On</label><input type="date" id="ho_on" value="' + today + '">' +
+      '<label>Ending up at</label><select id="ho_lodge">' +
+      '<option value="">Staying at this lodge</option>' +
+      (lastData.locations || []).map(function (l) {
+        return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>';
+      }).join("") + '</select>' +
+      '<p class="rmeta" style="margin-top:4px">If it ends up at a different lodge, signing for it moves the vehicle there — ' +
+      'with its open faults, schedules and open checks.</p>' +
+      '<div class="racts"><button onclick="doRaiseHandover(this)">Raise handover</button>' +
+      '<button onclick="cancelHandover()">Cancel</button></div></div>';
+  }
+
+  // Read-only, every item — the outgoing person's own completed
+  // checklist, so the incoming person can actually see what they're
+  // accepting instead of being asked to sign blind. A flagged item
+  // reads the same way it does everywhere else (label — fault type —
+  // action); everything else reads as checked and fine, per D-023's
+  // own exception-only recording — an item with nothing wrong was
+  // never a row to begin with, so "not flagged" IS "fine".
+  function signChecklistHtml(sections) {
+    var h = '<div class="sign-checklist">';
+    sections.forEach(function (s) {
+      h += '<p class="sc-section">' + esc(s.name) + '</p>';
+      s.items.forEach(function (i) {
+        if (i.flagged) {
+          h += '<p class="sc-item flagged">✗ ' + esc(i.text) +
+            (i.flagged.fault_type ? ' — <span class="fault">' + esc(i.flagged.fault_type) + '</span>' : '') +
+            (i.flagged.action ? ' — ' + esc(i.flagged.action) : '') + '</p>';
+        } else {
+          h += '<p class="sc-item">✓ ' + esc(i.text) + '</p>';
+        }
+      });
+    });
+    return h + '</div>';
+  }
+
+  function handoversSection() {
+    var open = handovers.filter(function (h) { return h.stage !== "done"; });
+    var h = '<h2>Handovers <span class="count">' + open.length + " open</span></h2>";
+    h += '<p class="order-note">One checklist, two signatures. The check stays open until the person receiving the vehicle has signed for it.</p>';
+
+    if (me && me.is_manager && !raisingHandover) {
+      h += '<div class="racts" style="margin-top:8px"><button onclick="startRaiseHandover()">+ Raise a handover</button></div>';
+    }
+    if (raisingHandover) h += handoverForm();
+
+    handovers.slice(0, 20).forEach(function (x) {
+      // Both parties, each with their own status — not one combined
+      // sentence. Per Mark, 2026-09-16: "show both parties that need
+      // to check, and highlight when one has checked and the other is
+      // still outstanding." handed_over_at/received_at are exactly
+      // that per-person signature, already tracked, just not shown
+      // this plainly before.
+      var fromDone = !!x.handed_over_at, toDone = !!x.received_at;
+      h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + '">' +
+        '<p class="rname">' + esc(x.vehicle) + '</p>' +
+        '<p class="ho-parties">' +
+          '<span class="who' + (fromDone ? "" : " pending") + '">' + esc(x.from) + (fromDone ? " ✓ checked" : " — outstanding") + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="who' + (toDone ? "" : " pending") + '">' + esc(x.to) + (toDone ? " ✓ checked" : " — outstanding") + '</span>' +
+        '</p>' +
+        '<p class="rmeta">' + esc(x.on) +
+          (x.moves_lodge ? " · " + esc(x.from_lodge) + " → " + esc(x.to_lodge) : "") + '</p>';
+      // What the outgoing person actually flagged, shown right here —
+      // per Mark, 2026-09-17: "how does the person recieving the
+      // vehicle check what faults were identified... is that only
+      // visible in the to-do list?" Until this, yes. Shown to whoever
+      // is looking, not gated behind starting to sign, since the whole
+      // point is deciding whether to sign in the first place.
+      // Which checklist line, what kind of fault, what was actually
+      // written down — Mark's own correction: "it just says damged -
+      // it does not reflect what was marked as damaged... it was for
+      // the Body - and it was damaged - Front Left Fender." The same
+      // label — fault type — action shape the to-do list already uses.
+      if (x.faults && x.faults.length) {
+        h += x.faults.map(function (f) {
+          return '<p class="ho-faults">' + esc(f.label) +
+            (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
+            (f.action ? ' — ' + esc(f.action) : '') +
+            (f.status === "resolved" ? ' <span class="fault" style="background:#D9E6DC;color:#2F6B45">fixed</span>' : '') +
+            '</p>';
+        }).join("");
+      } else if (x.handed_over_at) {
+        h += '<p class="order-note" style="margin:4px 0 0">Nothing flagged — checked clean.</p>';
+      }
+      // What the incoming person themselves noted on accepting it —
+      // its own clearly-labelled line, not tucked into the date meta
+      // where it was easy to miss.
+      if (x.received_notes) {
+        h += '<p class="ho-faults">' + esc(x.to) + ' noted: “' + esc(x.received_notes) + '”</p>';
+      }
+      // Reopenable any time, not just while signing — per Mark,
+      // 2026-09-17: "now when i sign off on it - i want to be able to
+      // see the history of the handover so i can easily see the
+      // faults that each person found." Reuses the exact same
+      // read-only checklist view Sign for it already shows.
+      if (x.inspection_id) {
+        h += '<div class="racts" style="margin-top:8px"><button onclick="toggleHandoverHistory(\'' + x.id + '\')">' +
+          (handoverHistoryFor === x.id ? "Hide history" : "History") + '</button></div>';
+      }
+      if (handoverHistoryFor === x.id) {
+        h += handoverHistoryLoading ? '<p class="loading">Loading the checklist…</p>'
+           : handoverHistoryChecklist ? signChecklistHtml(handoverHistoryChecklist)
+           : "";
+      }
+      if (signingId === x.id) {
+        h += '<div class="form">' +
+          (signChecklistLoading ? '<p class="loading">Loading the checklist…</p>' : "") +
+          (signChecklist ? signChecklistHtml(signChecklist) : "") +
+          '<label>Anything to note on accepting it</label>' +
+          '<textarea id="ho_notes" rows="2" placeholder="Faults you disagree with should be flagged on the checklist itself"></textarea>' +
+          '<div class="racts"><button onclick="doSign(\'' + x.id + '\', this)">Sign for it</button>' +
+          '<button onclick="cancelHandover()">Cancel</button></div></div>';
+      } else if (x.stage === "awaiting_receipt" && me && me.id === x.to_person_id) {
+        h += '<div class="racts"><button onclick="startSign(\'' + x.id + '\')">Sign for it</button></div>';
+      }
+      h += '</div>';
+    });
+    return h;
+  }
+
+  function rulesSection() {
+    var live = rules.filter(function (r) { return !r.archived; }).length;
+    // Collapsed by default — Mark, 2026-09-12: "We can actually collapse
+    // this whole section and just have it visible when we open it." These
+    // are settings, not the day's work, and they were crowding out the
+    // list people actually open this page to read.
+    var h = '<h2 style="cursor:pointer" onclick="toggleRules()">' +
+      (showRules ? "▾" : "▸") + ' Schedules <span class="count">' + live +
+      (showRules ? "" : " — tap to open") + '</span></h2>';
+    if (!showRules) return h;
+
+    h += '<p class="order-note">The rules themselves, not what is due off them. ' +
+      'Editing, adding and removing happen here; completing happens above, beside the thing that is due. ' +
+      (me && me.is_manager ? "" : "Management can add, edit and remove these.") + '</p>';
+    if (me && me.is_manager && editingId !== "__new__") {
+      h += '<div class="racts" style="margin-top:8px"><button onclick="startAdd()">+ Add a schedule</button></div>';
+    }
+    if (editingId === "__new__") h += ruleForm(null);
+
+    // Grouped by maintenance area, then by target within it, which is
+    // the same Area -> Target shape the to-do list and Fix a Fault use.
+    // Camp-wide (no area) sorts last rather than alphabetically among
+    // real area names.
+    var removedCount = rules.filter(function (r) { return r.archived; }).length;
+    var visible = showRemoved ? rules : rules.filter(function (r) { return !r.archived; });
+
+    if (removedCount) {
+      h += '<p class="order-note" style="margin-top:6px">' +
+        '<a href="#" onclick="toggleRemoved();return false;">' +
+        (showRemoved ? "Hide" : "View") + " " + removedCount + " removed schedule" +
+        (removedCount === 1 ? "" : "s") + '</a></p>';
+    }
+
+    var byArea = {};
+    visible.forEach(function (r) {
+      var a = r.area || "Camp-wide";
+      (byArea[a] = byArea[a] || []).push(r);
+    });
+    var areaNames = Object.keys(byArea).sort(function (a, b) {
+      if (a === "Camp-wide" && b !== "Camp-wide") return 1;
+      if (b === "Camp-wide" && a !== "Camp-wide") return -1;
+      return a.localeCompare(b);
+    });
+
+    // Vehicles is rendered differently from every other area: as the
+    // WHOLE vehicle list, always, one block per vehicle in registration
+    // order — Mark, 2026-09-12: "once a schedule has been committed on a
+    // vehicle it must remain visible. so we need the whole vehicle list
+    // present - those that have been allocated and those unallocated."
+    //
+    // Grouping by schedule instead made a vehicle vanish out of the list
+    // the moment it got one, reappearing above as a row named after the
+    // schedule. The list he is working down is a list of VEHICLES, and it
+    // has to stay one.
+    if (boot_vehicles.length) {
+      // Archived ones are kept in the vehicle's block, greyed, so
+      // Restore stays reachable — everywhere else on this page a removed
+      // schedule is still visible, and a vehicle should be no different.
+      var vehSched = {};
+      (byArea["Vehicles"] || []).forEach(function (r) {
+        if (r.target_vehicle_id) (vehSched[r.target_vehicle_id] = vehSched[r.target_vehicle_id] || []).push(r);
+      });
+      var general = (byArea["Vehicles"] || []).filter(function (r) {
+        return !r.target_vehicle_id && !r.archived;
+      });
+      var liveFor = function (id) {
+        return (vehSched[id] || []).filter(function (r) { return !r.archived; });
+      };
+      var withCount = boot_vehicles.filter(function (v) { return liveFor(v.id).length; }).length;
+
+      h += '<div class="area-group"><p class="area-heading">Vehicles</p>';
+      h += '<p class="rmeta" style="margin:0 0 8px">' + withCount + ' of ' + boot_vehicles.length +
+        ' vehicles have a schedule.</p>';
+
+      general.forEach(function (r) { h += ruleRow(r); });
+
+      boot_vehicles.slice().sort(function (a, b) {
+        return (a.registration || a.label).localeCompare(b.registration || b.label, undefined, { numeric: true });
+      }).forEach(function (v) {
+        var mine = vehSched[v.id] || [];
+        h += '<div class="vehblock"><p class="vehname">' + esc(v.label) + '</p>';
+        if (!liveFor(v.id).length) {
+          // Removed ones appear here only while "View removed" is on.
+          mine.forEach(function (r) { h += ruleRow(r); });
+          h += '<div class="rule missing"><p class="rmeta">No schedule yet.</p>' +
+            (me && me.is_manager
+              ? '<div class="racts"><button onclick="startAddFor(\'' + v.id + '\')">+ Add a schedule</button></div>'
+              : "") + '</div>';
+        } else {
+          mine.sort(function (x, y) { return x.name.localeCompare(y.name); }).forEach(function (r) {
+            h += ruleRow(r);
+          });
+          if (me && me.is_manager) {
+            h += '<div class="racts" style="margin:4px 0 0"><button onclick="startAddFor(\'' + v.id +
+              '\')">+ Add another</button></div>';
+          }
+        }
+        h += '</div>';
+      });
+      h += '</div>';
+      areaNames = areaNames.filter(function (a) { return a !== "Vehicles"; });
+    }
+
+    areaNames.forEach(function (areaName) {
+      h += '<div class="area-group"><p class="area-heading">' + esc(areaName) + '</p>';
+      byArea[areaName].sort(function (x, y) {
+        var tx = x.target || "", ty = y.target || "";
+        if (tx !== ty) return tx.localeCompare(ty, undefined, { numeric: true });
+        return x.name.localeCompare(y.name);
+      }).forEach(function (r) { h += ruleRow(r); });
+      h += '</div>';
+    });
+    return h;
+  }
+
+  // One schedule, wherever it is being listed — inside a vehicle's block
+  // or under an ordinary area heading.
+  function ruleRow(r) {
+    var h = '<div class="rule' + (r.archived ? " archived" : "") + '">' +
+      '<p class="rname">' + esc(r.name) + (r.archived ? " — removed" : "") + '</p>' +
+      '<p class="rmeta">' + esc(r.describes) +
+      (r.reminder_days != null
+          ? " · alerts " + (r.reminder_days % 7 === 0 && r.reminder_days >= 7
+              ? (r.reminder_days / 7) + " week" + (r.reminder_days === 7 ? "" : "s")
+              : r.reminder_days + " day" + (r.reminder_days === 1 ? "" : "s")) + " ahead"
+          : r.meter_reminder != null
+            ? " · alerts " + Number(r.meter_reminder).toLocaleString() + " " + (r.meter_unit || "km") + " ahead" +
+              (r.last_meter_value != null
+                ? " · last done at " + Number(r.last_meter_value).toLocaleString() + " " + (r.meter_unit || "km")
+                : " · never done")
+            : "") +
+      (r.next_due_date && r.trigger === "recurring"
+        ? " · next " + new Date(r.next_due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "") +
+      (r.default_department ? " · always " + esc(r.default_department) : "") +
+      (r.last_completed ? " · last done " +
+        new Date(r.last_completed).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "") +
+      (r.change_count ? " · " + r.change_count + " entr" + (r.change_count === 1 ? "y" : "ies") : "") +
+      '</p>';
+
+    if (editingId === r.id) { h += ruleForm(r); }
+    else {
+      h += '<div class="racts">';
+      if (r.change_count) h += '<button onclick="showHistory(\'' + r.id + '\')">' +
+        (historyFor === r.id ? "Hide history" : "History") + '</button>';
+      if (me && me.is_manager && r.editable) {
+        if (r.archived) h += '<button onclick="archiveRule(\'' + r.id + '\', true)">Restore</button>';
+        else h += '<button onclick="startEdit(\'' + r.id + '\')">Edit</button>';
+      }
+      h += '</div>';
+    }
+
+    if (historyFor === r.id) {
+      h += '<div class="hist">' + (historyRows.length ? historyRows.map(function (c) {
+        return '<p><span class="act">' + esc(c.action) + '</span> ' + esc(c.summary || "") +
+          ' <span style="color:#A8A192">— ' + new Date(c.at).toLocaleString() + '</span></p>' +
+          (c.notes ? '<p class="cnote">“' + esc(c.notes) + '”</p>' : "");
+      }).join("") : "<p>No changes recorded.</p>") + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function card(s) {
+    // Department first, then the person — Mark, 2026-09-12: "it must
+    // first show - Housekeeping (Department) - Name". The department is
+    // who owes the work; the name is who is doing it today. Both, not
+    // one or the other.
+    var who = (s.assigned_department || s.assigned_person)
+      ? '<span class="who' + (s.assigned_person ? "" : " dept") + '">' +
+        esc([s.assigned_department, s.assigned_person].filter(Boolean).join(" — ")) + '</span>'
+      : s.is_task ? '<span class="who none">Unassigned</span>' : "";
+
+    // A standard daily check and a handover both show up as "vehicle"
+    // work (kindOf), but they're not the same job — a handover needs
+    // two people, not one. Per Mark, 2026-09-16: "can we highlight if
+    // a vehicle needs a standard check or handover check." s.name
+    // already starts "Handover — ..." (built server-side); this just
+    // makes it visible without having to read the whole line.
+    var isHandover = s.name.indexOf("Handover") === 0;
+    var h = '<div class="card"><div class="sched-row"><div>' +
+      '<p style="font-weight:700;margin:0">' +
+      (isHandover ? '<span class="badge handover">Handover</span> ' : "") +
+      esc(s.name) + '</p>' +
+      '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
+      who +
+      '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
+
+    // Completing sits here, beside the thing that is due, rather than in
+    // the Schedules section below — Mark, 2026-09-12. Completing removes
+    // it from this list, and it returns only when it is next coming up.
+    if (completingId === s.id) return h + completeForm(s) + '</div>';
+    if (me && me.is_manager && s.is_schedule && s.completable) {
+      h += '<div class="assign-row"><button onclick="startComplete(\'' + s.id + '\')">Complete</button></div>';
+    }
+
+    // Management assigns a department by hand, the same way a fault is
+    // assigned. Only on a real Task — a recurring schedule row has no
+    // task behind it to hang an assignment on yet.
+    if (me && me.is_manager && s.is_task) {
+      h += '<div class="assign-row"><select id="assign-' + s.id + '">' +
+        '<option value="">Unassigned</option>' +
+        departments.map(function (d) {
+          return '<option value="' + esc(d.id) + '"' +
+            (s.assigned_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+        }).join("") +
+        '</select><button onclick="doAssignTask(\'' + s.id + '\')">Assign</button></div>';
+    }
+    return h + '</div>';
+  }
+
+  function reload() {
+    return Promise.all([
+      fetch(FN).then(function (r) { return r.json(); }),
+      fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
+      fetch(FN.replace("action=dashboard", "action=handovers")).then(function (r) { return r.json(); }),
+    ]).then(function (res) {
+      handovers = res[2].handovers || [];
+      handoverPeople = res[2].people || [];
+      lastData = res[0]; departments = res[0].departments || [];
+      areas = (res[0].areas || []).filter(function (a) { return !a.parent_area_id; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name); });
+      var v = areas.filter(function (a) { return a.name === "Vehicles"; })[0];
+      VEHICLE_AREA_ID = v ? v.id : null;
+      rules = res[1].schedules || [];
+      render();
+    });
+  }
+
+  // Sign-in itself happens once, on the landing page — this page only
+  // ever runs for someone already signed in. Arriving with no session
+  // at all (a bookmark, a stale tab) sends you back there rather than
+  // showing a page with nobody attributed to anything on it.
+  if (!me) { location.href = "./"; }
+  else {
+  var BOOT = BASE_FN + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : "");
+  fetch(BOOT).then(function (r) { return r.json(); }).then(function (b) {
+    people = b.people || [];
+    boot_vehicles = b.vehicles || [];
+    showSignedIn();
+    return reload();
+  }).catch(function (e) {
+    document.getElementById("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>';
+  });
+  }
+</script>
+<script>
+  /* Root D-023. Registered on every page so each one is saved on the phone
+     as it is visited. Failure is deliberately silent: an older browser with
+     no service worker must still get a perfectly working online page. */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    });
+  }
+</script>
+</body></html>
