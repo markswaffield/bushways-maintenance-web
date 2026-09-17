@@ -109,7 +109,16 @@
 
 <h1>Schedule — Chobe Elephant Camp</h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
-<p class="sub" id="whoRow" hidden>You are <select id="whoDept" onchange="onWhoDept()"></select> <select id="who" onchange="onWho()"></select></p>
+<div class="sub" id="whoRow" hidden>
+  <span id="whoSignedIn" hidden>Signed in as <b id="whoName"></b> · <a href="#" onclick="signOut();return false;">Sign out</a></span>
+  <span id="whoPicker">You are <select id="whoDept" onchange="onWhoDept()"></select>
+    <select id="who"></select>
+    <input type="password" id="whoPin" inputmode="numeric" maxlength="6" placeholder="PIN" style="width:70px;display:inline-block">
+    <button onclick="doWhoLogin()" style="padding:6px 10px;font-size:13px">Sign in</button>
+    <span id="whoSetPin" hidden><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6" placeholder="New PIN" style="width:80px;display:inline-block">
+    <button onclick="doWhoSetPin()" style="padding:6px 10px;font-size:13px">Set PIN</button></span>
+    <span id="whoErr" style="color:#A8502F;font-size:12.5px" hidden></span></span>
+</div>
 <p class="nav"><b>Schedule</b><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
@@ -196,13 +205,58 @@
     var shown = !deptFilter ? people
       : people.filter(function (p) { return p.department === deptFilter; });
     sel.innerHTML = '<option value="">— nobody —</option>' + shown.map(function (p) {
-      return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
+      return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
     }).join("");
+    sel.onchange = function () {
+      var opt = sel.selectedOptions[0];
+      document.getElementById("whoSetPin").hidden = !opt || opt.dataset.pinSet !== "false";
+    };
   }
-  window.onWho = function () {
-    me = people.filter(function (p) { return p.id === document.getElementById("who").value; })[0] || null;
-    render();
+  // Group-wide PIN sign-in — per Mark, 2026-09-17: "I would like the
+  // group wide sign in option... doing this once now solves the
+  // problem of identifying who worked on something right now." Kept
+  // only in sessionStorage, clearing the moment the tab or browser
+  // closes — the same reasoning Edit Checklists' own Administrator
+  // sign-in already had (D-037), generalised to any real person.
+  window.doWhoSetPin = function () {
+    var id = document.getElementById("who").value;
+    var pin = document.getElementById("whoNewPin").value;
+    fetch(FN.replace("action=dashboard", "action=set_pin"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ person_id: id, pin: pin }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      document.getElementById("whoSetPin").hidden = true;
+      document.getElementById("whoPin").value = pin;
+      alert("PIN set. Sign in below.");
+    });
   };
+  window.doWhoLogin = function () {
+    var id = document.getElementById("who").value;
+    var pin = document.getElementById("whoPin").value;
+    var err = document.getElementById("whoErr");
+    err.hidden = true;
+    if (!id || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
+    fetch(FN.replace("action=dashboard", "action=login"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ person_id: id, pin: pin }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { err.textContent = out.error; err.hidden = false; return; }
+      me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator };
+      sessionStorage.setItem("bw_signin", JSON.stringify(me));
+      showSignedIn();
+    });
+  };
+  window.signOut = function () {
+    sessionStorage.removeItem("bw_signin");
+    location.reload();
+  };
+  function showSignedIn() {
+    document.getElementById("whoPicker").hidden = true;
+    document.getElementById("whoSignedIn").hidden = false;
+    document.getElementById("whoName").textContent = me.name;
+    render();
+  }
   window.onMine = function () { mine = document.getElementById("mine").checked; render(); };
   window.onFilterDept = function () {
     filterDept = document.getElementById("fDept").value; filterPerson = ""; mine = false; render();
@@ -1111,6 +1165,10 @@
       deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
     renderWhoOptions("");
     document.getElementById("whoRow").hidden = false;
+    try {
+      var saved = sessionStorage.getItem("bw_signin");
+      if (saved) { me = JSON.parse(saved); showSignedIn(); }
+    } catch (e) {}
     return reload();
   }).catch(function (e) {
     document.getElementById("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>';

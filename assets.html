@@ -63,10 +63,19 @@
 <p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
 <p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><b>Assets</b><a href="./staff.html">Staff</a></p>
 
-<div class="bar">
+<div class="bar" id="whoSignedIn" hidden>
+  <div style="align-self:center">Signed in as <b id="whoName"></b> · <a href="#" onclick="signOut();return false;">Sign out</a></div>
+  <div style="align-self:center"><label><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label></div>
+</div>
+<div class="bar" id="whoPicker">
   <div><label for="whoDept">Department</label><select id="whoDept"></select></div>
   <div><label for="who">You are</label><select id="who"></select></div>
+  <div style="max-width:100px"><label for="whoPin">PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6"></div>
+  <div style="align-self:end"><button onclick="doWhoLogin()">Sign in</button></div>
+  <div id="whoSetPin" hidden><label for="whoNewPin">New PIN (4–6 digits)</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6"></div>
+  <div id="whoSetPinBtn" hidden style="align-self:end"><button onclick="doWhoSetPin()">Set PIN</button></div>
   <div style="align-self:center"><label><input type="checkbox" id="showRetired" style="width:auto"> Show retired</label></div>
+  <div style="width:100%"><p class="note" id="whoErr" style="color:#A8502F" hidden></p></div>
 </div>
 
 <div id="app"><p class="loading">Loading…</p></div>
@@ -249,8 +258,56 @@ el("showRetired").addEventListener("change", function(){ showRetired = this.chec
 function renderWhoOptions(deptFilter){
   var shown = !deptFilter ? people : people.filter(function(p){ return p.department === deptFilter; });
   el("who").innerHTML = '<option value="">— nobody —</option>' + shown.map(function(p){
-    return '<option value="' + esc(p.id) + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
+    return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
   }).join("");
+  el("who").onchange = function(){
+    var opt = el("who").selectedOptions[0];
+    var need = !!opt && opt.dataset.pinSet === "false";
+    el("whoSetPin").hidden = !need; el("whoSetPinBtn").hidden = !need;
+  };
+}
+
+// Group-wide PIN sign-in — per Mark, 2026-09-17: "I would like the
+// group wide sign in option... doing this once now solves the problem
+// of identifying who worked on something right now." Kept only in
+// sessionStorage, clearing the moment the tab or browser closes — the
+// same reasoning Edit Checklists' own Administrator sign-in already
+// had (D-037), generalised to any real person.
+window.doWhoSetPin = function(){
+  var id = el("who").value, pin = el("whoNewPin").value;
+  fetch(FN + "?action=set_pin", {
+    method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({ person_id: id, pin: pin }),
+  }).then(function(r){return r.json();}).then(function(out){
+    if (out.error) { alert(out.error); return; }
+    el("whoSetPin").hidden = true; el("whoSetPinBtn").hidden = true;
+    el("whoPin").value = pin;
+    alert("PIN set. Sign in below.");
+  });
+};
+window.doWhoLogin = function(){
+  var id = el("who").value, pin = el("whoPin").value;
+  var err = el("whoErr"); err.hidden = true;
+  if (!id || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
+  fetch(FN + "?action=login", {
+    method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({ person_id: id, pin: pin }),
+  }).then(function(r){return r.json();}).then(function(out){
+    if (out.error) { err.textContent = out.error; err.hidden = false; return; }
+    me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator };
+    sessionStorage.setItem("bw_signin", JSON.stringify(me));
+    showSignedIn();
+  });
+};
+window.signOut = function(){
+  sessionStorage.removeItem("bw_signin");
+  location.reload();
+};
+function showSignedIn(){
+  el("whoPicker").hidden = true;
+  el("whoSignedIn").hidden = false;
+  el("whoName").textContent = me.name;
+  render();
 }
 
 fetch(FN).then(function(r){return r.json();}).then(function(b){
@@ -261,10 +318,10 @@ fetch(FN).then(function(r){return r.json();}).then(function(b){
     deptNames.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
   el("whoDept").addEventListener("change", function(){ renderWhoOptions(this.value); });
   renderWhoOptions("");
-  el("who").addEventListener("change", function(){
-    me = people.filter(function(p){ return p.id === this.value; }.bind(this))[0] || null;
-    render();
-  });
+  try {
+    var saved = sessionStorage.getItem("bw_signin");
+    if (saved) { me = JSON.parse(saved); showSignedIn(); }
+  } catch (e) {}
   return load();
 }).catch(function(e){ el("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>'; });
 </script>
