@@ -82,6 +82,7 @@
   .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
   .row.retired{opacity:.5;border-style:dashed}
   .row .nm{font-weight:700;margin:0}
+  .row .camp{display:inline-block;font-weight:600;font-size:11.5px;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-right:4px}
   .row .mt{font-size:12px;color:#6B6455;margin:2px 0 0}
   .acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
   .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
@@ -96,7 +97,7 @@
 
 <h1>Assets — Chobe Elephant Camp</h1>
 <p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
-<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><b>Assets</b><a href="./staff.html">Staff</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><b>Assets</b><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
 
 <div class="filter-section signin-box" id="whoSignedIn" hidden>
   <div class="title">Signed in</div>
@@ -122,6 +123,13 @@
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
 var me = null, people = [], data = null, locations = [], showRetired = false;
 var editing = null, transferring = null, historyFor = null, historyRows = [];
+// A group-wide roll-up, filterable by camp — per Mark, 2026-09-18:
+// "Assets - i think this also needs be visible as a rollup - showing
+// all the listed assets for the whole group, or filtered by lodge."
+// viewableLocations is just Chobe for an ordinary manager (unchanged
+// from before this) — the Camp filter box only appears once there's
+// actually more than one camp to choose between.
+var viewableLocations = [], filterLocationId = "";
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -146,7 +154,7 @@ function post(action, body){
   }).then(function(r){return r.json();});
 }
 
-window.startAdd = function(kind){ editing = { kind: kind }; transferring = null; render(); };
+window.startAdd = function(kind){ editing = { kind: kind, location_id: filterLocationId || null }; transferring = null; render(); };
 window.startEdit = function(kind, id){
   var a = (data[kind] || []).filter(function(x){ return x.id === id; })[0];
   editing = Object.assign({}, a); transferring = null; render();
@@ -158,6 +166,7 @@ window.saveAsset = function(){
     kind: editing.kind, id: editing.id || null,
     name: el("f_name").value,
     description: el("f_desc") ? el("f_desc").value : null,
+    location_id: editing.location_id || null,
   }).then(function(out){
     if (out.error) { alert(out.error); return; }
     editing = null; load();
@@ -227,8 +236,23 @@ function transferForm(){
     '<button onclick="cancel()">Cancel</button></div></div>';
 }
 
+// Only shown once there's actually more than one camp to choose
+// between — an ordinary manager's own viewableLocations is just
+// Chobe, so this stays invisible and nothing about the page changes
+// for them. Per Mark, 2026-09-18: "showing all the listed assets for
+// the whole group, or filtered by lodge."
+function campFilterHtml(){
+  if (viewableLocations.length < 2) return "";
+  return '<div class="filter-section" style="max-width:300px"><div class="title">Camp</div>' +
+    '<label>Site</label><select id="campFilter" onchange="onLocationFilterChange()">' +
+    '<option value="">All camps you can see</option>' +
+    viewableLocations.map(function(l){
+      return '<option value="' + esc(l.id) + '"' + (filterLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
+    }).join("") + '</select></div>';
+}
+
 function render(){
-  var h = "";
+  var h = campFilterHtml();
   KINDS.forEach(function(k){
     var kind = k[0], title = k[1], movable = k[2];
     // This page is for moveable equipment, not what's fixed to a
@@ -251,13 +275,23 @@ function render(){
     // just looking at a transfer record isn't the thing being locked
     // down. The server enforces the same split — not just this hiding.
     if (me && me.is_administrator && !(editing && editing.kind === kind && !editing.id)) {
-      h += '<div class="acts"><button onclick="startAdd(\'' + kind + '\')">+ Add</button></div>';
+      // Which camp a new row belongs to is ambiguous while looking at
+      // "All camps" — pick a specific one in the Camp filter first,
+      // rather than guessing (or silently defaulting to Chobe the way
+      // an ordinary single-camp manager never has to think about).
+      if (viewableLocations.length > 1 && !filterLocationId) {
+        h += '<p class="note">Pick a camp above to add ' + esc(title.toLowerCase()) + ' there.</p>';
+      } else {
+        h += '<div class="acts"><button onclick="startAdd(\'' + kind + '\')">+ Add</button></div>';
+      }
     }
     if (editing && editing.kind === kind && !editing.id) h += assetForm();
 
     list.forEach(function(a){
       h += '<div class="row' + (a.retired ? " retired" : "") + '">' +
-        '<p class="nm">' + esc(a.name) + (a.description ? ' — ' + esc(a.description) : "") +
+        '<p class="nm">' +
+        (viewableLocations.length > 1 ? '<span class="camp">' + esc(a.location) + '</span> ' : "") +
+        esc(a.name) + (a.description ? ' — ' + esc(a.description) : "") +
         (a.retired ? " · retired" : "") + '</p>' +
         (a.retired && a.retired_reason ? '<p class="mt">' + esc(a.retired_reason) + '</p>' : "");
       if (editing && editing.id === a.id) { h += assetForm(); }
@@ -305,12 +339,20 @@ function load(){
     el("app").innerHTML = '<p class="note">Only management can view this.</p>';
     return Promise.resolve();
   }
-  return fetch(FN + "?action=assets_list&person_id=" + encodeURIComponent(me.id))
+  var url = FN + "?action=assets_list&person_id=" + encodeURIComponent(me.id);
+  if (filterLocationId) url += "&location_id=" + encodeURIComponent(filterLocationId);
+  return fetch(url)
     .then(function(r){return r.json();}).then(function(d){
       if (d.error) { el("app").innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
-      data = d; locations = d.locations || []; render();
+      data = d; locations = d.locations || []; viewableLocations = d.viewable_locations || []; render();
     });
 }
+
+window.onLocationFilterChange = function(){
+  filterLocationId = el("campFilter").value;
+  editing = null; transferring = null;
+  load();
+};
 
 el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
 
