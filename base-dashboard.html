@@ -57,7 +57,12 @@
   input[type=password]{padding:8px;font-size:14px}
   button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
   button.primary{background:#43594A;color:#fff}
-  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff;margin-top:10px}
+  /* color:#232019 here, not left to inherit — body's own text colour is
+     now light (it sits on the dark photo, above), which would otherwise
+     leave any plain text inside this white card just as light, and
+     therefore invisible against it. Caught live: "As Mark Swaffield"
+     rendered nearly white-on-white until this. */
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff;margin-top:10px;color:#232019}
   .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   .filter-section label:first-of-type{margin-top:0}
@@ -67,7 +72,7 @@
      uses (dashboard.html first). */
   .choices{display:flex;flex-direction:column;gap:14px;margin-top:18px;max-width:640px}
   @media (min-width:700px){ .choices{flex-direction:row} }
-  .choice{flex:1;background:#fff;border:1px solid #C9C2AC;border-radius:10px;padding:18px}
+  .choice{flex:1;background:#fff;border:1px solid #C9C2AC;border-radius:10px;padding:18px;color:#232019}
   .choice h2{margin:0 0 6px}
   .choice p{font-size:13px;color:#6B6455;margin:0 0 14px}
   .choice .letter{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;font-size:12px;font-weight:700;border-radius:50%;background:#EAF1EC;color:#43594A;margin-right:6px}

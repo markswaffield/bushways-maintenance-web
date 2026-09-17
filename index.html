@@ -43,7 +43,12 @@
   .wrap{width:100%;max-width:360px}
   h1{font-size:20px;margin:0 0 2px;text-align:center;color:#fff}
   .sub{color:#D8D2C4;font-size:13px;margin:0 0 20px;text-align:center}
-  .signin-box{border:1px solid #C9C2AC;border-radius:8px;padding:16px;background:#fff}
+  /* color:#232019 here, not left to inherit — body's own text colour is
+     now light (it sits on the dark photo, above); any plain text ever
+     added inside this white card would otherwise be just as light, and
+     invisible against it. Same real bug caught on base-dashboard.html's
+     "Signed in" card, fixed here pre-emptively before it could recur. */
+  .signin-box{border:1px solid #C9C2AC;border-radius:8px;padding:16px;background:#fff;color:#232019}
   .signin-box .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 12px}
   label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   label:first-of-type{margin-top:0}
