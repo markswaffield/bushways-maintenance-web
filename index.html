@@ -120,12 +120,37 @@
     });
   };
 
+  // Two lists merged, not one — plain bootstrap() alone is Chobe-scoped
+  // (D-044, on purpose: nobody wants 227 names in one dropdown), which
+  // would leave out the very people D-052 built this whole multi-camp
+  // path for. The 2 Concession Managers are homed at their own lodges
+  // (Khwai, OAT), not Chobe, and are not `is_base_manager` — bootstrap()
+  // alone would never list their names at all, and this is the one
+  // picker that has to work for absolutely anyone who might sign in,
+  // before anything is known about who that will be. base_dashboard_people
+  // (built for the old base-dashboard/base-rollup pickers, D-052) is
+  // exactly the other half: everyone with is_base_manager or a
+  // dashboard_location_access row. Merged and deduplicated by id.
   if (!resumed) {
-    fetch(FN).then(function (r) { return r.json(); }).then(function (b) {
-      people = b.people || [];
+    Promise.all([
+      fetch(FN).then(function (r) { return r.json(); }),
+      fetch(FN + "?action=base_dashboard_people").then(function (r) { return r.json(); }),
+    ]).then(function (res) {
+      var b = res[0], extra = res[1];
+      var seen = {};
+      people = [];
+      (b.people || []).concat(extra.people || []).forEach(function (p) {
+        if (!seen[p.id]) { seen[p.id] = true; people.push(p); }
+      });
+      people.sort(function (a, c) { return a.name.localeCompare(c.name); });
+      var deptSeen = {}, departments = [];
+      (b.departments || []).concat(extra.departments || []).forEach(function (d) {
+        if (!deptSeen[d.name]) { deptSeen[d.name] = true; departments.push(d); }
+      });
       var deptSel = document.getElementById("whoDept");
-      var deptNames = (b.departments || []).map(function (d) { return d.name; })
-        .filter(function (n) { return people.some(function (p) { return p.department === n; }); });
+      var deptNames = departments.map(function (d) { return d.name; })
+        .filter(function (n) { return people.some(function (p) { return p.department === n; }); })
+        .sort();
       deptSel.innerHTML = '<option value="">All departments</option>' +
         deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
       deptSel.onchange = function () { renderPersonOptions(deptSel.value); };
