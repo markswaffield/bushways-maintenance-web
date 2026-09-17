@@ -59,14 +59,16 @@
   .filter-section label:first-of-type{margin-top:0}
   /* A checkbox row needs the same real tap target as everything else
      — Mark, 2026-09-17, on the schedule page's Mine checkbox: "too
-     small to see easily or hit with your finger," applied the same
-     way here. A bare browser checkbox stays tiny regardless of its
-     label, so the box itself is enlarged, not just the text. */
-  .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
-  .filter-section label.check input[type=checkbox]{width:20px;height:20px;flex:none}
+     small to see easily or hit with your finger," then: "please fix
+     all that have the same issue." A bare browser checkbox stays tiny
+     regardless of its label, so the box itself is enlarged, not just
+     the text. Not scoped to .filter-section — the same class marks
+     the Management checkbox on the edit-person .form below too. */
+  label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
+  label.check input[type=checkbox]{width:20px;height:20px;flex:none}
   @media (max-width:700px){
-    .filter-section label.check{font-size:16px;padding:6px 0}
-    .filter-section label.check input[type=checkbox]{width:24px;height:24px}
+    label.check{font-size:16px;padding:6px 0}
+    label.check input[type=checkbox]{width:24px;height:24px}
   }
   @media (min-width:700px){ .signin-box{max-width:420px} }
   .row{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:9px 13px;margin-top:6px}
@@ -80,6 +82,11 @@
   .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
   .form label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:9px 0 4px}
   .form label:first-child{margin-top:0}
+  /* .form label above would otherwise win the checkbox-row rules
+     above (equal specificity, later in the sheet) — restated here so
+     the Management checkbox gets the same real tap target. */
+  .form label.check{display:flex;text-transform:none;letter-spacing:0;font-size:14px}
+  @media (max-width:700px){ .form label.check{font-size:16px} }
   .form .row2{display:flex;gap:8px}
   .form .row2 > *{flex:1}
   .note{font-size:12.5px;color:#6B6455;margin:6px 0 0}
@@ -197,8 +204,8 @@ function personForm(){
     }).join("") + '</select></div>' +
     '</div>' +
     '<label>Department</label><select id="f_dept">' + deptOptions(editing.home_location_id, editing.department_id) + '</select>' +
-    '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px;margin-top:10px">' +
-    '<input type="checkbox" id="f_mgr" style="width:auto"' + (editing.is_manager ? " checked" : "") + '> Management</label>' +
+    '<label class="check" style="margin-top:10px">' +
+    '<input type="checkbox" id="f_mgr"' + (editing.is_manager ? " checked" : "") + '> Management</label>' +
     '<div class="acts"><button class="primary" onclick="savePerson()">' + (isNew ? "Add" : "Save changes") + '</button>' +
     '<button onclick="cancel()">Cancel</button></div></div>';
 }
