@@ -152,12 +152,13 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>Schedule — Chobe Elephant Camp</h1>
+<h1>Schedule — <span id="campTitle">Chobe Elephant Camp</span></h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
 <div id="whoRow" hidden>
   <div class="filter-section signin-box" id="whoSignedIn" hidden>
     <div class="title">Signed in</div>
     <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
+    <p style="margin:6px 0 0;font-size:13.5px" id="campLine" hidden>Camp: <b id="campName"></b> · <a href="./base-dashboard.html">Change camp</a></p>
     <button onclick="signOut()" style="width:100%;margin-top:10px;padding:9px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;cursor:pointer">Sign out</button>
   </div>
   <div class="filter-section signin-box" id="whoPicker">
@@ -176,7 +177,27 @@
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
-  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard";
+  var BASE_FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+  // Resumed sign-in and the camp this session is "in," both read
+  // synchronously before the first fetch — Mark, 2026-09-18: "not
+  // having to select a lodge each time you want to access one of the
+  // tasks." Picked once on the Base Dashboard, then carried
+  // automatically here. Only ever meaningful for someone with real
+  // multi-camp access; an ordinary single-camp person's fetches carry
+  // no location_id at all, and every server function already defaults
+  // to Chobe when that's missing (root D-025) — nothing changes for
+  // them.
+  var me = null;
+  try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+  function currentCamp() {
+    try {
+      var saved = sessionStorage.getItem("bw_camp");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) { return null; }
+  }
+  var camp = currentCamp();
+  var CAMP_PARAM = (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+  var FN = BASE_FN + "?action=dashboard" + CAMP_PARAM;
   var lastData = null;
   // Mark, 2026-09-11: "default must be newest to oldest". For a schedule
   // "newest" is the furthest-away due date, so upcoming work sorts above
@@ -185,7 +206,7 @@
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
   var mine = false, filterDept = "", filterPerson = "";
-  var me = null, people = [], departments = [], areas = [], boot_vehicles = [];
+  var people = [], departments = [], areas = [], boot_vehicles = [];
   var VEHICLE_AREA_ID = null, addForVehicle = null;
   function isVehicleArea(id) { return !!id && id === VEHICLE_AREA_ID; }
   function vehLabel(id) {
@@ -294,19 +315,33 @@
       body: JSON.stringify({ person_id: id, pin: pin }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { err.textContent = out.error; err.hidden = false; return; }
-      me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator };
+      me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator, locations: out.locations || [] };
       sessionStorage.setItem("bw_signin", JSON.stringify(me));
+      // A real choice, once, right after signing in — Mark, 2026-09-18:
+      // "based on the sign in - you will either get taken to the
+      // Dashboard - or you will go directly to your relevant lodge."
+      // Someone with more than one camp who hasn't picked one yet this
+      // session goes to the Dashboard to choose; entering a camp there
+      // is what sets bw_camp, and this page (and every other) just uses
+      // it from then on.
+      if (me.locations.length > 1 && !currentCamp()) { location.href = "./base-dashboard.html"; return; }
       showSignedIn();
     });
   };
   window.signOut = function () {
     sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_camp");
     location.reload();
   };
   function showSignedIn() {
     document.getElementById("whoPicker").hidden = true;
     document.getElementById("whoSignedIn").hidden = false;
     document.getElementById("whoName").textContent = me.name;
+    if (camp && me.locations && me.locations.length > 1) {
+      document.getElementById("campName").textContent = camp.name;
+      document.getElementById("campLine").hidden = false;
+      document.getElementById("campTitle").textContent = camp.name;
+    }
     render();
   }
   window.onMine = function () { mine = document.getElementById("mine").checked; render(); };
@@ -1206,7 +1241,7 @@
 
   // Who is looking — the same stand-in sign-in as every other page:
   // pick your name. Root D-017 replaces it with a WhatsApp code.
-  var BOOT = FN.replace("?action=dashboard", "");
+  var BOOT = BASE_FN + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : "");
   fetch(BOOT).then(function (r) { return r.json(); }).then(function (b) {
     people = b.people || [];
     boot_vehicles = b.vehicles || [];
@@ -1217,10 +1252,7 @@
       deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
     renderWhoOptions("");
     document.getElementById("whoRow").hidden = false;
-    try {
-      var saved = sessionStorage.getItem("bw_signin");
-      if (saved) { me = JSON.parse(saved); showSignedIn(); }
-    } catch (e) {}
+    if (me) showSignedIn();
     return reload();
   }).catch(function (e) {
     document.getElementById("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>';

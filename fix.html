@@ -110,6 +110,23 @@
   var departments = [];
   var me = null;
   var lastIssues = [];
+  // The camp this session is "in" — persisted alongside sign-in, picked
+  // once on the Base Dashboard, not re-picked on every page. Mark,
+  // 2026-09-18: "not having to select a lodge each time you want to
+  // access one of the tasks." Only ever meaningful for someone with
+  // real multi-camp access; an ordinary single-camp person's fetches
+  // carry no location_id at all, and every server function already
+  // defaults to Chobe when that's missing (root D-025).
+  function currentCamp() {
+    try {
+      var saved = sessionStorage.getItem("bw_camp");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) { return null; }
+  }
+  var camp = currentCamp();
+  function campParam() {
+    return (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+  }
   // The same ordering rules as the to-do list, per Mark, 2026-09-12:
   // grouped by maintenance Area, then Target within it, with date only
   // ordering the faults inside one target. Area and Target are the
@@ -203,7 +220,7 @@
       body: JSON.stringify({ person_id: id, pin: pin }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { err.textContent = out.error; err.hidden = false; return; }
-      me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator };
+      me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator, locations: out.locations || [] };
       sessionStorage.setItem("bw_signin", JSON.stringify(me));
       afterSignIn();
     });
@@ -219,10 +236,17 @@
 
   window.signOut = function () {
     sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_camp");
     location.reload();
   };
 
   function afterSignIn() {
+    // A real choice, once, right after signing in — Mark, 2026-09-18:
+    // "based on the sign in - you will either get taken to the
+    // Dashboard - or you will go directly to your relevant lodge."
+    // Someone with more than one camp who hasn't picked one yet this
+    // session goes to the Dashboard to choose.
+    if (me.locations && me.locations.length > 1 && !camp) { location.href = "./base-dashboard.html"; return; }
     // Defaults the view to their own department, per Mark, 2026-09-08 —
     // "makes it easy for a department to easily see what it needs to
     // focus on." Still switchable to any department, or "All", below.
@@ -242,13 +266,16 @@
   function signedInBoxHtml() {
     return '<div class="filter-section signin-box"><div class="title">Signed in</div>' +
       '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + '</p>' +
+      (camp && me.locations && me.locations.length > 1
+        ? '<p style="margin:6px 0 0;font-size:13.5px">Camp: <b>' + esc(camp.name) + '</b> · <a href="./base-dashboard.html">Change camp</a></p>'
+        : "") +
       '<button onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button></div>';
   }
 
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p><p class="loading">Loading…</p>';
-    fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
+    list.innerHTML = '<h1>Fix a Fault' + (camp && me.locations && me.locations.length > 1 ? ' — ' + esc(camp.name) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p><p class="loading">Loading…</p>';
+    fetch(FN + "?action=open_issues" + campParam()).then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       renderList(applyFilters());
     }).catch(function (e) {
@@ -348,7 +375,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>';
+    var html = '<h1>Fix a Fault' + (camp && me.locations && me.locations.length > 1 ? ' — ' + esc(camp.name) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>';
 
     html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';

@@ -80,7 +80,7 @@
 
 <h1>Base Dashboard</h1>
 <p class="sub">Every camp Bush Ways operates, rolled up in one place — open faults and outstanding schedules, filterable by camp.</p>
-<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><b>Base Dashboard</b><a href="./admin-checklists.html">Edit Checklists</a></p>
+<p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><b>Base Dashboard</b></p>
 
 <div class="filter-section signin-box" id="whoSignedIn" hidden>
   <div class="title">Signed in</div>
@@ -243,7 +243,20 @@
       '<option value="">All camps you can see</option>' +
       data.locations.map(function (l) {
         return '<option value="' + esc(l.id) + '"' + (filterLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-      }).join("") + '</select></div>';
+      }).join("") +
+      '</select>' +
+      // Filters this roll-up down to one camp either way; entering it
+      // is a separate, real step — per Mark, 2026-09-18: "when someone
+      // signs in... you can then select if you want the All Camp
+      // Rollup or if you want a specific camp. If you select the
+      // specific camp - then you can access all the options of
+      // Schedule - Fix a Fault etc." Picked once here, then carried
+      // automatically to every page — "not having to select a lodge
+      // each time you want to access one of the tasks."
+      (filterLocationId
+        ? '<button class="primary" onclick="enterCamp()" style="width:100%;margin-top:10px">Enter this camp →</button>'
+        : "") +
+      '</div>';
 
     html += '<div class="filter-section"><div class="title">Date</div>' +
       '<label>Order (within each target)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
@@ -289,7 +302,18 @@
 
   window.onLocationFilterChange = function () {
     filterLocationId = document.getElementById("locationFilter").value;
+    renderFilters(lastData);
     renderIssues(applyFilters(lastData));
+  };
+  // Persisted alongside sign-in, not re-picked on every page — Mark,
+  // 2026-09-18: "not having to select a lodge each time you want to
+  // access one of the tasks." Every other page reads this on load and
+  // scopes itself to it automatically; "Change camp" (in the signed-in
+  // box there) comes straight back here to pick a different one.
+  window.enterCamp = function () {
+    var name = (lastData.locations.filter(function (l) { return l.id === filterLocationId; })[0] || {}).name || "";
+    sessionStorage.setItem("bw_camp", JSON.stringify({ id: filterLocationId, name: name }));
+    location.href = "./";
   };
   window.onDateDirectionChange = function () {
     dateDirection = document.getElementById("dateDirection").value;

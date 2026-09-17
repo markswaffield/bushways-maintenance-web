@@ -63,13 +63,25 @@
 </style></head><body>
 
 <h1>Completed Tasks</h1>
-<p class="sub">Chobe Elephant Camp — the full flow of every fixed fault</p>
+<p class="sub"><span id="campTitle">Chobe Elephant Camp</span> — the full flow of every fixed fault</p>
 <p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><b>Completed</b><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
-  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=completed_issues";
+  // No sign-in of its own, same as the to-do list, but honours a camp
+  // already entered elsewhere this session — Mark, 2026-09-18: "not
+  // having to select a lodge each time." See dashboard.html for the
+  // full reasoning; not repeated per page.
+  var me = null;
+  try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+  var camp = null;
+  try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+  var CAMP_PARAM = (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+  if (camp && me && me.locations && me.locations.length > 1) {
+    document.getElementById("campTitle").textContent = camp.name;
+  }
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=completed_issues" + CAMP_PARAM;
   var lastData = null;
   // Same grouping and filters as the to-do list (tool-local D-034),
   // per Mark, 2026-09-09: "can we apply the same ordering and filters

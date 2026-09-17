@@ -54,14 +54,30 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>To-Do — Chobe Elephant Camp</h1>
+<h1>To-Do — <span id="campTitle">Chobe Elephant Camp</span></h1>
 <p class="sub">Every open fault, grouped by area and target. Anything <em>due</em> lives on the Schedule.</p>
 <p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><b>To-do list</b><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
-  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard";
+  // This page has never needed its own sign-in ("No sign-in needed,
+  // same as the dashboard — this is a read-only record"), but it can
+  // still honour a camp already entered elsewhere this session — Mark,
+  // 2026-09-18: "not having to select a lodge each time you want to
+  // access one of the tasks." Reads whatever Schedule/Fix a
+  // Fault/etc. already set (sessionStorage is shared across pages of
+  // this site); an ordinary single-camp visit carries neither and
+  // this stays exactly Chobe, as it always has.
+  var me = null;
+  try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+  var camp = null;
+  try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+  var CAMP_PARAM = (me && camp && camp.id) ? "&location_id=" + encodeURIComponent(camp.id) + "&person_id=" + encodeURIComponent(me.id) : "";
+  if (camp && me && me.locations && me.locations.length > 1) {
+    document.getElementById("campTitle").textContent = camp.name;
+  }
+  var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard" + CAMP_PARAM;
   var lastData = null;
   // Rebuilt 2026-09-09, per Mark's own sketch: "Default Order" groups
   // by maintenance Area first (Guest Room, Main Area, Workshop...),
