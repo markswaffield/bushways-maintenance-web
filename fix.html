@@ -94,16 +94,23 @@
   var departments = [];
   var me = null;
   var lastIssues = [];
-  var viewFilter = "";
   // The same ordering rules as the to-do list, per Mark, 2026-09-12:
   // grouped by maintenance Area, then Target within it, with date only
   // ordering the faults inside one target. Area and Target are the
   // grouping itself, never something a filter switches away from
-  // (tool-local D-034). The department "Show" control below predates
-  // this and stays — it is what lets a department see its own queue.
+  // (tool-local D-034).
   var dateDirection = "newest";   // newest | oldest
   var dateFrom = "", dateTo = "";
   var filterAreaId = "", filterTarget = "";
+  // Status and Department, 2026-09-17 — split out of the old single
+  // "Show" dropdown (which mixed "unassigned" in with the department
+  // list) into their own filter-section boxes, same shape as the
+  // to-do list and Completed Tasks, per Mark: "i want the same layout
+  // as in the to-do list and completed list when it comes to the
+  // filter and picker boxes... on this page i want include another
+  // filter before the date. STATUS - All, Unassigned, Assigned."
+  var filterStatus = "";          // "" | "unassigned" | "assigned"
+  var filterDepartmentId = "";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -205,7 +212,8 @@
     // focus on." Still switchable to any department, or "All", below.
     // Management defaults to "All" instead — triaging and handing out
     // work across every department is the actual job, not one queue.
-    viewFilter = me.is_manager ? "" : (me.department || "");
+    var mine = departments.find(function (d) { return d.name === me.department; });
+    filterDepartmentId = me.is_manager ? "" : (mine ? mine.id : "");
     document.getElementById("start").hidden = true;
     document.getElementById("list").hidden = false;
     loadIssues();
@@ -216,17 +224,17 @@
     list.innerHTML = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + ' · <a href="#" onclick="signOut();return false;">Sign out</a></p><p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p><p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues").then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
-      renderList(applyViewFilter());
+      renderList(applyFilters());
     }).catch(function (e) {
       list.innerHTML += "<p>Couldn't load the list — a fault in the page. (" + e.message + ")</p>";
     });
   }
 
-  function applyViewFilter() {
+  function applyFilters() {
     return lastIssues.filter(function (i) {
-      if (viewFilter === "__unassigned__" && i.assigned_department) return false;
-      if (viewFilter && viewFilter !== "__unassigned__" &&
-          !(i.assigned_department && i.assigned_department.name === viewFilter)) return false;
+      if (filterStatus === "unassigned" && i.assigned_department) return false;
+      if (filterStatus === "assigned" && !i.assigned_department) return false;
+      if (filterDepartmentId && !(i.assigned_department && i.assigned_department.id === filterDepartmentId)) return false;
       if (dateFrom && new Date(i.raised_at) < new Date(dateFrom)) return false;
       if (dateTo && new Date(i.raised_at) > new Date(dateTo + "T23:59:59")) return false;
       if (filterAreaId && i.area_id !== filterAreaId) return false;
@@ -287,47 +295,51 @@
 
   window.onFixDateDirection = function () {
     dateDirection = document.getElementById("fixDateDirection").value;
-    renderList(applyViewFilter());
+    renderList(applyFilters());
   };
   window.onFixDateRange = function () {
     dateFrom = document.getElementById("fixDateFrom").value;
     dateTo = document.getElementById("fixDateTo").value;
-    renderList(applyViewFilter());
+    renderList(applyFilters());
   };
   window.onFixArea = function () {
     filterAreaId = document.getElementById("fixArea").value;
     filterTarget = "";
-    renderList(applyViewFilter());
+    renderList(applyFilters());
   };
   window.onFixTarget = function () {
     filterTarget = document.getElementById("fixTarget").value;
-    renderList(applyViewFilter());
+    renderList(applyFilters());
   };
-
-  window.setViewFilter = function (v) {
-    viewFilter = v;
-    renderList(applyViewFilter());
+  window.onFixStatus = function () {
+    filterStatus = document.getElementById("fixStatus").value;
+    renderList(applyFilters());
+  };
+  window.onFixDepartment = function () {
+    filterDepartmentId = document.getElementById("fixDepartment").value;
+    renderList(applyFilters());
   };
 
   function renderList(issues) {
     var list = document.getElementById("list");
     var html = '<h1>Fix a Fault</h1><p class="sub">Signed in as ' + esc(me.name) + (me.is_manager ? " (management)" : "") + ' · <a href="#" onclick="signOut();return false;">Sign out</a></p><p class="nav"><a href="./">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./staff.html">Staff</a></p>';
 
-    // Lets a department see just its own queue — Mark, 2026-09-08.
-    // Available to everyone, not only management: viewing your own
-    // department's work is different from assigning someone else's.
-    html += '<label>Show</label><select id="viewFilter" onchange="setViewFilter(this.value)">' +
-      '<option value=""' + (!viewFilter ? " selected" : "") + '>All departments</option>' +
-      '<option value="__unassigned__"' + (viewFilter === "__unassigned__" ? " selected" : "") + '>Unassigned</option>' +
-      departments.map(function (d) {
-        return '<option value="' + esc(d.name) + '"' + (viewFilter === d.name ? " selected" : "") + '>' + esc(d.name) + '</option>';
-      }).join("") +
-      '</select>';
-
     html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
 
     html += '<div class="filters">';
+
+    // Status — All / Unassigned / Assigned, per Mark, 2026-09-17: "i
+    // want include another filter before the date." Separate from
+    // Department below now (it used to be one combined "Show"
+    // dropdown) — status and who it's assigned to are two different
+    // questions.
+    html += '<div class="filter-section"><div class="title">Status</div>' +
+      '<label>Status</label><select id="fixStatus" onchange="onFixStatus()">' +
+      '<option value=""' + (!filterStatus ? " selected" : "") + '>All</option>' +
+      '<option value="unassigned"' + (filterStatus === "unassigned" ? " selected" : "") + '>Unassigned</option>' +
+      '<option value="assigned"' + (filterStatus === "assigned" ? " selected" : "") + '>Assigned</option>' +
+      '</select></div>';
 
     html += '<div class="filter-section"><div class="title">Date</div>' +
       '<label>Order (within each target)</label><select id="fixDateDirection" onchange="onFixDateDirection()">' +
@@ -358,12 +370,22 @@
     }
     html += '</div>';
 
+    // Lets a department see just its own queue — Mark, 2026-09-08.
+    // Available to everyone, not only management: viewing your own
+    // department's work is different from assigning someone else's.
+    html += '<div class="filter-section"><div class="title">Department</div>' +
+      '<label>Department</label><select id="fixDepartment" onchange="onFixDepartment()">' +
+      '<option value=""' + (!filterDepartmentId ? " selected" : "") + '>All departments</option>' +
+      departments.map(function (d) {
+        return '<option value="' + esc(d.id) + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+      }).join("") + '</select></div>';
+
     html += '</div>'; // .filters
 
     html += "<h2>Open faults <span style='color:#8C6A2F;font-weight:400'>" + issues.length +
       (issues.length !== lastIssues.length ? " of " + lastIssues.length : "") + "</span></h2>";
     if (!issues.length) html += '<p class="empty">Nothing here' +
-      ((viewFilter || filterAreaId || dateFrom || dateTo) ? " for this filter" : "") + '.</p>';
+      ((filterStatus || filterDepartmentId || filterAreaId || dateFrom || dateTo) ? " for this filter" : "") + '.</p>';
 
     groupForDisplay(issues).forEach(function (area) {
       html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
