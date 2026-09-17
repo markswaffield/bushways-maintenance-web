@@ -66,7 +66,7 @@
   .who.pending{background:#F4E3D3;color:#8C6A2F}
   .ho-parties{margin:4px 0 0}
   .ho-parties .arrow{color:#8C6A2F;margin:0 4px;font-size:11.5px}
-  .ho-faults{margin:6px 0 0}
+  .ho-faults{font-size:13.5px;margin:4px 0 0}
   .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4CFC2;color:#A8502F;margin:2px 4px 0 0}
   .assign-row{display:flex;gap:6px;margin-top:8px}
   .assign-row select{flex:1;padding:6px;font-size:13px;border:1px solid #C9C2AC;border-radius:5px;background:#fff;font-family:inherit}
@@ -733,10 +733,19 @@
       // visible in the to-do list?" Until this, yes. Shown to whoever
       // is looking, not gated behind starting to sign, since the whole
       // point is deciding whether to sign in the first place.
+      // Which checklist line, what kind of fault, what was actually
+      // written down — Mark's own correction: "it just says damged -
+      // it does not reflect what was marked as damaged... it was for
+      // the Body - and it was damaged - Front Left Fender." The same
+      // label — fault type — action shape the to-do list already uses.
       if (x.faults && x.faults.length) {
-        h += '<p class="ho-faults">' + x.faults.map(function (f) {
-          return '<span class="fault">' + esc(f.label) + (f.status === "resolved" ? " (fixed)" : "") + '</span>';
-        }).join(" ") + '</p>';
+        h += x.faults.map(function (f) {
+          return '<p class="ho-faults">' + esc(f.label) +
+            (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
+            (f.action ? ' — ' + esc(f.action) : '') +
+            (f.status === "resolved" ? ' <span class="fault" style="background:#D9E6DC;color:#2F6B45">fixed</span>' : '') +
+            '</p>';
+        }).join("");
       } else if (x.handed_over_at) {
         h += '<p class="order-note" style="margin:4px 0 0">Nothing flagged — checked clean.</p>';
       }
