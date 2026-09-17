@@ -223,8 +223,12 @@ function personRow(p){
     (p.retired ? " · retired" : "") + '</p>' +
     '<p class="mt">' + (p.phone ? esc(p.phone) : "no number on file") + '</p>' +
     (p.retired && p.retired_reason ? '<p class="mt">' + esc(p.retired_reason) + '</p>' : "");
+  // Visible to all management, editable only by administrators — per
+  // Mark, 2026-09-18: "Assets and Staff - visible to all management
+  // but not editable" and "visible and editable to all managers who
+  // are administrators." The server enforces the same split.
   if (editing && editing.id === p.id) { h += personForm(); }
-  else if (me && me.is_manager) {
+  else if (me && me.is_administrator) {
     h += '<div class="acts">';
     h += '<button onclick="startEdit(\'' + p.id + '\')">Edit</button>';
     h += p.retired
@@ -255,7 +259,7 @@ function render(){
       (open ? "" : " — tap to open") + '</span></h2>';
     if (!open) return;
 
-    if (me && me.is_manager && !(editing && !editing.id && editing.home_location_id === loc.id)) {
+    if (me && me.is_administrator && !(editing && !editing.id && editing.home_location_id === loc.id)) {
       h += '<div class="acts"><button onclick="startAdd(\'' + loc.id + '\')">+ Add</button></div>';
     }
     if (editing && !editing.id && editing.home_location_id === loc.id) h += personForm();
@@ -266,10 +270,22 @@ function render(){
   el("app").innerHTML = h;
 }
 
+// Visible to management, invisible to everyone else — per Mark,
+// 2026-09-18. Enforced here and on the server, same as assets.html.
 function load(){
-  return fetch(FN + "?action=staff_list").then(function(r){return r.json();}).then(function(d){
-    data = d; render();
-  });
+  if (!me) {
+    el("app").innerHTML = '<p class="note">Sign in as management to view this.</p>';
+    return Promise.resolve();
+  }
+  if (!me.is_manager) {
+    el("app").innerHTML = '<p class="note">Only management can view this.</p>';
+    return Promise.resolve();
+  }
+  return fetch(FN + "?action=staff_list&person_id=" + encodeURIComponent(me.id))
+    .then(function(r){return r.json();}).then(function(d){
+      if (d.error) { el("app").innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
+      data = d; render();
+    });
 }
 
 el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
@@ -330,7 +346,8 @@ function showSignedIn(){
   el("whoPicker").hidden = true;
   el("whoSignedIn").hidden = false;
   el("whoName").textContent = me.name;
-  render();
+  el("showRetired").parentElement.hidden = !me.is_manager;
+  load();
 }
 
 fetch(FN).then(function(r){return r.json();}).then(function(b){
@@ -343,7 +360,7 @@ fetch(FN).then(function(r){return r.json();}).then(function(b){
   renderWhoOptions("");
   try {
     var saved = sessionStorage.getItem("bw_signin");
-    if (saved) { me = JSON.parse(saved); showSignedIn(); }
+    if (saved) { me = JSON.parse(saved); showSignedIn(); return; }
   } catch (e) {}
   return load();
 }).catch(function(e){ el("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>'; });
