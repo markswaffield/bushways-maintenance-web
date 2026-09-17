@@ -115,8 +115,19 @@
        "./" (the landing page) is always the right answer regardless:
        already signed in there, it re-routes straight back to Base
        Dashboard or their own lodge; not signed in at all, it's the
-       correct place to be anyway. -->
-  <p class="sub" style="margin-top:24px"><a href="./">← Return to Menu</a></p>
+       correct place to be anyway.
+       A real button, not a plain link — Mark, the same day, catching
+       it straight after: "please flesh this out to a padded button as
+       all the others. Please note this needs to be the default style
+       used for any future developments." `.ghost` (below) is this
+       page's own existing name for a real but de-emphasised button —
+       same padding and radius as Sign in/Set PIN above, just not
+       filled — and is now the standing choice for a return/back/cancel
+       action anywhere in this tool, not a styled-to-look-like-text
+       link. See tool-local D-057. -->
+  <div class="acts" style="justify-content:center;margin-top:24px">
+    <button class="ghost" onclick="location.href='./'">← Return to Menu</button>
+  </div>
 </div>
 
 <div id="app" hidden>
