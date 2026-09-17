@@ -2,7 +2,7 @@
   "name": "Bush Ways Checks",
   "short_name": "Checks",
   "description": "Lodge and vehicle inspections for Bush Ways Safaris.",
-  "start_url": "./inspection.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

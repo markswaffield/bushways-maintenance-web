@@ -53,12 +53,8 @@
 
 <div id="start">
   <h1 id="campTitle">Chobe Elephant Camp</h1>
-  <p class="sub">Pick your name, then what you'd like to do.</p>
+  <p class="sub">Signed in as <b id="whoAmI"></b> · <a href="#" id="signOut">Sign out</a> — what would you like to do?</p>
   <p class="nav"><a href="./schedule.html">Schedule</a><b>Inspection</b><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
-  <label>Department</label>
-  <select id="personDept"><option value="">Loading…</option></select>
-  <label>Who are you?</label>
-  <select id="person"><option value="">Loading…</option></select>
   <label>What would you like to do?</label>
   <select id="area"><option value="">Loading…</option></select>
   <button id="startBtn">Continue</button>
@@ -128,17 +124,24 @@
   var state = { people: [], rooms: [], vehicles: [], areas: [] };
   // "room" or "vehicle" — which kind of thing is being inspected.
   var targetType = "room";
-  var myPersonId = null, pendingRoomId = null;
+  var pendingRoomId = null;
   // The camp this device is "in" — set on the Base Dashboard (desktop
   // or phone, same browser), read passively here. Per Mark, 2026-09-18:
   // Base Managers travel and do real inspections at whichever camp
   // they're actually at — "they therefore need to be able to go into
   // each camp to log their findings - just as someone in camp has to."
-  // Authorised against whoever signed in to set it (bw_signin), not
-  // against the simple name picked below — that stays what it's always
-  // been, attribution only, unchanged for an ordinary single-camp user.
   var signedInAs = null;
   try { var savedSignIn = sessionStorage.getItem("bw_signin"); if (savedSignIn) signedInAs = JSON.parse(savedSignIn); } catch (e) {}
+  // Sign-in itself now happens once, on the landing page — this page
+  // only ever runs for someone already signed in. 2026-09-18 (D-055,
+  // extended): the page used to ask "who are you?" again here even
+  // after signing in — Mark: "it still asks for my name - this should
+  // be redundant as my sign in should confirm who i am." The separate
+  // name picker (myPersonId, D-016/D-017) that used to sit alongside
+  // this is gone; the signed-in identity is now the ONLY identity this
+  // page ever attributes a check to, same as every other page.
+  if (!signedInAs) { location.href = "./"; }
+  var myPersonId = signedInAs && signedInAs.id;
   var camp = null;
   try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
   function campParam() {
@@ -146,6 +149,15 @@
   }
   function campName() {
     return (signedInAs && camp && signedInAs.locations && signedInAs.locations.length > 1) ? camp.name : "Chobe Elephant Camp";
+  }
+  if (signedInAs) {
+    document.getElementById("whoAmI").textContent = signedInAs.name;
+    document.getElementById("signOut").onclick = function (e) {
+      e.preventDefault();
+      sessionStorage.removeItem("bw_signin");
+      sessionStorage.removeItem("bw_camp");
+      location.href = "./";
+    };
   }
   if (signedInAs && camp && signedInAs.locations && signedInAs.locations.length > 1) {
     document.getElementById("campTitle").textContent = camp.name;
@@ -165,30 +177,10 @@
     });
   }
 
-  // Department first, then name — per Mark, 2026-09-17, once the real
-  // staff list made the name dropdown long: "the list is very long -
-  // i think we need some filter options to shorten the list. department
-  // picker - then name picker." renderPersonOptions re-filters the name
-  // list whenever the department changes; it never hides anyone with no
-  // department, since a real gap there is worth noticing, not burying.
-  function renderPersonOptions(deptFilter) {
-    var p = document.getElementById("person");
-    var shown = !deptFilter ? state.people
-      : state.people.filter(function (x) { return x.department === deptFilter; });
-    p.innerHTML = '<option value="">Select your name</option>' +
-      shown.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.department ? ' — ' + esc(x.department) : '') + '</option>'; }).join("");
-  }
-
+  if (signedInAs) {
   fetch(FN + (campParam() ? "?" + campParam().slice(1) : "")).then(function (r) { return r.json(); }).then(function (data) {
     state.people = data.people; state.rooms = data.rooms; state.areas = data.areas;
     state.vehicles = data.vehicles || [];
-    var deptSel = document.getElementById("personDept");
-    var deptNames = (data.departments || []).map(function (d) { return d.name; })
-      .filter(function (n) { return state.people.some(function (x) { return x.department === n; }); });
-    deptSel.innerHTML = '<option value="">All departments</option>' +
-      deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
-    deptSel.onchange = function () { renderPersonOptions(deptSel.value); };
-    renderPersonOptions("");
     var r = document.getElementById("room");
     r.innerHTML = '<option value="">Select a room</option>' +
       data.rooms.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
@@ -204,11 +196,11 @@
   }).catch(function (e) {
     document.getElementById("start").innerHTML = "<p>Couldn't reach the checklist data. This is a fault in the page, not your connection or phone — please tell Mark/Claude. (" + esc(e.message) + ")</p>";
   });
+  }
 
   document.getElementById("startBtn").onclick = function () {
-    myPersonId = document.getElementById("person").value;
     var areaVal = document.getElementById("area").value;
-    if (!myPersonId || !areaVal) { alert("Pick your name and what you'd like to do first."); return; }
+    if (!areaVal) { alert("Pick what you'd like to do first."); return; }
     if (areaVal === "__report__") {
       enterReportForm();
       return;

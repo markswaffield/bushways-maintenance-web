@@ -106,6 +106,17 @@
     </div>
     <div class="acts" style="justify-content:center"><button class="primary" id="setPinBtn">Set PIN</button></div>
   </div>
+  <!-- Mark, 2026-09-18: "when you open this page you cannot exit the
+       page unless you type in your name and pin. we need an Return to
+       Menu button in case you went into the page by mistake." This
+       gate is its own separate Administrator PIN (D-037) — nothing to
+       do with the ordinary bw_signin every other page now shares — so
+       there's nowhere on this page itself to send someone back to.
+       "./" (the landing page) is always the right answer regardless:
+       already signed in there, it re-routes straight back to Base
+       Dashboard or their own lodge; not signed in at all, it's the
+       correct place to be anyway. -->
+  <p class="sub" style="margin-top:24px"><a href="./">← Return to Menu</a></p>
 </div>
 
 <div id="app" hidden>

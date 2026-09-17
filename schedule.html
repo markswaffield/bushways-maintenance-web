@@ -273,7 +273,14 @@
       document.getElementById("campLine").hidden = false;
       document.getElementById("campTitle").textContent = camp.name;
     }
-    render();
+    // No render() here — its only caller (below) calls reload() right
+    // after this, and reload() renders itself once lastData actually
+    // has something in it. Calling render() here too, on every single
+    // page load (not just a fresh sign-in), was a real bug: lastData
+    // is still null at this exact moment, and render()'s very first
+    // line reads lastData.schedules — "Could not load: TypeError:
+    // Cannot read properties of null" every time, caught live going
+    // from Base Dashboard straight into Schedule.
   }
   window.onMine = function () { mine = document.getElementById("mine").checked; render(); };
   // The three functions this page used to own for the sign-in picker
@@ -299,6 +306,7 @@
   };
 
   function render() {
+    if (!lastData) return; // nothing to draw yet — reload() calls this again once there is
     var all = (lastData.schedules || []);
     var shown = all.filter(function (s) {
       if (kind && kindOf(s) !== kind) return false;
