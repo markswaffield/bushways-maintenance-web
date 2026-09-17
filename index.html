@@ -44,8 +44,9 @@
   <p class="sub">Sign in to continue</p>
   <div id="signinBox" class="signin-box" hidden>
     <div class="title">Sign in</div>
-    <label>Department</label><select id="whoDept"></select>
-    <label>You are</label><select id="who"></select>
+    <label>Lodge</label><select id="whoLoc" onchange="onWhoLoc()"></select>
+    <label>Department</label><select id="whoDept" disabled></select>
+    <label>You are</label><select id="who" disabled></select>
     <label>PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6" placeholder="4–6 digits">
     <span id="whoSetPin" hidden><label>New PIN</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6">
       <button class="secondary" onclick="doWhoSetPin()">Set PIN</button></span>
@@ -76,11 +77,21 @@
   try { var saved = sessionStorage.getItem("bw_signin"); if (saved) resumed = JSON.parse(saved); } catch (e) {}
   if (resumed) { route(resumed); }
 
-  // Department first, then name — same picker every other sign-in box
-  // has used since D-045/2026-09-17.
-  function renderPersonOptions(deptFilter) {
+  // Lodge first, then department, then name — Mark, 2026-09-18: "at the
+  // moment when you choose a department it only shows the names of the
+  // people in chobe. We need to introduce an additional filter -
+  // Location - then Department." Picking a lodge is what actually
+  // narrows a 230-person, 9-lodge list down to something browsable — the
+  // old picker skipped straight to Department against a Chobe-only list
+  // (`bootstrap()`, deliberately scoped that way, D-044), which is why
+  // anyone real but not homed at Chobe could never find their own name
+  // here at all. This is purely about FINDING your name — it has no
+  // bearing on which lodge you actually land in after signing in, which
+  // is still decided by `locations` off `login()` (D-052/D-053).
+  function renderPersonOptions(locId, deptFilter) {
     var sel = document.getElementById("who");
-    var shown = !deptFilter ? people : people.filter(function (p) { return p.department === deptFilter; });
+    var shown = people.filter(function (p) { return p.location_id === locId; });
+    if (deptFilter) shown = shown.filter(function (p) { return p.department === deptFilter; });
     sel.innerHTML = '<option value="">— nobody —</option>' + shown.map(function (p) {
       return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
     }).join("");
@@ -89,6 +100,28 @@
       document.getElementById("whoSetPin").hidden = !opt || opt.dataset.pinSet !== "false";
     };
   }
+
+  window.onWhoLoc = function () {
+    var locId = document.getElementById("whoLoc").value;
+    var deptSel = document.getElementById("whoDept");
+    var whoSel = document.getElementById("who");
+    if (!locId) {
+      deptSel.disabled = true; whoSel.disabled = true;
+      deptSel.innerHTML = ""; whoSel.innerHTML = "";
+      return;
+    }
+    var here = people.filter(function (p) { return p.location_id === locId; });
+    var deptNames = [];
+    var seen = {};
+    here.forEach(function (p) { if (p.department && !seen[p.department]) { seen[p.department] = true; deptNames.push(p.department); } });
+    deptNames.sort();
+    deptSel.innerHTML = '<option value="">All departments</option>' +
+      deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
+    deptSel.disabled = false;
+    deptSel.onchange = function () { renderPersonOptions(locId, deptSel.value); };
+    whoSel.disabled = false;
+    renderPersonOptions(locId, "");
+  };
 
   window.doWhoSetPin = function () {
     var id = document.getElementById("who").value;
@@ -121,41 +154,15 @@
     });
   };
 
-  // Two lists merged, not one — plain bootstrap() alone is Chobe-scoped
-  // (D-044, on purpose: nobody wants 227 names in one dropdown), which
-  // would leave out the very people D-052 built this whole multi-camp
-  // path for. The 2 Concession Managers are homed at their own lodges
-  // (Khwai, OAT), not Chobe, and are not `is_base_manager` — bootstrap()
-  // alone would never list their names at all, and this is the one
-  // picker that has to work for absolutely anyone who might sign in,
-  // before anything is known about who that will be. base_dashboard_people
-  // (built for the old base-dashboard/base-rollup pickers, D-052) is
-  // exactly the other half: everyone with is_base_manager or a
-  // dashboard_location_access row. Merged and deduplicated by id.
+  // Genuinely group-wide, not `bootstrap()`'s Chobe-scoped list (D-044)
+  // — see the comment on renderPersonOptions above for why that has to
+  // be true here specifically.
   if (!resumed) {
-    Promise.all([
-      fetch(FN).then(function (r) { return r.json(); }),
-      fetch(FN + "?action=base_dashboard_people").then(function (r) { return r.json(); }),
-    ]).then(function (res) {
-      var b = res[0], extra = res[1];
-      var seen = {};
-      people = [];
-      (b.people || []).concat(extra.people || []).forEach(function (p) {
-        if (!seen[p.id]) { seen[p.id] = true; people.push(p); }
-      });
-      people.sort(function (a, c) { return a.name.localeCompare(c.name); });
-      var deptSeen = {}, departments = [];
-      (b.departments || []).concat(extra.departments || []).forEach(function (d) {
-        if (!deptSeen[d.name]) { deptSeen[d.name] = true; departments.push(d); }
-      });
-      var deptSel = document.getElementById("whoDept");
-      var deptNames = departments.map(function (d) { return d.name; })
-        .filter(function (n) { return people.some(function (p) { return p.department === n; }); })
-        .sort();
-      deptSel.innerHTML = '<option value="">All departments</option>' +
-        deptNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
-      deptSel.onchange = function () { renderPersonOptions(deptSel.value); };
-      renderPersonOptions("");
+    fetch(FN + "?action=landing_people").then(function (r) { return r.json(); }).then(function (b) {
+      people = b.people || [];
+      var locSel = document.getElementById("whoLoc");
+      locSel.innerHTML = '<option value="">Select your lodge</option>' +
+        (b.locations || []).map(function (l) { return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>'; }).join("");
       document.getElementById("loadingMsg").hidden = true;
       document.getElementById("signinBox").hidden = false;
     }).catch(function (e) {
