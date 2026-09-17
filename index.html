@@ -55,6 +55,18 @@
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
   .filter-section label:first-of-type{margin-top:0}
   .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  /* A checkbox row (Mine, below) needs the same real tap target as
+     everything else — Mark, 2026-09-17: "there is a small block for
+     Mine - this needs to be a bit bigger too - too small to see
+     easily or hit with your finger." A bare browser checkbox stays
+     ~13px regardless of anything around it, so the box itself is
+     enlarged, not just its label. */
+  .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
+  .filter-section label.check input[type=checkbox]{width:20px;height:20px;flex:none}
+  @media (max-width:700px){
+    .filter-section label.check{font-size:16px;padding:6px 0}
+    .filter-section label.check input[type=checkbox]{width:24px;height:24px}
+  }
   .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
   .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 14px;margin-top:6px}
@@ -339,8 +351,8 @@
     // for the day."
     html += '<div class="filter-section"><div class="title">Who</div>';
     if (me) {
-      html += '<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px">' +
-        '<input type="checkbox" id="mine" onchange="onMine()" style="width:auto"' + (mine ? " checked" : "") + '>' +
+      html += '<label class="check">' +
+        '<input type="checkbox" id="mine" onchange="onMine()"' + (mine ? " checked" : "") + '>' +
         'Mine — me or ' + esc(me.department || "my department") + '</label>';
     }
     var unassignedCount = all.filter(function (x) { return !x.assigned_department; }).length;
