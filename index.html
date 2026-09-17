@@ -506,6 +506,12 @@
     var kind = document.getElementById("f_kind").value;
     var body = {
       by_person_id: me && me.id,
+      // A new rule belongs to whichever camp is currently entered —
+      // Mark, 2026-09-18: "When a Base Manager enters Khwai - he must
+      // be editing or creating in Khwai - not in Chobe." Unused by
+      // updateSchedule (a rule's camp is fixed at creation), harmless
+      // to send either way.
+      location_id: camp ? camp.id : null,
       name: document.getElementById("f_name").value,
       interval_kind: kind,
       default_department_id: document.getElementById("f_dept").value || null,

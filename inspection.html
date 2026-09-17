@@ -468,7 +468,7 @@
     btn.disabled = true;
     fetch(FN + "?action=structure", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: text, reported_by: signedInAs ? signedInAs.id : myPersonId, location_id: camp ? camp.id : null }),
+      body: JSON.stringify({ text: text, reported_by: myPersonId, signed_in_id: signedInAs ? signedInAs.id : null, location_id: camp ? camp.id : null }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       btn.disabled = false;
       if (out.header || (out.faults && out.faults.length)) {
@@ -528,6 +528,7 @@
           sub_area_id: matchedSubareaId,
           structured: wasStructured,
           location_id: camp ? camp.id : null,
+          signed_in_id: signedInAs ? signedInAs.id : null,
         }),
       });
     }).then(function (r) { return r.json(); }).then(function (out) {
@@ -837,6 +838,7 @@
             hours: pendingHours,
             template_id: data.template_id, results: results,
             location_id: camp ? camp.id : null,
+            signed_in_id: signedInAs ? signedInAs.id : null,
           }),
         }).then(function (resp) { return resp.json(); }).then(function (out) {
           // The issue this item's photo belongs to doesn't exist until
