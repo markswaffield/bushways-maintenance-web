@@ -216,7 +216,12 @@
     data.targets.forEach(function (t, ti) {
       html += "<h2>" + esc(t.target_label) + "</h2>";
       t.sections.forEach(function (s) {
-        html += "<h3>" + esc(s.name) + "</h3>";
+        // A D-064 target has exactly one section, named after the
+        // target itself — showing it again here would just repeat the
+        // h2 above in different capitalisation. A target with several
+        // real sections (none exist yet, but nothing rules it out)
+        // still gets its own sub-heading.
+        if (s.name !== t.target_label) html += "<h3>" + esc(s.name) + "</h3>";
         s.items.forEach(function (item) {
           var key = ti + ":" + item.id;
           if (item.kind === "reading") {
