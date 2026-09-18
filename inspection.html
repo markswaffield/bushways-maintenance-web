@@ -19,6 +19,12 @@
   .item input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
   .details{display:none;margin:10px 0 0 30px;padding:10px;background:#EFECE3;border-radius:6px}
   .item.open .details{display:block}
+  /* Still open from a previous visit — 2026-09-18 (D-060), Mark: "the
+     fault should remain live in a specific target checklist until such
+     time as it has been fixed and cleared." A plain empty checklist
+     inviting the same broken toilet to be flagged as if new, every
+     single visit, was the actual bug. */
+  .reopen-banner{background:#F4CFC2;color:#A8502F;font-size:12.5px;font-weight:600;padding:7px 10px;border-radius:6px;margin:0 0 8px}
   .note{color:#8C6A2F;font-size:12px;margin-top:2px}
   .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
   .confirm .transcript{font-style:italic;margin-top:8px}
@@ -621,15 +627,24 @@
     show("checklist");
 
     var itemFaultsById = {};
+    // item.id -> issue_id, only for the single-open-fault case above —
+    // this is what lets submit know "unticked" means "confirmed fixed"
+    // for THIS item specifically, not just "nothing to report."
+    var resolvableIssueByItemId = {};
 
-    function faultPickerHtml(item) {
+    // preselect: the single open_issues[0] entry when there's exactly
+    // one still-open fault on this item (2026-09-18, D-060) — the
+    // fault picker opens already pointed at it, since this is a
+    // confirmation ("still broken") far more often than a fresh find.
+    function faultPickerHtml(item, preselect) {
       itemFaultsById[item.id] = item.faults;
       if (!item.faults.length) return "";
       var grouped = item.faults.some(function (f) { return f.component_id; });
       if (!grouped) {
         return '<label>What\'s wrong?</label><select data-fault="' + item.id + '"><option value="">Choose one</option>' +
           item.faults.map(function (f) {
-            return '<option value="' + f.id + '">' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+            var sel = preselect && preselect.fault_type_id === f.id;
+            return '<option value="' + f.id + '"' + (sel ? " selected" : "") + '>' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
           }).join("") + '</select>';
       }
       var components = [], seen = {};
@@ -637,10 +652,35 @@
         var key = f.component_id || "__other__";
         if (!seen[key]) { seen[key] = true; components.push({ key: key, name: f.component_name || "Other" }); }
       });
-      return '<label>Which part?</label><select data-component="' + item.id + '" onchange="onComponentChange(\'' + item.id + '\')"><option value="">Choose one</option>' +
-        components.map(function (comp) { return '<option value="' + comp.key + '">' + esc(comp.name) + '</option>'; }).join("") +
+      var preKey = preselect ? (preselect.component_id || "__other__") : null;
+      var faultOptions = preKey
+        ? item.faults.filter(function (f) { return (f.component_id || "__other__") === preKey; })
+        : [];
+      return '<label>Which part?</label><select data-component="' + item.id + '" onchange="onComponentChange(\'' + item.id + '\')">' +
+        '<option value="">Choose one</option>' +
+        components.map(function (comp) { return '<option value="' + comp.key + '"' + (comp.key === preKey ? " selected" : "") + '>' + esc(comp.name) + '</option>'; }).join("") +
         '</select>' +
-        '<label>What\'s wrong?</label><select data-fault="' + item.id + '" disabled><option value="">Choose the part first</option></select>';
+        '<label>What\'s wrong?</label><select data-fault="' + item.id + '"' + (preKey ? "" : " disabled") + '>' +
+        (preKey
+          ? faultOptions.map(function (f) {
+              var sel = preselect.fault_type_id === f.id;
+              return '<option value="' + f.id + '"' + (sel ? " selected" : "") + '>' + esc(f.name) + (f.suggestion ? " — suggested: " + esc(f.suggestion) : "") + '</option>';
+            }).join("")
+          : '<option value="">Choose the part first</option>') +
+        '</select>';
+    }
+
+    // "3 days ago" / "2 weeks ago" — plain enough that anyone reads it
+    // at a glance, no library needed for something this small.
+    function timeAgo(iso) {
+      var days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+      if (days === 0) return "today";
+      if (days === 1) return "1 day ago";
+      if (days < 14) return days + " days ago";
+      var weeks = Math.floor(days / 7);
+      if (weeks < 8) return weeks + " week" + (weeks === 1 ? "" : "s") + " ago";
+      var months = Math.floor(days / 30);
+      return months + " month" + (months === 1 ? "" : "s") + " ago";
     }
 
     window.onComponentChange = function (itemId) {
@@ -705,9 +745,28 @@
           html += '<div class="item"><label class="main">' + esc(item.text) + '</label>' +
             '<input type="text" inputmode="numeric" data-value="' + item.id + '" placeholder="Reading"></div>';
         } else {
-          html += '<div class="item" data-item="' + item.id + '">' +
-            '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
-            '<div class="details">' + faultPickerHtml(item) +
+          // Still open from an earlier visit (2026-09-18, D-060) — the
+          // one-fault case pre-checks the box and pre-points the fault
+          // picker at it, since a person opening this checklist is far
+          // more often confirming "yes, still broken" than finding
+          // something new. More than one open fault on the same line
+          // (only possible on a grouped item type, i.e. Toilet today)
+          // is shown as a plain warning instead — picking which one to
+          // act on stays a job for Fix a Fault, not this screen.
+          var openIssues = item.open_issues || [];
+          var single = openIssues.length === 1 ? openIssues[0] : null;
+          if (single) resolvableIssueByItemId[item.id] = single.issue_id;
+          var banner = "";
+          if (single) {
+            banner = '<p class="reopen-banner">⚠ Already reported, not yet fixed — ' + esc(timeAgo(single.created_at)) +
+              '. Still broken? Leave it ticked. Fixed now? Untick it.</p>';
+          } else if (openIssues.length > 1) {
+            banner = '<p class="reopen-banner">⚠ ' + openIssues.length + ' faults already reported here, not yet fixed — resolve them from Fix a Fault once done.</p>';
+          }
+          html += '<div class="item' + (single ? " open" : "") + '" data-item="' + item.id + '">' +
+            '<label class="main"><input type="checkbox" data-failed="' + item.id + '"' + (single ? " checked" : "") + '> ' + esc(item.text) + '</label>' +
+            (openIssues.length > 1 ? banner : "") +
+            '<div class="details">' + (single ? banner : "") + faultPickerHtml(item, single) +
             '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
             '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
             '</div></div>';
@@ -754,6 +813,11 @@
                 label: shortLabel(item.text), fault_type_label: faultLabel,
                 photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
               });
+            } else if (resolvableIssueByItemId[item.id]) {
+              // Pre-checked because it was still open, actively
+              // unticked this time — a real confirmation it's fixed,
+              // not just "nothing to report" (2026-09-18, D-060).
+              results.push({ item_id: item.id, resolved_issue_id: resolvableIssueByItemId[item.id], label: shortLabel(item.text) });
             }
           }
         });
@@ -785,6 +849,7 @@
       show("review");
       var flagged = results.filter(function (x) { return x.failed; });
       var readings = results.filter(function (x) { return x.value !== undefined; });
+      var resolved = results.filter(function (x) { return x.resolved_issue_id; });
       var html = '<h1>Confirm Inspection</h1>' +
         '<p class="sub">' + esc(data.target_label || data.room_label) + ', ' + esc(campName()) + ' — check this is right before it\'s recorded</p>';
 
@@ -797,9 +862,21 @@
           pendingHours.toLocaleString() + '</b></p></div>';
       }
 
-      if (!flagged.length && !readings.length) {
+      // Confirmed fixed this visit (2026-09-18, D-060) — its own card,
+      // separate from what's still wrong, since closing something out
+      // is worth a person double-checking before it's recorded same as
+      // raising one is.
+      if (resolved.length) {
+        html += '<div class="review-card"><p class="review-line" style="color:#2F6B45;font-weight:600">✓ Marking fixed:</p>';
+        resolved.forEach(function (x) {
+          html += '<p class="review-line">' + esc(x.label) + '</p>';
+        });
+        html += '</div>';
+      }
+
+      if (!flagged.length && !readings.length && !resolved.length) {
         html += '<div class="review-card"><p class="review-line">Nothing flagged — every item recorded as fine.</p></div>';
-      } else {
+      } else if (flagged.length || readings.length) {
         html += '<div class="review-card">';
         flagged.forEach(function (x) {
           html += '<p class="review-line">' + esc(x.label) +
@@ -852,7 +929,14 @@
             document.getElementById("doneBox").innerHTML =
               "<p>" + esc(out.target_label || out.room_label) + ", " + esc(campName()) + ".</p>" +
               "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
-              (out.issues_raised ? "<p>" + out.issues_raised + " issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
+              // Split 2026-09-18 (D-060): a new fault reads differently
+              // from one that's simply still broken — telling someone
+              // "1 issue raised" for a toilet that's been on the
+              // to-do list for three weeks would be a real, misleading
+              // claim that something had just been found.
+              (out.issues_raised ? "<p>" + out.issues_raised + " new issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
+              (out.issues_confirmed ? "<p>" + out.issues_confirmed + " still open from before — confirmed, not duplicated.</p>" : "") +
+              (out.issues_resolved ? "<p>" + out.issues_resolved + " marked fixed.</p>" : "") +
               (out.odometer_recorded != null ? "<p>Odometer recorded: " + Number(out.odometer_recorded).toLocaleString() + " km.</p>" : "") +
               (out.hours_recorded != null ? "<p>Hours recorded: " + Number(out.hours_recorded).toLocaleString() + ".</p>" : "") +
               (out.service_raised ? "<p><b>A service is now due for this vehicle</b> — it's on the schedule.</p>" : "") +
