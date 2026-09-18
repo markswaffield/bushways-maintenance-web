@@ -92,7 +92,15 @@
 <div class="filter-section signin-box" id="whoSignedIn">
   <div class="title">Signed in</div>
   <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
-  <button class="primary" onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button>
+  <!-- Mark, 2026-09-18: "we need a button that takes you back to the
+       page where you can select which tool you want to work with."
+       Deliberately not signOut() — it stays the same signed-in
+       session, just back to the group's own tool picker (root
+       D-025/D-026). route() there routes a Base Manager straight back
+       to that same picker on its own, resumed session or not, so a
+       plain link to "./" is all this needs. -->
+  <button onclick="location.href='./'" style="width:100%;margin-top:10px">← Change tool</button>
+  <button class="primary" onclick="signOut()" style="width:100%;margin-top:8px">Sign out</button>
 </div>
 
 <div id="app"><p class="empty">Loading…</p></div>
