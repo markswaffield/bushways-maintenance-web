@@ -109,10 +109,22 @@
   // here at all. This is purely about FINDING your name — it has no
   // bearing on which lodge you actually land in after signing in, which
   // is still decided by `locations` off `login()` (D-052/D-053).
+  // "Base Management" is not really a department the way "Maintenance"
+  // or "Operations" is — it's the literal home department of a handful
+  // of people (Directors and the like), while most of the group's real
+  // Base Managers sit in their own actual department (a Maintenance
+  // Manager, a Guides Coordinator...) and carry a separate flag,
+  // is_base_manager, that gives them access to every lodge (D-053).
+  // Mark, 2026-09-18, pointing at exactly this mismatch: "the drop
+  // down list of Base Managers does not match the list i have saved."
+  // Picking "Base Management" here means the flag, not the department
+  // string — matches his own staff sheet's "Base Manager" column
+  // one-for-one, not just the people literally filed under that name.
   function renderPersonOptions(locId, deptFilter) {
     var sel = document.getElementById("who");
     var shown = people.filter(function (p) { return p.location_id === locId; });
-    if (deptFilter) shown = shown.filter(function (p) { return p.department === deptFilter; });
+    if (deptFilter === "Base Management") shown = shown.filter(function (p) { return p.is_base_manager; });
+    else if (deptFilter) shown = shown.filter(function (p) { return p.department === deptFilter; });
     sel.innerHTML = '<option value="">— nobody —</option>' + shown.map(function (p) {
       return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
     }).join("");
