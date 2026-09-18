@@ -226,7 +226,7 @@
     var v = boot_vehicles.filter(function (x) { return x.id === id; })[0];
     return v ? (v.registration || v.label) : "";
   }
-  var handovers = [], handoverPeople = [], raisingHandover = false;
+  var handovers = [], handoverPeople = [], raisingHandover = false, editingHandoverId = null;
   // The reference view of a completed handover's checklist, reopenable
   // any time — per Mark, 2026-09-17: "now when i sign off on it - i
   // want to be able to see the history of the handover so i can easily
@@ -800,8 +800,34 @@
   // submit() in the Edge Function. "History", below, still opens the
   // read-only view of what the outgoing person recorded, any time —
   // a different, still-useful feature, untouched.
-  window.startRaiseHandover = function () { raisingHandover = true; render(); };
-  window.cancelHandover = function () { raisingHandover = false; render(); };
+  window.startRaiseHandover = function () { raisingHandover = true; editingHandoverId = null; render(); };
+  window.cancelHandover = function () { raisingHandover = false; editingHandoverId = null; render(); };
+
+  // Correcting a handover after it's raised — Mark, 2026-09-18: "If a
+  // handover is created with person A handing over to person B - but
+  // then it is found that B cannot receive the vehicle and we need to
+  // change it to person C. how can we do this." Open to management on
+  // any handover that isn't done yet; who's handing over specifically
+  // locks the moment they've actually done the outgoing check
+  // (`handed_over_at` set) — the form below shows that as fixed text
+  // rather than a picker once it does.
+  window.startEditHandover = function (id) { editingHandoverId = id; raisingHandover = false; render(); };
+  window.doEditHandover = function (id, btn) {
+    if (btn) btn.disabled = true;
+    fetch(FN.replace("action=dashboard", "action=edit_handover"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        by_person_id: me && me.id, handover_id: id,
+        from_person_id: document.getElementById("eho_from") ? document.getElementById("eho_from").value : undefined,
+        to_person_id: document.getElementById("eho_to").value,
+        handover_on: document.getElementById("eho_on").value,
+        to_location_id: document.getElementById("eho_lodge").value || null,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      editingHandoverId = null; reload();
+    });
+  };
 
   window.toggleHandoverHistory = function (id) {
     if (handoverHistoryFor === id) { handoverHistoryFor = null; render(); return; }
@@ -861,6 +887,28 @@
       '<p class="rmeta" style="margin-top:4px">If it ends up at a different lodge, signing for it moves the vehicle there — ' +
       'with its open faults, schedules and open checks.</p>' +
       '<div class="racts"><button onclick="doRaiseHandover(this)">Raise handover</button>' +
+      '<button onclick="cancelHandover()">Cancel</button></div></div>';
+  }
+
+  // Same fields as raising one, pre-filled — "Handed over by" becomes
+  // fixed text once that person's own check is already recorded
+  // (`handed_over_at` set), since that can't change any more; every
+  // other field stays open right up until the handover is done.
+  function handoverEditForm(x) {
+    var fromLocked = !!x.handed_over_at;
+    return '<div class="form">' +
+      '<label>Handed over by</label>' +
+      (fromLocked
+        ? '<p class="rmeta" style="margin:2px 0 10px">' + esc(x.from) + ' — the check is already recorded against them, so this can\'t change now.</p>'
+        : '<select id="eho_from"><option value="">Choose…</option>' + personOptions(x.from_person_id) + '</select>') +
+      '<label>Received by</label><select id="eho_to"><option value="">Choose…</option>' + personOptions(x.to_person_id) + '</select>' +
+      '<label>On</label><input type="date" id="eho_on" value="' + esc(x.on) + '">' +
+      '<label>Ending up at</label><select id="eho_lodge">' +
+      '<option value="">Staying at this lodge</option>' +
+      (lastData.locations || []).map(function (l) {
+        return '<option value="' + esc(l.id) + '"' + (x.to_location_id === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
+      }).join("") + '</select>' +
+      '<div class="racts"><button onclick="doEditHandover(\'' + x.id + '\', this)">Save changes</button>' +
       '<button onclick="cancelHandover()">Cancel</button></div></div>';
   }
 
@@ -948,15 +996,30 @@
       // see the history of the handover so i can easily see the
       // faults that each person found." Reuses the exact same
       // read-only checklist view Sign for it already shows.
-      if (x.inspection_id) {
-        h += '<div class="racts" style="margin-top:8px"><button onclick="toggleHandoverHistory(\'' + x.id + '\')">' +
-          (handoverHistoryFor === x.id ? "Hide history" : "History") + '</button></div>';
+      // Edit — management only, and only while there's still something
+      // to correct (x.stage !== "done" — a completed handover is
+      // history). Sits beside History rather than replacing it, since
+      // they answer different questions: History shows what happened,
+      // Edit fixes what's still wrong.
+      var showHistoryBtn = !!x.inspection_id;
+      var showEditBtn = me && me.is_manager && x.stage !== "done" && editingHandoverId !== x.id;
+      if (showHistoryBtn || showEditBtn) {
+        h += '<div class="racts" style="margin-top:8px">';
+        if (showHistoryBtn) {
+          h += '<button onclick="toggleHandoverHistory(\'' + x.id + '\')">' +
+            (handoverHistoryFor === x.id ? "Hide history" : "History") + '</button>';
+        }
+        if (showEditBtn) {
+          h += '<button onclick="startEditHandover(\'' + x.id + '\')">Edit</button>';
+        }
+        h += '</div>';
       }
       if (handoverHistoryFor === x.id) {
         h += handoverHistoryLoading ? '<p class="loading">Loading the checklist…</p>'
            : handoverHistoryChecklist ? signChecklistHtml(handoverHistoryChecklist)
            : "";
       }
+      if (editingHandoverId === x.id) h += handoverEditForm(x);
       // No "Sign for it" step any more — per Mark, 2026-09-18 (see the
       // comment above handoversSection's JS). Completing it is just
       // doing the vehicle's own check; this line only says whose turn
