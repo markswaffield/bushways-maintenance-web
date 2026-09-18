@@ -44,6 +44,23 @@
   .card .fault-line{font-size:13.5px;margin:0}
   .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
   .card .meta{font-size:12px;color:#6B6455;margin:4px 0 0}
+  /* Assigning and the note management adds before assigning moved here
+     from Fix a Fault, 2026-09-18 (D-072) — Mark: "all managers can add
+     a note and assign as was the case in for Fix A Fault." Same
+     control shapes, unchanged, just living here now. */
+  select,input[type=text],textarea{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
+  button{padding:10px 16px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff}
+  button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  button.small{padding:7px 12px;font-size:13px}
+  .notes{margin-top:8px}
+  .note-line{background:#EFECE3;border-radius:6px;padding:6px 10px;font-size:13px;margin-top:4px}
+  .note-line .note-who{font-weight:600;color:#5B5344}
+  .note-add{margin-top:8px;display:flex;gap:8px;align-items:flex-start}
+  .note-add textarea{flex:1;font-size:14px}
+  .assign-row{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .assign-row select{flex:1}
+  .assigned-label{font-size:12.5px;color:#43594A;font-weight:600;margin-top:6px}
+  .actions{display:flex;gap:8px;margin-top:10px}
   .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
   .badge.overdue{background:#F4CFC2;color:#A8502F}
   .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
@@ -85,7 +102,9 @@
   var shownCamp = camp || (me && me.locations && me.locations[0]);
   if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=dashboard" + CAMP_PARAM;
+  var API = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
   var lastData = null;
+  var departments = []; // set once data first loads — doAddNote/doAssign's own assign-row needs it too
   // Rebuilt 2026-09-09, per Mark's own sketch: "Default Order" groups
   // by maintenance Area first (Guest Room, Main Area, Workshop...),
   // then by Target within it (Room 1's faults all together, then
@@ -127,13 +146,17 @@
     return { overdue: "Overdue", due_soon: "Due soon", upcoming: "Upcoming" }[status];
   }
 
-  fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
-    lastData = data;
-    renderFilters(data);
-    renderIssues(applyFilters(data));
-  }).catch(function (e) {
-    document.getElementById("app").innerHTML = "<p>Couldn't load the to-do list — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
-  });
+  function loadIssues() {
+    fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+      lastData = data;
+      departments = data.departments || [];
+      renderFilters(data);
+      renderIssues(applyFilters(data));
+    }).catch(function (e) {
+      document.getElementById("app").innerHTML = "<p>Couldn't load the to-do list — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+    });
+  }
+  loadIssues();
 
   function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
   // Every distinct target currently open within one area — built from
@@ -304,8 +327,40 @@
             (f.action ? ' — ' + esc(f.action) : '') +
             (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(f.assigned_department) + '</span>' : '') +
             '</p>' +
-            '<p class="meta">' + esc(f.raised_by) + ', ' + timeAgo(f.raised_at) + '</p>' +
-            '</div>';
+            '<p class="meta">' + esc(f.raised_by) + ', ' + timeAgo(f.raised_at) + '</p>';
+
+          // Detail management adds before assigning, and assigning
+          // itself — moved here from Fix a Fault, 2026-09-18 (D-072).
+          // Mark: "move the assign option away from the Fix a Fault
+          // page and put it on the To-Do-List page. On the To-do-List
+          // Page all managers can add a note and assign as was the
+          // case in for Fix A Fault." Same controls, same shapes,
+          // living at the point management actually triages from.
+          if (f.notes && f.notes.length) {
+            html += '<div class="notes">' + f.notes.map(function (n) {
+              return '<p class="note-line"><span class="note-who">' + esc(n.by || "Unknown") + '</span> — ' + esc(n.text) + '</p>';
+            }).join("") + '</div>';
+          }
+          if (me && me.is_manager) {
+            html += '<div class="note-add"><textarea id="note-' + f.id + '" rows="1" placeholder="Add detail for whoever picks this up (optional)"></textarea>' +
+              '<button class="small secondary" onclick="doAddNote(\'' + f.id + '\')">Add note</button></div>';
+            html += '<div class="assign-row"><select id="assign-' + f.id + '">' +
+              '<option value="">Unassigned</option>' +
+              departments.map(function (d) {
+                return '<option value="' + d.id + '"' + (f.assigned_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
+              }).join("") +
+              '</select><button class="small secondary" onclick="doAssign(\'' + f.id + '\')">Assign</button></div>';
+          }
+
+          // Straight into Fix a Fault for this one, no re-finding it
+          // among filters — the same "Open checklist →" pattern the
+          // Due list uses for a schedule. Mark, 2026-09-18: "the
+          // option to be able to go directly from To-do-List into Fix
+          // a Fault, just like the schedules allow you to go directly
+          // into the Checklists."
+          html += '<div class="actions"><button class="small secondary" onclick="location.href=\'./fix.html?issue=' + f.id + '\'">Open in Fix a Fault →</button></div>';
+
+          html += '</div>';
         });
         html += '</div>';
       });
@@ -318,6 +373,30 @@
 
     document.getElementById("app").innerHTML = html;
   }
+
+  window.doAddNote = function (id) {
+    var field = document.getElementById("note-" + id);
+    var text = field.value.trim();
+    if (!text) return;
+    fetch(API + "?action=attach", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_id: id, added_by: me.id, note: text }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      loadIssues();
+    }).catch(function (e) { alert("Couldn't add the note — a fault in the page. (" + e.message + ")"); });
+  };
+
+  window.doAssign = function (id) {
+    var departmentId = document.getElementById("assign-" + id).value;
+    fetch(API + "?action=assign", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, by_person_id: me.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); return; }
+      loadIssues();
+    }).catch(function (e) { alert("Couldn't assign — a fault in the page. (" + e.message + ")"); });
+  };
 </script>
 <script>
   /* Root D-023. Registered on every page so each one is saved on the phone
