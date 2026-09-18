@@ -68,7 +68,7 @@
      everything else — Mark, 2026-09-17: "there is a small block for
      Mine - this needs to be a bit bigger too - too small to see
      easily or hit with your finger." */
-  .filter-section label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
+  .filter-section label.check,.form label.check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;padding:4px 0}
   /* Size, then accent-color, then a border — none of it reliable, all
      on the same underlying problem: a native checkbox's own rendering
      is the OS/browser's call, not CSS's, no matter what gets layered
@@ -78,22 +78,22 @@
      square and a hand-drawn tick — nothing left for a browser to
      under-render, because there's no native widget left in the
      picture at all. */
-  .filter-section label.check input[type=checkbox]{
+  .filter-section label.check input[type=checkbox],.form label.check input[type=checkbox]{
     appearance:none;-webkit-appearance:none;margin:0;
     width:24px;height:24px;flex:none;box-sizing:border-box;
     border:2px solid #43594A;border-radius:4px;
     background:#fff;cursor:pointer;position:relative;
   }
-  .filter-section label.check input[type=checkbox]:checked{background:#43594A}
-  .filter-section label.check input[type=checkbox]:checked::after{
+  .filter-section label.check input[type=checkbox]:checked,.form label.check input[type=checkbox]:checked{background:#43594A}
+  .filter-section label.check input[type=checkbox]:checked::after,.form label.check input[type=checkbox]:checked::after{
     content:"";position:absolute;left:7px;top:3px;
     width:6px;height:12px;border:solid #fff;border-width:0 2px 2px 0;
     transform:rotate(45deg);
   }
   @media (max-width:700px){
-    .filter-section label.check{font-size:16px;padding:6px 0}
-    .filter-section label.check input[type=checkbox]{width:28px;height:28px}
-    .filter-section label.check input[type=checkbox]:checked::after{left:9px;top:4px;width:7px;height:14px}
+    .filter-section label.check,.form label.check{font-size:16px;padding:6px 0}
+    .filter-section label.check input[type=checkbox],.form label.check input[type=checkbox]{width:28px;height:28px}
+    .filter-section label.check input[type=checkbox]:checked::after,.form label.check input[type=checkbox]:checked::after{left:9px;top:4px;width:7px;height:14px}
   }
   .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
@@ -221,6 +221,13 @@
   var mine = false, filterDept = "", filterPerson = "";
   var people = [], departments = [], areas = [], boot_vehicles = [];
   var VEHICLE_AREA_ID = null, addForVehicle = null;
+  // Several targets at once (D-065/D-066) — every real target for
+  // every split area, loaded once at page load, the same shape
+  // boot_vehicles already is. { area_id: [{type,id,label}] } — an area
+  // with no entry here (Guest Rooms, Vehicles, most other lodges) just
+  // has nothing to pick, and the form falls back to its ordinary
+  // single/no-target shape.
+  var targetsByArea = {};
   function isVehicleArea(id) { return !!id && id === VEHICLE_AREA_ID; }
   function vehLabel(id) {
     var v = boot_vehicles.filter(function (x) { return x.id === id; })[0];
@@ -489,6 +496,18 @@
       target_vehicle_id: (kind !== "date" || isVehicleArea(document.getElementById("f_area").value))
         ? (document.getElementById("f_vehicle").value || null) : null,
     };
+    // Several targets at once (D-065/D-066) — sent whenever the picked
+    // area actually has any real targets to offer (even an empty list,
+    // so unchecking every box on an edit genuinely clears them);
+    // omitted entirely for an area with none, so an ordinary schedule
+    // is completely unaffected.
+    var targetBoxes = Array.prototype.slice.call(document.querySelectorAll(".f_target"));
+    if (targetBoxes.length) {
+      body.target_list = targetBoxes.filter(function (el) { return el.checked; }).map(function (el) {
+        var parts = el.value.split(":");
+        return { type: parts[0], id: parts[1] };
+      });
+    }
     if (kind === "date") {
       body.reminder_days = document.getElementById("f_lead").value === "" ? null : leadInDays();
       body.next_due_date = document.getElementById("f_firstdue").value || null;
@@ -690,6 +709,7 @@
           return '<option value="' + esc(v.id) + '"' + (sel ? " selected" : "") + '>' + esc(v.label) + '</option>';
         }).join("") + '</select>' +
       '</div>' +
+      targetsFieldHtml(isNew ? null : rule, isNew ? (addForVehicle ? VEHICLE_AREA_ID : "") : rule.area_id) +
       '<label>Which department does this belong to?</label><select id="f_dept">' +
       '<option value="">Choose a department…</option>' +
       departments.map(function (d) {
@@ -771,10 +791,34 @@
   };
 
 
+  // Several targets at once (D-065/D-066) — Mark: "we create a
+  // schedule - select all the targets that should be included." A real
+  // checkbox per target, using D-050's own custom checkbox (appearance:
+  // none, hand-drawn — the only rendering that's actually held up on
+  // every device this session tested). Only shows for an area that
+  // actually has real, split targets (targetsByArea) — the 11 areas
+  // D-064 built, at CEC, today. Everywhere else this renders empty and
+  // hidden, and the schedule keeps working exactly as it always has.
+  function targetsFieldHtml(rule, areaId) {
+    var opts = targetsByArea[areaId] || [];
+    if (!opts.length) return '<div id="f_targetsrow" hidden></div>';
+    var checkedIds = {};
+    (rule && rule.targets || []).forEach(function (t) { checkedIds[t.type + ":" + t.id] = true; });
+    return '<div id="f_targetsrow"><label>Which targets does this cover?</label>' +
+      '<p class="rmeta" style="margin:2px 0 6px">Pick as many as this schedule should combine into one checklist — leave none picked for an ordinary single-target schedule.</p>' +
+      opts.map(function (t) {
+        var key = t.type + ":" + t.id;
+        return '<label class="check"><input type="checkbox" class="f_target" value="' + esc(key) + '"' +
+          (checkedIds[key] ? " checked" : "") + '>' + esc(t.label) + '</label>';
+      }).join("") + '</div>';
+  }
+
   window.onAreaPick = function () {
     var row = document.getElementById("f_vehrow");
     var k = document.getElementById("f_kind").value;
     if (row) row.hidden = (k === "date") && !isVehicleArea(document.getElementById("f_area").value);
+    var tRow = document.getElementById("f_targetsrow");
+    if (tRow) tRow.outerHTML = targetsFieldHtml(null, document.getElementById("f_area").value);
   };
 
   window.onPresetPick = function () {
@@ -1230,6 +1274,13 @@
     if (me && me.is_manager && s.is_schedule && s.completable) {
       h += '<div class="assign-row"><button onclick="startComplete(\'' + s.id + '\')">Complete</button></div>';
     }
+    // Several targets at once (D-065/D-066) — open to anyone signed in,
+    // not management-only, same as opening any other checklist is.
+    // "Complete," above, is different: recording a note as done needs
+    // the same management gate a fault-assignment does.
+    if (s.is_schedule && s.consolidated) {
+      h += '<div class="assign-row"><button onclick="location.href=\'./consolidated.html?schedule=' + esc(s.id) + '\'">Open checklist →</button></div>';
+    }
 
     // Management assigns a department by hand, the same way a fault is
     // assigned. Only on a real Task — a recurring schedule row has no
@@ -1251,6 +1302,7 @@
       fetch(FN).then(function (r) { return r.json(); }),
       fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
       fetch(FN.replace("action=dashboard", "action=handovers")).then(function (r) { return r.json(); }),
+      fetch(FN.replace("action=dashboard", "action=all_area_targets")).then(function (r) { return r.json(); }),
     ]).then(function (res) {
       handovers = res[2].handovers || [];
       handoverPeople = res[2].people || [];
@@ -1260,6 +1312,7 @@
       var v = areas.filter(function (a) { return a.name === "Vehicles"; })[0];
       VEHICLE_AREA_ID = v ? v.id : null;
       rules = res[1].schedules || [];
+      targetsByArea = res[3].targets_by_area || {};
       render();
     });
   }
