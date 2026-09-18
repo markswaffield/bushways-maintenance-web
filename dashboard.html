@@ -387,14 +387,35 @@
     }).catch(function (e) { alert("Couldn't add the note — a fault in the page. (" + e.message + ")"); });
   };
 
+  // A real gap, Mark caught using it for real: "the note i recorded
+  // did not save... this is not seen anywhere after i asigned the
+  // task." Add note and Assign were two separate buttons for two
+  // separate requests — typing detail, then clicking Assign, sent only
+  // the assignment; whatever was still sitting in the note box never
+  // reached the server at all, silently, with nothing to say it hadn't
+  // (no error — there just wasn't a second click). Assign now carries
+  // along whatever's currently in that fault's own note box, so the
+  // natural "type detail, then assign" motion actually saves both. Add
+  // note by itself is unchanged, for adding one without assigning.
   window.doAssign = function (id) {
     var departmentId = document.getElementById("assign-" + id).value;
-    fetch(API + "?action=assign", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, by_person_id: me.id }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
-      if (out.error) { alert(out.error); return; }
-      loadIssues();
+    var noteField = document.getElementById("note-" + id);
+    var noteText = noteField ? noteField.value.trim() : "";
+    var saveNote = noteText
+      ? fetch(API + "?action=attach", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ issue_id: id, added_by: me.id, note: noteText }),
+        }).then(function (r) { return r.json(); })
+      : Promise.resolve(null);
+    saveNote.then(function (noteOut) {
+      if (noteOut && noteOut.error) { alert(noteOut.error); return; }
+      return fetch(API + "?action=assign", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, by_person_id: me.id }),
+      }).then(function (r) { return r.json(); }).then(function (out) {
+        if (out.error) { alert(out.error); return; }
+        loadIssues();
+      });
     }).catch(function (e) { alert("Couldn't assign — a fault in the page. (" + e.message + ")"); });
   };
 </script>
