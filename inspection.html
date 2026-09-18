@@ -627,6 +627,11 @@
     show("checklist");
 
     var itemFaultsById = {};
+    // item.id -> true for a line that already has exactly one open
+    // fault — a "different problem with this too" report on it must
+    // never be matched against that existing one (2026-09-18, D-060's
+    // own follow-up). See the item-rendering comment below.
+    var forceNewItemIds = {};
 
     function faultPickerHtml(item) {
       itemFaultsById[item.id] = item.faults;
@@ -736,13 +741,30 @@
           var openIssues = item.open_issues || [];
           var html2 = "";
           if (openIssues.length === 1) {
+            // 2026-09-18, Mark: "a previous check noted that the door
+            // was damaged - lock not working. a new check shows
+            // another problem - sticking on the floor. is there any
+            // way of adding to the original fault on the same item?"
+            // The existing fault stays read-only (see above — no way
+            // to resolve or edit it from here), but a genuinely
+            // different, second problem on the same line is a real,
+            // separate thing to track — offered as its own explicit
+            // report, never merged into the first. forceNewItemIds
+            // marks it for submit() below: this item's matching open
+            // issue must NOT be treated as a match for this result,
+            // even though it's the same checklist line.
             var oi = openIssues[0];
             var oiFault = (item.faults || []).find(function (f) { return f.id === oi.fault_type_id; });
+            forceNewItemIds[item.id] = true;
             html2 = '<div class="item" data-item="' + item.id + '">' +
               '<label class="main"><input type="checkbox" checked disabled> ' + esc(item.text) + '</label>' +
               '<p class="reopen-banner">⚠ Already reported' + (oiFault ? " — <b>" + esc(oiFault.name) + "</b>" : "") +
               ', not yet fixed — ' + esc(timeAgo(oi.created_at)) + '. Update or resolve it from Fix a Fault.</p>' +
-              '</div>';
+              '<label class="main" style="margin-top:8px"><input type="checkbox" data-failed="' + item.id + '"> A different problem with this too</label>' +
+              '<div class="details">' + faultPickerHtml(item) +
+              '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
+              '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
+              '</div></div>';
           } else if (openIssues.length > 1) {
             html2 = '<div class="item" data-item="' + item.id + '">' +
               '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
@@ -791,9 +813,12 @@
             var v = c.querySelector('[data-value="' + item.id + '"]').value;
             if (v) results.push({ item_id: item.id, value: Number(v), label: shortLabel(item.text) });
           } else {
-            // A single, already-open fault (D-060) renders with no
-            // [data-failed] at all — read-only, on purpose, nothing to
-            // collect here. See the item-rendering comment above.
+            // The read-only existing fault itself (D-060) has no
+            // [data-failed] at all — nothing to collect for it. A line
+            // with exactly one open fault does still carry a second,
+            // real checkbox for "A different problem with this too" —
+            // this is what that one collects, marked force_new so
+            // submit() never merges it into the existing issue.
             var failedEl = c.querySelector('[data-failed="' + item.id + '"]');
             var failed = failedEl && failedEl.checked;
             if (failed) {
@@ -806,6 +831,7 @@
                 action_if_failed: c.querySelector('[data-action="' + item.id + '"]').value,
                 label: shortLabel(item.text), fault_type_label: faultLabel,
                 photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
+                force_new: !!forceNewItemIds[item.id],
               });
             }
           }
