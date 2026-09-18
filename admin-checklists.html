@@ -44,8 +44,8 @@
   .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
   .nav a{color:#232019;text-decoration:none}
   @media (max-width:700px){
-    .nav{font-size:16px;gap:8px}
-    .nav a,.nav b{padding:11px 15px}
+    .nav{font-size:13px;gap:6px}
+    .nav a,.nav b{padding:6px 10px}
   }
   select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
   label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 3px}
@@ -132,34 +132,48 @@
 
 <div id="app" hidden>
 <h1>Edit Checklists</h1>
-<p class="sub">Signed in as <b id="whoAmI"></b> · <a href="#" id="signOut">Sign out</a></p>
+<p class="sub">Signed in as <b id="whoAmI"></b></p>
+<!-- Real button, not a plain link — D-057, 2026-09-18: "the sign out
+     option is also not a padded button." -->
+<button class="ghost" id="signOut" style="width:auto;margin:6px 0 4px">Sign out</button>
 <p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><b>Edit Checklists</b><a href="./base-dashboard.html">Base Dashboard</a></p>
 
-<h2>Pick a lodge</h2>
-<div class="bar">
-  <div><label>Lodge</label><select id="lodgePicker"><option value="">Select a lodge</option></select></div>
-</div>
+<!-- Picking, and editing, are two separate steps now — 2026-09-18,
+     Mark: "currently when you choose a checklist - the editable
+     version appears below the list of checks - this is not user
+     friendly - especially on a phone - we should have a Checklist
+     Picker first - then this opens the checklist." #pickerView and
+     #editorBox are never both visible at once; loadTemplate() below
+     switches from one to the other, and the editor's own back button
+     switches back. -->
+<div id="pickerView">
+  <h2>Pick a lodge</h2>
+  <div class="bar">
+    <div><label>Lodge</label><select id="lodgePicker"><option value="">Select a lodge</option></select></div>
+  </div>
 
-<div id="templateListBox" hidden>
-  <h2>Pick a checklist</h2>
-  <div id="templateList"></div>
+  <div id="templateListBox" hidden>
+    <h2>Pick a checklist</h2>
+    <div id="templateList"></div>
+  </div>
+
+  <h2>Bring a checklist to a lodge that doesn't have it yet</h2>
+  <div class="bar">
+    <div><label>Master checklist</label><select id="masterPicker"><option value="">Select a master</option></select></div>
+    <div><label>Lodge</label><select id="applyLodgePicker"><option value="">Select a lodge</option></select></div>
+  </div>
+  <div class="acts"><button class="primary" id="applyMasterBtn">Apply</button></div>
+  <p id="applyMsg" class="who"></p>
 </div>
 
 <div id="editorBox" hidden>
+  <div class="acts"><button class="ghost" id="backToPickerBtn">← Choose a different checklist</button></div>
   <h2><span id="editorTitle"></span></h2>
   <div id="sections"></div>
   <div class="acts">
     <button class="ghost" id="addSectionBtn">+ Add a section</button>
   </div>
 </div>
-
-<h2>Bring a checklist to a lodge that doesn't have it yet</h2>
-<div class="bar">
-  <div><label>Master checklist</label><select id="masterPicker"><option value="">Select a master</option></select></div>
-  <div><label>Lodge</label><select id="applyLodgePicker"><option value="">Select a lodge</option></select></div>
-</div>
-<div class="acts"><button class="primary" id="applyMasterBtn">Apply</button></div>
-<p id="applyMsg" class="who"></p>
 </div>
 
 <script>
@@ -268,9 +282,18 @@
   function loadTemplate(id, name) {
     currentTemplateId = id;
     document.getElementById("editorTitle").textContent = name;
+    // Picker and editor never share the screen — 2026-09-18, D-057's
+    // own follow-up: picking a checklist now swaps straight to editing
+    // it, not appending the editor below an already-long picker.
+    document.getElementById("pickerView").hidden = true;
     document.getElementById("editorBox").hidden = false;
     api("admin_template", { qs: "template=" + id }).then(renderSections);
   }
+
+  document.getElementById("backToPickerBtn").onclick = function () {
+    document.getElementById("editorBox").hidden = true;
+    document.getElementById("pickerView").hidden = false;
+  };
 
   function renderSections(d) {
     var box = document.getElementById("sections");
