@@ -211,7 +211,8 @@
     return '<div class="filter-section signin-box"><div class="title">Signed in</div>' +
       '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + '</p>' +
       (camp && me.locations && me.locations.length > 1
-        ? '<p style="margin:6px 0 0;font-size:13.5px">Camp: <b>' + esc(camp.name) + '</b> · <a href="./base-dashboard.html">Change camp</a></p>'
+        ? '<p style="margin:6px 0 0;font-size:13.5px">Camp: <b>' + esc(camp.name) + '</b></p>' +
+          '<button class="secondary small" style="width:100%;margin-top:6px" onclick="location.href=\'./base-dashboard.html\'">Change camp</button>'
         : "") +
       '<button onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button></div>';
   }
