@@ -74,6 +74,23 @@
     <button onclick="doWhoLogin()">Sign in</button>
     <p class="err" id="whoErr" hidden></p>
   </div>
+
+  <!-- The group's own tool picker — root D-025/D-026, 2026-09-18. Only
+       ever shown to a manager or administrator (route() below); anyone
+       else routes straight through to Maintenance with no extra tap,
+       exactly as before this existed. -->
+  <div id="toolBox" class="signin-box" hidden>
+    <div class="title">Choose a tool</div>
+    <button onclick="pickTool('maintenance')">Maintenance</button>
+    <button onclick="pickTool('day-sheet')">Day Sheet</button>
+    <div id="campPicker" hidden>
+      <label id="campPickerLabel">Camp</label>
+      <select id="campPickerSel"></select>
+      <button onclick="goToCamp()">Go</button>
+      <button class="secondary" onclick="document.getElementById('campPicker').hidden = true">← Back</button>
+    </div>
+  </div>
+
   <p class="loading" id="loadingMsg">Loading…</p>
 </div>
 
@@ -89,10 +106,70 @@
 
   // Resuming a session skips straight to routing — this page is never
   // shown to someone already signed in, it just decides where they go.
+  //
+  // A second real tool exists now (Day Sheet, root D-020) — this is
+  // maintenance's own front door becoming the group's, per root D-025:
+  // "one place to sign in... then routed by what that person actually
+  // has access to." Mark, 2026-09-18, once he realised Day Sheet
+  // already qualifies: "I forgot the Daily Sheet - which is essentially
+  // an operational tool for the lodge... After sign in - i see a page
+  // with 2 page buttons for now. Maintenance & Daily Sheet. Lodge
+  // specific managers will go to their camps when they click these
+  // buttons. Admin will go to a second layer for each option."
+  //
+  // Ordinary, single-tool staff (not a manager, not an administrator)
+  // skip the picker entirely and land exactly where they always have —
+  // Day Sheet was never theirs to see, so showing them a choice with
+  // one dead entry would be worse than no choice at all.
   function route(me) {
-    if (me.locations && me.locations.length > 1) { location.href = "./base-dashboard.html"; return; }
-    location.href = "./schedule.html";
+    if (!(me.is_manager || me.is_administrator)) {
+      // Exactly the routing this page always did — untouched for
+      // anyone who doesn't even see the tool picker below.
+      if (me.locations && me.locations.length > 1) { location.href = "./base-dashboard.html"; return; }
+      location.href = "./schedule.html";
+      return;
+    }
+    showToolPicker(me);
   }
+
+  function showToolPicker(me) {
+    document.getElementById("signinBox").hidden = true;
+    document.getElementById("loadingMsg").hidden = true;
+    document.getElementById("toolBox").hidden = false;
+    window._meForPicker = me;
+  }
+
+  var multiCamp = null; // set when pickTool needs the camp dropdown
+  window.pickTool = function (tool) {
+    var me = window._meForPicker;
+    var multi = me.locations && me.locations.length > 1;
+    if (tool === "maintenance") {
+      // Unchanged — Maintenance's own existing A/B split (root D-053/
+      // D-054) still decides Roll Up vs a specific camp from here.
+      location.href = multi ? "./base-dashboard.html" : "./schedule.html";
+      return;
+    }
+    // Day Sheet — deliberately no Roll Up option, Mark: "for now lets
+    // not do the day sheet roll up option. Let Admin only be able to
+    // go into the camps via a drop down picker." A single-camp person
+    // goes straight in, same as Maintenance does.
+    if (!multi) {
+      sessionStorage.setItem("bw_camp", JSON.stringify(me.locations[0]));
+      location.href = "./day-sheet.html";
+      return;
+    }
+    var sel = document.getElementById("campPickerSel");
+    sel.innerHTML = me.locations.map(function (l) {
+      return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>';
+    }).join("");
+    document.getElementById("campPicker").hidden = false;
+  };
+  window.goToCamp = function () {
+    var sel = document.getElementById("campPickerSel");
+    var loc = { id: sel.value, name: sel.selectedOptions[0].textContent };
+    sessionStorage.setItem("bw_camp", JSON.stringify(loc));
+    location.href = "./day-sheet.html";
+  };
 
   var resumed = null;
   try { var saved = sessionStorage.getItem("bw_signin"); if (saved) resumed = JSON.parse(saved); } catch (e) {}

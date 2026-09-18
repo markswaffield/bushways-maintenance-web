@@ -2,7 +2,7 @@
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#122d31">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
-<title>Chobe Elephant Camp — Day Sheet</title>
+<title>Day Sheet</title>
 <!--
   The Day Sheet — tools/daily-operations/.
 
@@ -138,9 +138,14 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>Day Sheet — Chobe Elephant Camp</h1>
+<h1 id="campTitle">Day Sheet</h1>
 <p class="sub">Every room and every movement on one screen. Built to be read across, so a clash stands out.</p>
-<p class="nav"><a href="./">Schedule</a> · <a href="./inspection.html">Inspection</a> · <a href="./dashboard.html">To-do list</a> · <a href="./fix.html">Fix a fault</a> · <a href="./completed.html">Completed</a></p>
+<!-- A different tool now (root D-020), reached through the group's own
+     picker (root D-025/D-026), not through Maintenance's own nav —
+     tool-local D-008, 2026-09-18. A plain way back to that picker
+     instead of Maintenance's own five links, which never belonged
+     here in the first place. -->
+<p class="nav"><a href="./">← Change camp / tool</a><button class="ghost" id="signOut" style="width:auto;display:inline-block;margin-left:10px">Sign out</button></p>
 
 <div class="toolbar">
   <div><label for="who">You are</label><select id="who"></select></div>
@@ -156,6 +161,32 @@
 <script>
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/day-sheet";
 var boot = null, sheet = null, unplaced = [], placed = [], dirty = {};
+
+// A real sign-in gate — tool-local D-008, 2026-09-18. This page had
+// none at all before: anyone with the link could open and edit any
+// camp's day sheet. Reads the exact same bw_signin the group's own
+// landing picker just wrote (same origin, D-025/D-026) — nothing new
+// to sign in with, and nobody reaches this page any more without
+// having already been through that picker, which is itself gated to
+// managers and administrators only.
+var me = null;
+try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+if (!me) { location.href = "./"; }
+var camp = null;
+try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+var shownCamp = camp || (me && me.locations && me.locations[0]);
+if (shownCamp) {
+  document.getElementById("campTitle").textContent = "Day Sheet — " + shownCamp.name;
+  document.title = shownCamp.name + " — Day Sheet";
+}
+function campParam() {
+  return shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "";
+}
+document.getElementById("signOut").onclick = function () {
+  sessionStorage.removeItem("bw_signin");
+  sessionStorage.removeItem("bw_camp");
+  location.href = "./";
+};
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -493,6 +524,11 @@ function saveAll(){
 }
 
 function post(action, body){
+  // location_id on every write, not just the reads — add_booking and
+  // anything that calls ensureSheet() need to know which camp's sheet
+  // this is (tool-local D-008). Harmless to include on the ones that
+  // don't (allocate/move/unallocate operate on already-known ids).
+  body = Object.assign({ location_id: shownCamp ? shownCamp.id : null }, body);
   return fetch(FN+"?action="+action, {
     method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(body)
   }).then(function(r){return r.json();}).catch(function(e){return {error:String(e)};});
@@ -503,8 +539,8 @@ function load(){
   el("date").value = date;
   dirty = {}; el("save").disabled = true; setStatus("");
   Promise.all([
-    fetch(FN+"?action=day_sheet&date="+date).then(function(r){return r.json();}),
-    fetch(FN+"?action=bookings&from="+date+"&to="+date).then(function(r){return r.json();})
+    fetch(FN+"?action=day_sheet&date="+date+campParam()).then(function(r){return r.json();}),
+    fetch(FN+"?action=bookings&from="+date+"&to="+date+campParam()).then(function(r){return r.json();})
   ]).then(function(res){
     sheet = res[0];
     var all = res[1].bookings || [];
@@ -588,7 +624,7 @@ window.addEventListener("beforeunload", function(e){
   if (Object.keys(dirty).length){ e.preventDefault(); e.returnValue = ""; }
 });
 
-fetch(FN).then(function(r){return r.json();}).then(function(b){
+fetch(FN + (shownCamp ? "?location_id=" + encodeURIComponent(shownCamp.id) : "")).then(function(r){return r.json();}).then(function(b){
   boot = b;
   el("who").innerHTML = b.people.map(function(p){
     return '<option value="'+esc(p.id)+'">'+esc(p.name)+"</option>";
