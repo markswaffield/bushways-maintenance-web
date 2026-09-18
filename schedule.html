@@ -1292,6 +1292,12 @@
       esc(s.name) + '</p>' +
       '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
       who +
+      // Hold and resume, tool-local D-078, 2026-09-18 — Mark: "Due
+      // List must clearly show that the check is ON HOLD." Purely
+      // computed (checked_count/target_count from the server, not a
+      // flag anyone sets), so it's correct whether or not whoever
+      // stopped actually tapped a Hold button on the way out.
+      (s.on_hold ? '<p class="meta"><span class="badge due_soon">ON HOLD</span> ' + s.checked_count + ' of ' + s.target_count + ' done</p>' : '') +
       '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
 
     // Completing sits here, beside the thing that is due, rather than in
@@ -1306,7 +1312,8 @@
     // "Complete," above, is different: recording a note as done needs
     // the same management gate a fault-assignment does.
     if (s.is_schedule && s.consolidated) {
-      h += '<div class="assign-row"><button onclick="location.href=\'./consolidated.html?schedule=' + esc(s.id) + '\'">Open checklist →</button></div>';
+      h += '<div class="assign-row"><button onclick="location.href=\'./consolidated.html?schedule=' + esc(s.id) + '\'">' +
+        (s.on_hold ? "Continue checklist →" : "Open checklist →") + '</button></div>';
     }
 
     // Management assigns a department by hand, the same way a fault is

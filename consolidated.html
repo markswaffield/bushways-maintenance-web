@@ -11,33 +11,43 @@
   those targets and generates a consolidated checklist for that
   schedule."
 
+  Rebuilt the same day (tool-local D-078) once Mark saw it wasn't
+  realistic for one person to do every target in one sitting: "It is
+  unlikely that a single manager will do the whole check themselves...
+  maybe it would be good to install a HOLD or HANDOVER button... this
+  would then tie in with the audit trail." Each target now checks off
+  and submits for real the moment its own "✓ checked" button is
+  tapped — no more one big batch submitted at the very end — so
+  stopping partway through simply means leaving; whoever comes back
+  (the same person or someone else entirely) sees exactly which
+  targets are already done, by whom, and only fills in what's left.
+  The schedule itself only truly completes (its due date rolls
+  forward) once every target shows checked and Confirm is tapped.
+
   A separate page from checklist.html on purpose, not a mode bolted
   onto it — the per-item rendering (D-060's read-only reopened faults,
   the fault picker, "a different problem with this too", photos) is
-  copied from there deliberately, not shared by import, so nothing
-  about the single-target screen that's already live and tested had to
-  change to build this. Every id/data attribute below is namespaced by
-  target index ("t0_", "t1_"...) since several targets' items render on
-  one page at once.
+  copied from there deliberately, not shared by import. Every id/data
+  attribute is namespaced by target index ("t0_", "t1_"...) since
+  several targets' items can render on one page at once.
 
   Underneath, this still submits one real Inspection per target
-  (submit_consolidated loops submit() once per entry) — D-064's own
-  decision, carried all the way through: every existing piece (D-034's
-  Area→Target grouping, D-060's live faults, a transfer taking a
-  target's own faults with it) keeps working completely unmodified,
-  because as far as any of that is concerned nothing about how an
-  individual target's checklist works is any different today.
+  (D-064's own decision) — every existing piece (D-034's Area→Target
+  grouping, D-060's live faults, a transfer taking a target's own
+  faults with it) keeps working completely unmodified.
 -->
 <style>
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
   h1{font-size:19px;margin:0 0 4px}
   h2{font-size:15px;margin:26px 0 8px;color:#43594A;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #43594A;padding-bottom:4px}
   h3{font-size:13px;margin:16px 0 6px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em}
-  .sub{color:#6B6455;font-size:13px;margin:0 0 20px}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 6px}
   label{display:block;font-size:13px;color:#5B5344;margin:14px 0 4px}
   select,input[type=text],textarea{width:100%;padding:10px;font-size:16px;border:1px solid #C9C2AC;border-radius:6px;box-sizing:border-box;background:#fff;font-family:inherit}
-  button{width:100%;padding:14px;font-size:16px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;margin-top:22px}
+  button{width:100%;padding:14px;font-size:16px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;margin-top:14px}
   button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  button.small{padding:9px 14px;font-size:14px;width:auto}
+  button:disabled{opacity:.55}
   .item{border-bottom:1px solid #E3DFD3;padding:12px 0}
   .item label.main{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#232019;margin:0;cursor:pointer}
   .item input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
@@ -45,13 +55,20 @@
   .item.open .details{display:block}
   .reopen-banner{background:#F4CFC2;color:#A8502F;font-size:12.5px;font-weight:600;padding:7px 10px;border-radius:6px;margin:0 0 8px}
   .note{color:#8C6A2F;font-size:12px;margin-top:2px}
-  .review-card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
-  .review-line{font-size:14px;margin:0 0 6px}
-  .review-line .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
-  .btnrow{display:flex;gap:10px;margin-top:22px}
-  .btnrow button{margin-top:0}
   .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
   .loading{color:#6B6455;font-size:14px}
+  /* Progress header — always visible, since it's the whole point of
+     this page now: how far through is this run, and what's left. */
+  .progress-bar{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .progress-bar .count{font-weight:700;color:#43594A}
+  /* A target already checked off this run — collapsed to one line,
+     out of the way, but not hidden: who did it and when is the point. */
+  .target-done{background:#EAF1EC;border:1px solid #43594A;border-radius:8px;padding:12px 14px;margin-top:22px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .target-done b{color:#122d31}
+  .target-done .who{font-size:12.5px;color:#43594A}
+  .target-section{margin-top:22px}
+  .target-foot{display:flex;gap:10px;margin-top:16px}
+  .target-foot button{margin-top:0}
   [hidden]{display:none!important}
 </style></head><body>
 
@@ -60,12 +77,16 @@
 <div id="checklist" hidden>
   <h1 id="scheduleTitle"></h1>
   <p class="sub" id="scheduleSub"></p>
+  <div class="progress-bar">
+    <span><span class="count" id="progressCount"></span> targets checked</span>
+    <button class="secondary small" id="holdBtn" style="margin:0">Hold — come back later</button>
+  </div>
   <div id="targetsBox"></div>
-  <button id="submitBtn">Submit checklist</button>
+  <div id="closeOutBox" hidden>
+    <button id="confirmRunBtn">Confirm — close out this schedule</button>
+  </div>
   <button class="secondary" onclick="location.href='./schedule.html'">← Back to Schedule</button>
 </div>
-
-<div id="review" hidden></div>
 
 <div id="done" hidden>
   <h1>Recorded</h1>
@@ -96,12 +117,22 @@
     });
   }
   function show(id) {
-    ["loading", "checklist", "review", "done"].forEach(function (x) {
+    ["loading", "checklist", "done"].forEach(function (x) {
       document.getElementById(x).hidden = x !== id;
     });
   }
   function shortLabel(text) {
     return String(text).split("\n")[0].split(/\s+[—-]\s+/)[0].trim();
+  }
+  function timeAgo(iso) {
+    var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    if (mins < 1440) return Math.round(mins / 60) + "h ago";
+    var days = Math.floor(mins / 1440);
+    if (days < 14) return days + " day" + (days === 1 ? "" : "s") + " ago";
+    var weeks = Math.floor(days / 7);
+    return weeks + " week" + (weeks === 1 ? "" : "s") + " ago";
   }
   // Shared with checklist.html's own copy — resized client-side before
   // it ever leaves the phone, Maun's bandwidth being the reason.
@@ -125,24 +156,18 @@
       reader.readAsDataURL(file);
     });
   }
-  // "3 days ago" — same as checklist.html's own copy, for the reopened-
-  // fault banner below.
-  function timeAgo(iso) {
-    var days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
-    if (days === 0) return "today";
-    if (days === 1) return "1 day ago";
-    if (days < 14) return days + " days ago";
-    var weeks = Math.floor(days / 7);
-    if (weeks < 8) return weeks + " week" + (weeks === 1 ? "" : "s") + " ago";
-    var months = Math.floor(days / 30);
-    return months + " month" + (months === 1 ? "" : "s") + " ago";
-  }
 
   var params = new URLSearchParams(location.search);
   var scheduleId = params.get("schedule");
   if (!scheduleId) {
     document.getElementById("loading").innerHTML = "<h1>No schedule given</h1><p>This page opens from a schedule's own \"Open checklist\" button.</p>";
   } else {
+    load();
+  }
+
+  function load() {
+    show("loading");
+    document.getElementById("loading").innerHTML = "<h1>Loading…</h1>";
     fetch(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(scheduleId) + campParam())
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -161,15 +186,10 @@
     show("checklist");
     document.getElementById("scheduleTitle").textContent = data.schedule_name;
     document.getElementById("scheduleSub").textContent =
-      campName() + " — " + data.targets.length + " target" + (data.targets.length === 1 ? "" : "s") +
-      " combined into one checklist. Leave an item alone if it's fine.";
+      campName() + " — " + data.target_count + " target" + (data.target_count === 1 ? "" : "s") + " in this schedule. Leave an item alone if it's fine.";
+    document.getElementById("progressCount").textContent = data.done_count + " of " + data.target_count;
+    document.getElementById("holdBtn").onclick = function () { location.href = "./schedule.html"; };
 
-    // Per-target state, parallel arrays indexed the same way as
-    // data.targets — itemFaultsById and forceNewItemIds both need their
-    // own namespace per target, since two different targets' templates
-    // can each have their own item using the same short id space is
-    // never true in practice (real uuids), but keeping every id/data
-    // attribute prefixed "t<i>_" keeps this page honest regardless.
     var itemFaultsById = {};
     var forceNewItemIds = {};
 
@@ -214,11 +234,18 @@
 
     var html = "";
     data.targets.forEach(function (t, ti) {
+      if (t.done) {
+        html += '<div class="target-done" id="doneCard-' + ti + '">' +
+          '<span>✓ <b>' + esc(t.target_label) + '</b></span>' +
+          '<span class="who">checked by ' + esc(t.done_by || "someone") + ', ' + timeAgo(t.done_at) + '</span></div>';
+        return;
+      }
+      html += '<div class="target-section" id="target-' + ti + '">';
       html += "<h2>" + esc(t.target_label) + "</h2>";
-      // A vehicle's odometer, or a metered asset's hours (D-068, once
-      // rooms and vehicles became addable to the basket) — the exact
-      // same block inspection.html shows for a single-target check,
-      // just once per target here instead of once for the whole page.
+      // A vehicle's odometer, or a metered asset's hours (D-068) — the
+      // exact same block inspection.html shows for a single-target
+      // check, just once per target here instead of once for the
+      // whole page.
       if (t.target_type === "vehicle") {
         html += '<div class="odo"><label>Odometer reading (km) — ' + esc(t.target_label) + '</label>' +
           '<input type="number" inputmode="numeric" data-odometer="' + ti + '" min="0" step="1" placeholder="e.g. 184320">' +
@@ -233,11 +260,6 @@
             : "No reading recorded yet.") + '</p></div>';
       }
       t.sections.forEach(function (s) {
-        // A D-064 target has exactly one section, named after the
-        // target itself — showing it again here would just repeat the
-        // h2 above in different capitalisation. A target with several
-        // real sections (none exist yet, but nothing rules it out)
-        // still gets its own sub-heading.
         if (s.name !== t.target_label) html += "<h3>" + esc(s.name) + "</h3>";
         s.items.forEach(function (item) {
           var key = ti + ":" + item.id;
@@ -246,8 +268,6 @@
               '<input type="text" inputmode="numeric" data-value="' + key + '" placeholder="Reading"></div>';
             return;
           }
-          // Still open from an earlier visit (D-060) — same read-only
-          // treatment checklist.html already gives this, unmodified.
           var openIssues = item.open_issues || [];
           if (openIssues.length === 1) {
             var oi = openIssues[0];
@@ -256,7 +276,7 @@
             html += '<div class="item" data-item="' + key + '">' +
               '<label class="main"><input type="checkbox" checked disabled> ' + esc(item.text) + '</label>' +
               '<p class="reopen-banner">⚠ Already reported' + (oiFault ? " — <b>" + esc(oiFault.name) + "</b>" : "") +
-              ', not yet fixed — ' + esc(timeAgo(oi.created_at)) + '. Update or resolve it from Fix a Fault.</p>' +
+              ', not yet fixed. Update or resolve it from Fix a Fault.</p>' +
               '<label class="main" style="margin-top:8px"><input type="checkbox" data-failed="' + key + '"> A different problem with this too</label>' +
               '<div class="details">' + faultPickerHtml(ti, item) +
               '<label>Action / notes</label><textarea data-action="' + key + '" rows="2" placeholder="What needs doing"></textarea>' +
@@ -280,6 +300,8 @@
           }
         });
       });
+      html += '<div class="target-foot"><button data-check="' + ti + '">✓ ' + esc(t.target_label) + ' checked</button></div>';
+      html += '</div>';
     });
     document.getElementById("targetsBox").innerHTML = html;
 
@@ -289,176 +311,148 @@
       });
     });
 
-    document.getElementById("submitBtn").onclick = function () {
-      // One results array per target, in the same order as data.targets
-      // — submit_consolidated() loops these into one real Inspection
-      // each, exactly the shape a single-target submit() already takes.
-      var perTarget = data.targets.map(function () { return []; });
-      data.targets.forEach(function (t, ti) {
-        t.sections.forEach(function (s) {
-          s.items.forEach(function (item) {
-            var key = ti + ":" + item.id;
-            if (item.kind === "reading") {
-              var v = document.querySelector('[data-value="' + key + '"]');
-              if (v && v.value) perTarget[ti].push({ item_id: item.id, value: Number(v.value), label: shortLabel(item.text) });
-              return;
-            }
-            var failedEl = document.querySelector('[data-failed="' + key + '"]');
-            var failed = failedEl && failedEl.checked;
-            if (!failed) return;
-            var faultEl = document.querySelector('[data-fault="' + key + '"]');
-            var faultLabel = faultEl && faultEl.value ? faultEl.options[faultEl.selectedIndex].text.split(" — ")[0] : null;
-            var photoInput = document.querySelector('[data-photo="' + key + '"]');
-            perTarget[ti].push({
-              item_id: item.id, failed: true,
-              fault_type_id: faultEl ? faultEl.value : null,
-              action_if_failed: document.querySelector('[data-action="' + key + '"]').value,
-              label: shortLabel(item.text), fault_type_label: faultLabel,
-              photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
-              force_new: !!forceNewItemIds[key],
-            });
-          });
-        });
-      });
-      // One odometer/hours reading per target, alongside its own
-      // results (D-068) — undefined for anything that isn't a vehicle
-      // or a metered asset, which submit() already treats as "nothing
-      // to record" the same way a single-target check does.
-      var perTargetReading = data.targets.map(function (t, ti) {
-        var odoInput = document.querySelector('[data-odometer="' + ti + '"]');
-        var hoursInput = document.querySelector('[data-hours="' + ti + '"]');
-        var odometer = odoInput && odoInput.value !== "" ? Number(odoInput.value) : null;
-        var hours = hoursInput && hoursInput.value !== "" ? Number(hoursInput.value) : null;
-        if (odometer !== null && t.odometer != null && odometer < Number(t.odometer)) {
-          if (!confirm(esc(t.target_label) + "'s reading (" + odometer.toLocaleString() +
-              " km) is lower than the last one recorded (" + Number(t.odometer).toLocaleString() +
-              " km). Record it anyway?")) return null;
-        }
-        return { odometer: odometer, hours: hours };
-      });
-      if (perTargetReading.indexOf(null) !== -1) return; // a lower-reading confirm was declined
-      showReview(data, perTarget, perTargetReading);
-    };
+    data.targets.forEach(function (t, ti) {
+      if (t.done) return;
+      var btn = document.querySelector('[data-check="' + ti + '"]');
+      btn.onclick = function () { checkTarget(data, ti, t); };
+    });
+
+    updateCloseOut(data);
   }
 
-  // Nothing is written yet at this point, same discipline as the
-  // single-target screen (Mark, 2026-09-08: "once submitted we need an
-  // edit or confirm button").
-  function showReview(data, perTarget, perTargetReading) {
-    show("review");
-    var r = document.getElementById("review");
-    var html = '<h1>Confirm checklist</h1>' +
-      '<p class="sub">' + esc(data.schedule_name) + ', ' + esc(campName()) + ' — check this is right before it\'s recorded</p>';
-
-    var anyFlagged = false;
-    data.targets.forEach(function (t, ti) {
-      var flagged = perTarget[ti].filter(function (x) { return x.failed; });
-      var readings = perTarget[ti].filter(function (x) { return x.value !== undefined; });
-      var reading = perTargetReading[ti];
-      var hasReading = reading && (reading.odometer !== null || reading.hours !== null);
-      if (!flagged.length && !readings.length && !hasReading) return;
-      anyFlagged = true;
-      html += '<div class="review-card"><p class="review-line" style="font-weight:700">' + esc(t.target_label) + '</p>';
-      if (reading && reading.odometer !== null) {
-        html += '<p class="review-line">Odometer: <b>' + reading.odometer.toLocaleString() + ' km</b></p>';
-      }
-      if (reading && reading.hours !== null) {
-        html += '<p class="review-line">Hours: <b>' + reading.hours.toLocaleString() + '</b></p>';
-      }
-      flagged.forEach(function (x) {
-        html += '<p class="review-line">' + esc(x.label) +
-          (x.fault_type_label ? ' — <span class="fault">' + esc(x.fault_type_label) + '</span>' : '') +
-          (x.action_if_failed ? ' — ' + esc(x.action_if_failed) : '') +
-          (x.photoFile ? ' 📷' : '') + '</p>';
-      });
-      readings.forEach(function (x) {
-        html += '<p class="review-line">' + esc(x.label) + ': ' + esc(x.value) + '</p>';
-      });
-      html += '</div>';
-    });
-    if (!anyFlagged) {
-      html += '<div class="review-card"><p class="review-line">Nothing flagged on any target — every item recorded as fine.</p></div>';
-    }
-
-    html += '<div class="btnrow">' +
-      '<button class="secondary" id="editBtn">← Edit</button>' +
-      '<button id="confirmBtn">Confirm — submit checklist</button>' +
-      '</div>';
-    r.innerHTML = html;
-
-    document.getElementById("editBtn").onclick = function () { show("checklist"); };
-    document.getElementById("confirmBtn").onclick = function () {
-      var btn = document.getElementById("confirmBtn");
-      btn.disabled = true;
-      btn.textContent = "Submitting…";
-      fetch(FN + "?action=submit_consolidated", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          schedule_id: scheduleId,
-          person_id: signedInAs.id, signed_in_id: signedInAs.id,
-          location_id: camp ? camp.id : null,
-          entries: data.targets.map(function (t, ti) {
-            var reading = perTargetReading[ti] || {};
-            return {
-              target_type: t.target_type, target_id: t.target_id, template_id: t.template_id, results: perTarget[ti],
-              odometer: reading.odometer, hours: reading.hours,
-            };
-          }),
-        }),
-      }).then(function (resp) { return resp.json(); }).then(function (out) {
-        if (out.error) {
-          btn.disabled = false;
-          btn.textContent = "Confirm — submit checklist";
-          alert(out.error);
+  // One target, submitted for real the moment it's checked off —
+  // tool-local D-078. Whoever's signed in right now is credited on
+  // this one Inspection, whether or not they're the same person who
+  // did any of the others — that's the audit trail Mark asked for,
+  // and it needs nothing extra: performed_by already worked this way
+  // on every single-target check, this just calls it per target
+  // instead of once for a whole batch at the end.
+  function checkTarget(data, ti, t) {
+    var results = [];
+    t.sections.forEach(function (s) {
+      s.items.forEach(function (item) {
+        var key = ti + ":" + item.id;
+        if (item.kind === "reading") {
+          var v = document.querySelector('[data-value="' + key + '"]');
+          if (v && v.value) results.push({ item_id: item.id, value: Number(v.value), label: shortLabel(item.text) });
           return;
         }
-        // Photos, per target — out.results carries each target's own
-        // issue_ids (item_id -> the real issue, created moments ago),
-        // the same shape a single-target submit() already returns,
-        // just one map per target instead of one map total.
-        var issueIdsByTarget = {};
-        (out.results || []).forEach(function (r) { issueIdsByTarget[r.target_id] = r.issue_ids || {}; });
-        var withPhotos = [];
-        data.targets.forEach(function (t, ti) {
-          perTarget[ti].forEach(function (x) {
-            if (x.failed && x.photoFile) {
-              var issueId = (issueIdsByTarget[t.target_id] || {})[x.item_id];
-              if (issueId) withPhotos.push({ issue_id: issueId, photoFile: x.photoFile });
-            }
-          });
+        var failedEl = document.querySelector('[data-failed="' + key + '"]');
+        var failed = failedEl && failedEl.checked;
+        if (!failed) return;
+        var faultEl = document.querySelector('[data-fault="' + key + '"]');
+        var faultLabel = faultEl && faultEl.value ? faultEl.options[faultEl.selectedIndex].text.split(" — ")[0] : null;
+        var photoInput = document.querySelector('[data-photo="' + key + '"]');
+        results.push({
+          item_id: item.id, failed: true,
+          fault_type_id: faultEl ? faultEl.value : null,
+          action_if_failed: document.querySelector('[data-action="' + key + '"]').value,
+          label: shortLabel(item.text), fault_type_label: faultLabel,
+          photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
         });
-        var uploaded = 0, failed = 0;
-        function finish() {
-          document.getElementById("doneBox").innerHTML =
-            "<p>" + esc(data.schedule_name) + ", " + esc(campName()) + ".</p>" +
-            "<p>" + out.targets_completed + " target" + (out.targets_completed === 1 ? "" : "s") + " checked.</p>" +
-            (out.issues_raised ? "<p>" + out.issues_raised + " new issue" + (out.issues_raised === 1 ? "" : "s") + " raised — tracked, open, waiting to be fixed.</p>" : "") +
-            (out.issues_confirmed ? "<p>" + out.issues_confirmed + " still open from before — confirmed, not duplicated.</p>" : "") +
-            (out.next_due_date ? "<p>Next due " + new Date(out.next_due_date).toLocaleDateString() + ".</p>" : "") +
-            (uploaded ? "<p>" + uploaded + " photo" + (uploaded === 1 ? "" : "s") + " attached.</p>" : "") +
-            (failed ? "<p class='note'>" + failed + " photo" + (failed === 1 ? "" : "s") + " didn't upload — the checklist itself is still safely recorded.</p>" : "");
-          show("done");
-        }
-        if (!withPhotos.length) { finish(); return; }
-        var remaining = withPhotos.length;
-        withPhotos.forEach(function (x) {
-          compressImage(x.photoFile).then(function (dataUrl) {
-            return fetch(FN + "?action=attach", {
-              method: "POST", headers: { "content-type": "application/json" },
-              body: JSON.stringify({ issue_id: x.issue_id, added_by: signedInAs.id, image_data_url: dataUrl }),
-            });
-          }).then(function (r2) { return r2.json(); }).then(function (a) {
-            if (a.error) failed++; else uploaded++;
-          }).catch(function () { failed++; })
-            .then(function () { if (--remaining === 0) finish(); });
-        });
-      }).catch(function (e) {
-        btn.disabled = false;
-        btn.textContent = "Confirm — submit checklist";
-        alert("Couldn't submit — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
       });
-    };
+    });
+
+    var odoInput = document.querySelector('[data-odometer="' + ti + '"]');
+    var hoursInput = document.querySelector('[data-hours="' + ti + '"]');
+    var odometer = odoInput && odoInput.value !== "" ? Number(odoInput.value) : null;
+    var hours = hoursInput && hoursInput.value !== "" ? Number(hoursInput.value) : null;
+    if (odometer !== null && t.odometer != null && odometer < Number(t.odometer)) {
+      if (!confirm(esc(t.target_label) + "'s reading (" + odometer.toLocaleString() +
+          " km) is lower than the last one recorded (" + Number(t.odometer).toLocaleString() +
+          " km). Record it anyway?")) return;
+    }
+
+    var btn = document.querySelector('[data-check="' + ti + '"]');
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+
+    fetch(FN + "?action=submit", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        person_id: signedInAs.id, signed_in_id: signedInAs.id,
+        location_id: camp ? camp.id : null, schedule_id: scheduleId,
+        target_type: t.target_type, target_id: t.target_id, template_id: t.template_id,
+        results: results, odometer: odometer, hours: hours,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) {
+        btn.disabled = false;
+        btn.textContent = "✓ " + t.target_label + " checked";
+        alert(out.error);
+        return;
+      }
+      var withPhotos = results.filter(function (x) { return x.failed && x.photoFile; });
+      function finishTarget() {
+        var section = document.getElementById("target-" + ti);
+        var doneCard = document.createElement("div");
+        doneCard.className = "target-done";
+        doneCard.id = "doneCard-" + ti;
+        doneCard.innerHTML = "✓ <b>" + esc(t.target_label) + "</b><span class=\"who\">checked by " + esc(signedInAs.name) + ", just now</span>";
+        section.replaceWith(doneCard);
+        t.done = true;
+        data.done_count++;
+        document.getElementById("progressCount").textContent = data.done_count + " of " + data.target_count;
+        updateCloseOut(data);
+      }
+      if (!withPhotos.length) { finishTarget(); return; }
+      var remaining = withPhotos.length;
+      withPhotos.forEach(function (x) {
+        var issueId = (out.issue_ids || {})[x.item_id];
+        if (!issueId) { if (--remaining === 0) finishTarget(); return; }
+        compressImage(x.photoFile).then(function (dataUrl) {
+          return fetch(FN + "?action=attach", {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ issue_id: issueId, added_by: signedInAs.id, image_data_url: dataUrl }),
+          });
+        }).then(function () {}).catch(function () {})
+          .then(function () { if (--remaining === 0) finishTarget(); });
+      });
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = "✓ " + t.target_label + " checked";
+      alert("Couldn't record it — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
+    });
   }
+
+  function updateCloseOut(data) {
+    var box = document.getElementById("closeOutBox");
+    box.hidden = data.done_count < data.target_count;
+  }
+
+  document.getElementById("confirmRunBtn").onclick = function () {
+    var btn = document.getElementById("confirmRunBtn");
+    btn.disabled = true;
+    btn.textContent = "Closing out…";
+    fetch(FN + "?action=complete_schedule_run", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ schedule_id: scheduleId, person_id: signedInAs.id }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) {
+        btn.disabled = false;
+        btn.textContent = "Confirm — close out this schedule";
+        alert(out.error);
+        return;
+      }
+      var byPerson = {};
+      (out.summary || []).forEach(function (s) {
+        var who = s.done_by || "Unknown";
+        byPerson[who] = (byPerson[who] || 0) + 1;
+      });
+      var whoLines = Object.keys(byPerson).map(function (name) {
+        return name + " (" + byPerson[name] + ")";
+      }).join(", ");
+      document.getElementById("doneBox").innerHTML =
+        "<p>" + esc(document.getElementById("scheduleTitle").textContent) + ", " + esc(campName()) + ".</p>" +
+        "<p>" + out.targets_completed + " target" + (out.targets_completed === 1 ? "" : "s") + " checked — " + esc(whoLines) + ".</p>" +
+        (out.next_due_date ? "<p>Next due " + new Date(out.next_due_date).toLocaleDateString() + ".</p>" : "");
+      show("done");
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = "Confirm — close out this schedule";
+      alert("Couldn't close this out — a fault in the page, not your phone. (" + e.message + ")");
+    });
+  };
 </script>
 <script>
   if ("serviceWorker" in navigator) {
