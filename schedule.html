@@ -709,7 +709,7 @@
           return '<option value="' + esc(v.id) + '"' + (sel ? " selected" : "") + '>' + esc(v.label) + '</option>';
         }).join("") + '</select>' +
       '</div>' +
-      targetsFieldHtml(isNew ? null : rule, isNew ? (addForVehicle ? VEHICLE_AREA_ID : "") : rule.area_id) +
+      targetsFieldHtml(isNew ? null : rule) +
       '<label>Which department does this belong to?</label><select id="f_dept">' +
       '<option value="">Choose a department…</option>' +
       departments.map(function (d) {
@@ -791,34 +791,49 @@
   };
 
 
-  // Several targets at once (D-065/D-066) — Mark: "we create a
-  // schedule - select all the targets that should be included." A real
-  // checkbox per target, using D-050's own custom checkbox (appearance:
-  // none, hand-drawn — the only rendering that's actually held up on
-  // every device this session tested). Only shows for an area that
-  // actually has real, split targets (targetsByArea) — the 11 areas
-  // D-064 built, at CEC, today. Everywhere else this renders empty and
-  // hidden, and the schedule keeps working exactly as it always has.
-  function targetsFieldHtml(rule, areaId) {
-    var opts = targetsByArea[areaId] || [];
-    if (!opts.length) return '<div id="f_targetsrow" hidden></div>';
+  // Several targets at once (D-065/D-066), from any area, not just the
+  // one picked above (D-067) — Mark, straight after trying the first
+  // version: "how do we build a schedule that includes targets from
+  // different maintenance areas. your setup only allows me to choose
+  // targets from within the one maintenance area." Every real split
+  // target across every area shows here, grouped under its own area
+  // name for readability, independent of the "Maintenance area"
+  // dropdown above — the schedule's own area is derived server-side
+  // from whichever targets actually get checked (deriveAreaFromTargets
+  // — the same area if they all share one, "Camp-wide" if they don't),
+  // not asked for twice. A real checkbox per target, D-050's own custom
+  // checkbox (appearance: none, hand-drawn — the only rendering that's
+  // actually held up on every device this session tested). Empty and
+  // hidden entirely if CEC's 11 split areas haven't loaded any targets
+  // at all — the schedule keeps working exactly as it always has.
+  function targetsFieldHtml(rule) {
+    var areaIds = Object.keys(targetsByArea).sort(function (a, b) {
+      return (areaNameById(a) || "").localeCompare(areaNameById(b) || "");
+    });
+    if (!areaIds.length) return '<div id="f_targetsrow" hidden></div>';
     var checkedIds = {};
     (rule && rule.targets || []).forEach(function (t) { checkedIds[t.type + ":" + t.id] = true; });
     return '<div id="f_targetsrow"><label>Which targets does this cover?</label>' +
-      '<p class="rmeta" style="margin:2px 0 6px">Pick as many as this schedule should combine into one checklist — leave none picked for an ordinary single-target schedule.</p>' +
-      opts.map(function (t) {
-        var key = t.type + ":" + t.id;
-        return '<label class="check"><input type="checkbox" class="f_target" value="' + esc(key) + '"' +
-          (checkedIds[key] ? " checked" : "") + '>' + esc(t.label) + '</label>';
+      '<p class="rmeta" style="margin:2px 0 6px">Pick as many as this schedule should combine into one checklist, from any area — leave none picked for an ordinary single-target schedule.</p>' +
+      areaIds.map(function (areaId) {
+        var opts = targetsByArea[areaId];
+        return '<p class="rmeta" style="margin:10px 0 2px;font-weight:700;color:#43594A">' + esc(areaNameById(areaId) || "") + '</p>' +
+          opts.map(function (t) {
+            var key = t.type + ":" + t.id;
+            return '<label class="check"><input type="checkbox" class="f_target" value="' + esc(key) + '"' +
+              (checkedIds[key] ? " checked" : "") + '>' + esc(t.label) + '</label>';
+          }).join("");
       }).join("") + '</div>';
+  }
+  function areaNameById(id) {
+    var a = areas.filter(function (x) { return x.id === id; })[0];
+    return a ? a.name : null;
   }
 
   window.onAreaPick = function () {
     var row = document.getElementById("f_vehrow");
     var k = document.getElementById("f_kind").value;
     if (row) row.hidden = (k === "date") && !isVehicleArea(document.getElementById("f_area").value);
-    var tRow = document.getElementById("f_targetsrow");
-    if (tRow) tRow.outerHTML = targetsFieldHtml(null, document.getElementById("f_area").value);
   };
 
   window.onPresetPick = function () {
