@@ -58,7 +58,8 @@
 
 <div id="start">
   <h1 id="campTitle">Chobe Elephant Camp</h1>
-  <p class="sub">Signed in as <b id="whoAmI"></b> · <a href="#" id="signOut">Sign out</a> — what would you like to do?</p>
+  <p class="sub">Signed in as <b id="whoAmI"></b> — what would you like to do?</p>
+  <button class="btn-secondary" id="signOut" style="width:auto;padding:7px 13px;margin-bottom:14px">Sign out</button>
   <script src="./nav.js"></script>
   <div id="navRow"></div>
   <script>
@@ -509,7 +510,7 @@
       if (matchedAreaId && areaName) {
         detected.hidden = false;
         detected.innerHTML = "Detected: " + esc(roomName || areaName) +
-          ' — <a href="#" id="clearMatchLink">not this, clear it</a>';
+          ' <button class="btn-secondary" id="clearMatchLink" style="width:auto;padding:3px 9px;font-size:12.5px;margin-left:6px">not this, clear it</button>';
         document.getElementById("clearMatchLink").onclick = function (e) { e.preventDefault(); clearMatch(); };
       } else {
         detected.hidden = true;

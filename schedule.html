@@ -1134,10 +1134,9 @@
     var visible = showRemoved ? rules : rules.filter(function (r) { return !r.archived; });
 
     if (removedCount) {
-      h += '<p class="order-note" style="margin-top:6px">' +
-        '<a href="#" onclick="toggleRemoved();return false;">' +
+      h += '<p style="margin-top:6px"><button onclick="toggleRemoved()">' +
         (showRemoved ? "Hide" : "View") + " " + removedCount + " removed schedule" +
-        (removedCount === 1 ? "" : "s") + '</a></p>';
+        (removedCount === 1 ? "" : "s") + '</button></p>';
     }
 
     var byArea = {};
