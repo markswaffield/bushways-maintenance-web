@@ -215,6 +215,23 @@
     var html = "";
     data.targets.forEach(function (t, ti) {
       html += "<h2>" + esc(t.target_label) + "</h2>";
+      // A vehicle's odometer, or a metered asset's hours (D-068, once
+      // rooms and vehicles became addable to the basket) — the exact
+      // same block inspection.html shows for a single-target check,
+      // just once per target here instead of once for the whole page.
+      if (t.target_type === "vehicle") {
+        html += '<div class="odo"><label>Odometer reading (km) — ' + esc(t.target_label) + '</label>' +
+          '<input type="number" inputmode="numeric" data-odometer="' + ti + '" min="0" step="1" placeholder="e.g. 184320">' +
+          '<p class="note">' + (t.odometer != null
+            ? "Last recorded: " + Number(t.odometer).toLocaleString() + " km."
+            : "No reading recorded for this vehicle yet.") + '</p></div>';
+      } else if (t.meter_asset_id) {
+        html += '<div class="odo"><label>Hours reading — ' + esc(t.target_label) + '</label>' +
+          '<input type="number" inputmode="numeric" data-hours="' + ti + '" min="0" step="0.1" placeholder="e.g. 1240.5">' +
+          '<p class="note">' + (t.meter_last_reading != null
+            ? "Last recorded: " + Number(t.meter_last_reading).toLocaleString() + " hours."
+            : "No reading recorded yet.") + '</p></div>';
+      }
       t.sections.forEach(function (s) {
         // A D-064 target has exactly one section, named after the
         // target itself — showing it again here would just repeat the
@@ -303,14 +320,31 @@
           });
         });
       });
-      showReview(data, perTarget);
+      // One odometer/hours reading per target, alongside its own
+      // results (D-068) — undefined for anything that isn't a vehicle
+      // or a metered asset, which submit() already treats as "nothing
+      // to record" the same way a single-target check does.
+      var perTargetReading = data.targets.map(function (t, ti) {
+        var odoInput = document.querySelector('[data-odometer="' + ti + '"]');
+        var hoursInput = document.querySelector('[data-hours="' + ti + '"]');
+        var odometer = odoInput && odoInput.value !== "" ? Number(odoInput.value) : null;
+        var hours = hoursInput && hoursInput.value !== "" ? Number(hoursInput.value) : null;
+        if (odometer !== null && t.odometer != null && odometer < Number(t.odometer)) {
+          if (!confirm(esc(t.target_label) + "'s reading (" + odometer.toLocaleString() +
+              " km) is lower than the last one recorded (" + Number(t.odometer).toLocaleString() +
+              " km). Record it anyway?")) return null;
+        }
+        return { odometer: odometer, hours: hours };
+      });
+      if (perTargetReading.indexOf(null) !== -1) return; // a lower-reading confirm was declined
+      showReview(data, perTarget, perTargetReading);
     };
   }
 
   // Nothing is written yet at this point, same discipline as the
   // single-target screen (Mark, 2026-09-08: "once submitted we need an
   // edit or confirm button").
-  function showReview(data, perTarget) {
+  function showReview(data, perTarget, perTargetReading) {
     show("review");
     var r = document.getElementById("review");
     var html = '<h1>Confirm checklist</h1>' +
@@ -320,9 +354,17 @@
     data.targets.forEach(function (t, ti) {
       var flagged = perTarget[ti].filter(function (x) { return x.failed; });
       var readings = perTarget[ti].filter(function (x) { return x.value !== undefined; });
-      if (!flagged.length && !readings.length) return;
+      var reading = perTargetReading[ti];
+      var hasReading = reading && (reading.odometer !== null || reading.hours !== null);
+      if (!flagged.length && !readings.length && !hasReading) return;
       anyFlagged = true;
       html += '<div class="review-card"><p class="review-line" style="font-weight:700">' + esc(t.target_label) + '</p>';
+      if (reading && reading.odometer !== null) {
+        html += '<p class="review-line">Odometer: <b>' + reading.odometer.toLocaleString() + ' km</b></p>';
+      }
+      if (reading && reading.hours !== null) {
+        html += '<p class="review-line">Hours: <b>' + reading.hours.toLocaleString() + '</b></p>';
+      }
       flagged.forEach(function (x) {
         html += '<p class="review-line">' + esc(x.label) +
           (x.fault_type_label ? ' — <span class="fault">' + esc(x.fault_type_label) + '</span>' : '') +
@@ -356,7 +398,11 @@
           person_id: signedInAs.id, signed_in_id: signedInAs.id,
           location_id: camp ? camp.id : null,
           entries: data.targets.map(function (t, ti) {
-            return { target_type: t.target_type, target_id: t.target_id, template_id: t.template_id, results: perTarget[ti] };
+            var reading = perTargetReading[ti] || {};
+            return {
+              target_type: t.target_type, target_id: t.target_id, template_id: t.template_id, results: perTarget[ti],
+              odometer: reading.odometer, hours: reading.hours,
+            };
           }),
         }),
       }).then(function (resp) { return resp.json(); }).then(function (out) {
