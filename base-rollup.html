@@ -86,7 +86,15 @@
 
 <h1>All Camps</h1>
 <p class="sub">Every camp Bush Ways operates, rolled up in one place — open faults and outstanding schedules, filterable by camp. To go and work at a specific camp instead, use <a href="./base-dashboard.html">Base Dashboard</a>.</p>
-<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "");
+  })();
+</script>
 
 <!-- Sign-in itself now happens once, on the landing page (index.html) —
      Mark, 2026-09-18: "when i click on the app - I want to go to a blank

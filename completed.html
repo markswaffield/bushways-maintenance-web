@@ -64,7 +64,15 @@
 
 <h1>Completed Tasks</h1>
 <p class="sub"><span id="campTitle">Chobe Elephant Camp</span> — the full flow of every fixed fault</p>
-<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><b>Completed</b><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "Completed");
+  })();
+</script>
 
 <div id="app"><p class="loading">Loading…</p></div>
 

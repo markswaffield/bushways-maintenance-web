@@ -140,7 +140,15 @@
 <!-- Real button, not a plain link — D-057, 2026-09-18: "the sign out
      option is also not a padded button." -->
 <button class="ghost" id="signOut" style="width:auto;margin:6px 0 4px">Sign out</button>
-<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><b>Edit Checklists</b><a href="./base-dashboard.html">Base Dashboard</a></p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_admin"); if (s) { var a = JSON.parse(s); m = { is_manager: true, is_administrator: true, locations: [] }; } } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "Edit Checklists");
+  })();
+</script>
 
 <!-- Picking, and editing, are two separate steps now — 2026-09-18,
      Mark: "currently when you choose a checklist - the editable

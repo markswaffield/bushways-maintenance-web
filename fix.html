@@ -3,6 +3,7 @@
 <meta name="theme-color" content="#122d31">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <title>Chobe Elephant Camp — Fix a Fault</title>
+<script src="./nav.js"></script>
 <style>
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
   h1{font-size:19px;margin:0 0 4px}
@@ -64,8 +65,7 @@
   .assign-row{display:flex;gap:8px;align-items:center;margin-top:8px}
   .assign-row select{flex:1}
   .assigned-label{font-size:12.5px;color:#43594A;font-weight:600;margin-top:6px}
-  .fix-form{display:none;margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
-  .card.open .fix-form{display:block}
+  .fix-form{margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
   .photos{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
   .photos a img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
   .notes{margin-top:8px}
@@ -228,7 +228,7 @@
 
   function loadIssues() {
     var list = document.getElementById("list");
-    list.innerHTML = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p><p class="loading">Loading…</p>';
+    list.innerHTML = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + navHtml(me, "Fix a fault") + '<p class="loading">Loading…</p>';
     fetch(FN + "?action=open_issues" + campParam()).then(function (r) { return r.json(); }).then(function (data) {
       lastIssues = data.issues;
       var want = issueParam();
@@ -240,18 +240,22 @@
   }
 
   // The one fault this page was opened for, on its own — nothing else
-  // to find it among, and its own fix-form already open, matching
-  // what tapping "Mark fixed" would otherwise take a second step to do.
+  // to find it among, its fix-form right there already (D-076).
   function renderSingleIssue(id) {
     var list = document.getElementById("list");
     var found = lastIssues.filter(function (i) { return i.id === id; })[0];
     var html = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() +
-      '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>' +
-      '<p class="order-note"><a href="./fix.html">← All faults</a></p>';
+      navHtml(me, "Fix a fault") +
+      // A real button, not a styled-to-look-like-text link — the
+      // standing rule for any navigation action in this tool (D-057).
+      // Mark, 2026-09-18, catching this one specifically: "When
+      // Completing a fault - get a text that says - All Faults -
+      // needs to be a Button."
+      '<div class="actions"><button class="secondary" onclick="location.href=\'./fix.html\'">← All faults</button></div>';
     if (!found) {
       html += '<p class="empty">This fault is no longer open — it may already have been fixed.</p>';
     } else {
-      html += issueCardHtml(found, true);
+      html += issueCardHtml(found);
     }
     list.innerHTML = html;
   }
@@ -348,7 +352,7 @@
 
   function renderList(issues) {
     var list = document.getElementById("list");
-    var html = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + '<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><b>Fix a fault</b><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>';
+    var html = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + navHtml(me, "Fix a fault");
 
     html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
@@ -417,7 +421,7 @@
       html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
       area.targets.forEach(function (target) {
         html += '<div class="target-group"><p class="target-heading">' + esc(target.name) + '</p>';
-        target.faults.forEach(function (i) { html += issueCardHtml(i, false); });
+        target.faults.forEach(function (i) { html += issueCardHtml(i); });
         html += '</div>';
       });            // targets within this area
       html += '</div>';
@@ -427,8 +431,8 @@
   }
 
   // One fault's own card — shared by the grouped list above and the
-  // single-fault deep-link view (renderSingleIssue). `openNow` starts
-  // its Mark Fixed form already expanded, for the deep-link case.
+  // single-fault deep-link view (renderSingleIssue). Its fix form is
+  // always right there, not behind a toggle (D-076).
   //
   // Assigning and the note management adds before assigning moved to
   // the To-do list instead of living here (tool-local D-072, 2026-09-18)
@@ -436,8 +440,19 @@
   // put it on the To-Do-List page." What's already been assigned or
   // noted still shows, read-only, for whoever's fixing it; only the
   // controls to change either moved.
-  function issueCardHtml(i, openNow) {
-    var html = '<div class="card' + (openNow ? " open" : "") + '" id="card-' + i.id + '">' +
+  // The fix form is always right there now, not behind a "Mark fixed"
+  // toggle first — tool-local D-076, 2026-09-18. Mark: "when you land
+  // on the Fault Fix page you get the option to describe what was
+  // done, part used etc. You also have 2 buttons - Mark Fixed and
+  // Confirm. We do not need the Mark Fixed - prefer Confirm," and,
+  // landing here from the plain nav link rather than the to-do list's
+  // own deep link: "do not have the option to put notes or parts.
+  // Only has a Mark Fixed button - I would like to do away with this
+  // and replicate what is described as above." One real reason to
+  // resolve a fault, one real button — same for every card, whichever
+  // way you reached it.
+  function issueCardHtml(i) {
+    var html = '<div class="card" id="card-' + i.id + '">' +
       '<p class="item">' + esc(i.target) + ' — ' + esc(i.label) + (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : '') + '</p>' +
       (i.fault_type ? '<span class="fault">' + esc(i.fault_type) + '</span>' : '') +
       (i.note || i.suggested_action ? esc(i.note || i.suggested_action) : '') +
@@ -464,22 +479,14 @@
       html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_department.name) + '</p>';
     }
 
-    html += '<div class="actions">' +
-      '<button class="small" onclick="toggleFix(\'' + i.id + '\')">Mark fixed</button>' +
-      '</div>' +
-      '<div class="fix-form">' +
+    html += '<div class="fix-form">' +
       '<label>What was done?</label><textarea id="action-' + i.id + '" rows="2" placeholder="What actually fixed it"></textarea>' +
       '<label>Part used (optional)</label><input type="text" id="part-' + i.id + '" placeholder="e.g. SN352">' +
       '<label>Photo of the fix (optional)</label><input type="file" accept="image/*" capture="environment" id="photo-' + i.id + '">' +
-      '<div class="actions"><button onclick="doResolve(\'' + i.id + '\')">Confirm fixed</button>' +
-      '<button class="secondary" onclick="toggleFix(\'' + i.id + '\')">Cancel</button></div>' +
+      '<div class="actions"><button onclick="doResolve(\'' + i.id + '\')">Confirm fixed</button></div>' +
       '</div></div>';
     return html;
   }
-
-  window.toggleFix = function (id) {
-    document.getElementById("card-" + id).classList.toggle("open");
-  };
 
   // doAddNote/doAssign moved to dashboard.html (D-072) — this page no
   // longer has the controls that called them.

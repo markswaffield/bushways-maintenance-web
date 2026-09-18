@@ -97,7 +97,15 @@
 
 <h1>Assets — Chobe Elephant Camp</h1>
 <p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
-<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><b>Assets</b><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "Assets");
+  })();
+</script>
 
 <div class="filter-section signin-box" id="whoSignedIn" hidden>
   <div class="title">Signed in</div>

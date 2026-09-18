@@ -176,7 +176,15 @@
     <button onclick="signOut()" style="width:100%;margin-top:10px;padding:9px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;cursor:pointer">Sign out</button>
   </div>
 </div>
-<p class="nav"><b>Schedule</b><a href="./inspection.html">Inspection</a><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "Schedule");
+  })();
+</script>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
@@ -212,10 +220,14 @@
   var CAMP_PARAM = me ? ("&person_id=" + encodeURIComponent(me.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")) : "";
   var FN = BASE_FN + "?action=dashboard" + CAMP_PARAM;
   var lastData = null;
-  // Mark, 2026-09-11: "default must be newest to oldest". For a schedule
-  // "newest" is the furthest-away due date, so upcoming work sorts above
-  // overdue work — his call, and the other option puts it back.
-  var direction = "newest";
+  // Changed back the other way, 2026-09-18 (tool-local D-077) — Mark:
+  // "I would like to change the default ordering for Scheduling list
+  // to Oldest to Newest (as schedules are forward planned - need it
+  // this way to see current schedules first)." For a schedule
+  // "oldest" is the soonest/most-overdue due date, so what actually
+  // needs doing now sorts to the top — the original 2026-09-11 default
+  // (newest first, upcoming work on top) is what this replaces.
+  var direction = "oldest";
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
   var mine = false, filterDept = "", filterPerson = "";
@@ -366,8 +378,8 @@
 
     html += '<div class="filter-section"><div class="title">Order</div>' +
       '<label>By due date</label><select id="direction" onchange="onDirection()">' +
-      '<option value="newest"' + (direction === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
-      '<option value="oldest"' + (direction === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
+      '<option value="oldest"' + (direction === "oldest" ? " selected" : "") + '>Oldest to newest (default)</option>' +
+      '<option value="newest"' + (direction === "newest" ? " selected" : "") + '>Newest to oldest</option>' +
       '</select>' +
       '<label>Custom date range (optional)</label>' +
       '<div class="daterange">' +

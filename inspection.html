@@ -59,7 +59,15 @@
 <div id="start">
   <h1 id="campTitle">Chobe Elephant Camp</h1>
   <p class="sub">Signed in as <b id="whoAmI"></b> · <a href="#" id="signOut">Sign out</a> — what would you like to do?</p>
-  <p class="nav"><a href="./schedule.html">Schedule</a><b>Inspection</b><a href="./dashboard.html">To-do list</a><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+  <script src="./nav.js"></script>
+  <div id="navRow"></div>
+  <script>
+    (function () {
+      var m = null;
+      try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+      document.getElementById("navRow").innerHTML = navHtml(m, "Inspection");
+    })();
+  </script>
   <label>What would you like to do?</label>
   <select id="area"><option value="">Loading…</option></select>
   <button id="startBtn">Continue</button>

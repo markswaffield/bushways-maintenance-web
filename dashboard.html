@@ -73,7 +73,15 @@
 
 <h1>To-Do — <span id="campTitle">Chobe Elephant Camp</span></h1>
 <p class="sub">Every open fault, grouped by area and target. Anything <em>due</em> lives on the Schedule.</p>
-<p class="nav"><a href="./schedule.html">Schedule</a><a href="./inspection.html">Inspection</a><b>To-do list</b><a href="./fix.html">Fix a fault</a><a href="./completed.html">Completed</a><a href="./assets.html">Assets</a><a href="./staff.html">Staff</a><a href="./admin-checklists.html">Edit Checklists</a><a href="./base-dashboard.html">Base Dashboard</a></p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "To-do list");
+  })();
+</script>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
