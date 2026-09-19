@@ -54,6 +54,7 @@
   .status.ok{color:#2F6B45}
   .status.err{color:#A8502F}
   .status.dirty{color:#8C6A2F;font-weight:600}
+  .whoami{display:inline-block;font-size:13.5px;font-weight:600;padding:6px 0;color:#232019}
 
   .scroll{overflow-x:auto;margin-top:12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
   table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
@@ -151,7 +152,7 @@
 </p>
 
 <div class="toolbar">
-  <div><label for="who">You are</label><select id="who"></select></div>
+  <div><label>Signed in as</label><span class="whoami" id="whoami"></span></div>
   <div><label for="date">Date</label><input type="date" id="date"></div>
   <div><button id="save" disabled>Save changes</button></div>
   <div><button class="ghost" id="reload">Refresh</button></div>
@@ -195,7 +196,11 @@ function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function el(id){return document.getElementById(id);}
 function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
-function personId(){return el("who").value;}
+// Whoever signed in, full stop — Mark, 2026-09-19: "it does not
+// automatically pick your name as the person who signed in - so it will
+// not be auditing who made changes". A dropdown that could be set to
+// somebody else is not an audit trail, it is a suggestion.
+function personId(){ return me && me.id; }
 function setStatus(t,cls){var s=el("status");s.textContent=t;s.className="status"+(cls?" "+cls:"");}
 
 function opts(list, sel){
@@ -212,10 +217,33 @@ function val(row, key, scope){
   if (scope === "stay") return (row.stay && row.stay[key]) || "";
   return (row.saved && row.saved[key]) || "";
 }
+// Who may appear in each role picker. Mark, 2026-09-19: they "should
+// only reflect the relevant staff from that department in that lodge".
+// The lodge half is done in the Edge Function (only this camp's people
+// come back at all); this is the department half.
+//
+// Matched on the real department names from notes/Lodge Departments -
+// master.docx. An unknown or missing department falls back to the whole
+// list rather than an empty box — better to show too many than to make a
+// role unfillable because somebody's department was not set.
+var ROLE_DEPARTMENTS = {
+  housekeeper_id: ["Housekeeping"],
+  guide_id: ["Guides and Drivers"],
+  arrival_driver_id: ["Guides and Drivers"],
+  departure_driver_id: ["Guides and Drivers"],
+};
+function peopleFor(key){
+  var want = ROLE_DEPARTMENTS[key];
+  if (!want) return boot.people;
+  var matching = boot.people.filter(function (p) { return want.indexOf(p.department) !== -1; });
+  return matching.length ? matching : boot.people;
+}
+
 function cellSelect(row,key,list,scope){
   if (scope === "stay" && !row.stay) return '<td class="dim"></td>';
+  var choices = (list === boot.people) ? peopleFor(key) : list;
   return '<td><select data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'">'
-       + opts(list, val(row,key,scope)) + "</select></td>";
+       + opts(choices, val(row,key,scope)) + "</select></td>";
 }
 // ETA and ETD change constantly, so the camp always overrides - Mark,
 // 2026-09-11: "these can change at any time - so camp needs to be able
@@ -629,9 +657,7 @@ window.addEventListener("beforeunload", function(e){
 
 fetch(FN + (shownCamp ? "?location_id=" + encodeURIComponent(shownCamp.id) : "")).then(function(r){return r.json();}).then(function(b){
   boot = b;
-  el("who").innerHTML = b.people.map(function(p){
-    return '<option value="'+esc(p.id)+'">'+esc(p.name)+"</option>";
-  }).join("");
+  el("whoami").textContent = me.name + (me.department ? " · " + me.department : "");
   el("date").value = today();
   el("date").addEventListener("change", load);
   load();
