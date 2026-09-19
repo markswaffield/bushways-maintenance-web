@@ -78,7 +78,15 @@
      rather than growing to fit its content and pushing the page taller. */
   .scroll{flex:1;min-height:0;overflow:auto;margin-top:10px;
           border:1px solid #C9C2AC;border-radius:8px;background:#fff}
-  table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+  /* table-layout:fixed, with every width declared in the colgroup below.
+     Mark, 2026-09-19: "if you scroll right it compresses the Room
+     column". With the default auto layout the browser re-apportions
+     width from the content as it goes, and a sticky column has no say in
+     it — so the frozen columns squeezed the moment the grid scrolled.
+     Fixed layout honours the declared widths exactly and nothing moves.
+     The widths live in COLS and are load-bearing twice over: the frozen
+     columns' left offsets are the running total of the ones before. */
+  table{border-collapse:separate;border-spacing:0;font-size:12.5px;table-layout:fixed;width:max-content;min-width:100%}
   th,td{border-right:1px solid #EDE9DE;border-bottom:1px solid #EDE9DE;padding:0;vertical-align:top}
   thead th{position:sticky;top:0;z-index:10;background:#4C3B2C;color:#fff;font-weight:700;
            text-align:left;padding:5px 6px;font-size:11px;letter-spacing:.02em;white-space:nowrap}
@@ -89,11 +97,11 @@
      to the guest name row so it also remains static". Five columns, each
      offset by the sum of those before it, so they have to carry explicit
      widths. Header cells sit above body cells at the same offset. */
-  td.room,      th.c-room   {position:sticky;left:0;    width:58px; min-width:58px}
-  td.status-cell,th.c-status{position:sticky;left:58px; width:96px; min-width:96px}
-  td.c-pax,     th.c-pax    {position:sticky;left:154px;width:46px; min-width:46px}
-  td.c-type,    th.c-type   {position:sticky;left:200px;width:92px; min-width:92px}
-  td.c-names,   th.c-names  {position:sticky;left:292px;width:172px;min-width:172px}
+  td.room,      th.c-room   {position:sticky;left:0}
+  td.status-cell,th.c-status{position:sticky;left:58px}
+  td.c-pax,     th.c-pax    {position:sticky;left:154px}
+  td.c-type,    th.c-type   {position:sticky;left:200px}
+  td.c-names,   th.c-names  {position:sticky;left:292px}
   tbody td.room,tbody td.status-cell,tbody td.c-pax,tbody td.c-type,tbody td.c-names{z-index:5}
   thead th.c-room,thead th.c-status,thead th.c-pax,thead th.c-type,thead th.c-names{z-index:20}
   /* The last frozen column carries the seam, so the join reads as one
@@ -129,7 +137,7 @@
   tbody tr.st-empty td.room{background:#F1EDE4;color:#A8A192}
   th.g-room{background:#4C3B2C}
   td.room{background:#F1EDE4;font-weight:700;text-align:center;
-          padding:6px 8px;white-space:nowrap}
+          padding:6px 4px;line-height:1.15;overflow-wrap:anywhere}
   tbody tr:nth-child(even) td{background:#FCFBF8}
   tbody tr:nth-child(even) td.room{background:#EDE8DC}
   tbody tr.turnover td.room{background:#F4CFC2;color:#A8502F}
@@ -358,7 +366,8 @@ function cellPax(b){
 }
 
 var HEAD =
-  '<thead>'
+  COLGROUP
++ '<thead>'
 + '<tr class="groups">'
 +   '<th class="room c-room g-room" rowspan="2">Room</th>'
 +   '<th class="c-status g-room" rowspan="2">Status</th>'
@@ -379,6 +388,21 @@ var HEAD =
 +   "<th>Names</th><th>Driver/Guide</th><th>Vehicle</th><th>Departure details</th><th>ETD</th>"
 +   "<th>Activity</th><th>Time</th>"
 + "</tr></thead>";
+
+// One entry per column, in order. Change a width here and the frozen
+// columns' left offsets in the stylesheet must change with it.
+var COLS = [
+  58, 96,                       // Room, Status            (frozen)
+  46, 92, 172,                  // Pax, Type, Names        (frozen)
+  130, 130, 130, 190,           // Housekeeper, Guide, Vehicle, Notes
+  130, 130, 165, 90,            // Arrivals
+  150, 130, 130, 165, 90,       // Departures
+  150, 80,                      // Activities
+  210                           // Maintenance
+];
+var COLGROUP = "<colgroup>" + COLS.map(function (w) {
+  return '<col style="width:' + w + 'px">';
+}).join("") + "</colgroup>";
 
 var STATUS_LABEL = { arriving:"Arriving", departing:"Departing", turnover:"Turnover", staying:"Staying", empty:"Empty" };
 
