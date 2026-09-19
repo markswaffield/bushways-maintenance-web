@@ -1314,6 +1314,15 @@
       h += '<div class="assign-row"><button onclick="location.href=\'./consolidated.html?schedule=' + esc(s.id) + '\'">' +
         (s.on_hold ? "Continue checklist →" : "Open checklist →") + '</button></div>';
     }
+    // A plain on-occupancy Room/Vehicle Task — including a handover
+    // and a usage-based service, both of which are also just a real
+    // Vehicle Check underneath — never had a direct link into its own
+    // checklist before, per Mark, 2026-09-19. Same deep link
+    // checklist.html now understands (?target=&target_type=).
+    if (s.is_task && s.target_id) {
+      h += '<div class="assign-row"><button onclick="location.href=\'./inspection.html?target=' +
+        esc(s.target_id) + '&target_type=' + esc(s.target_type) + '\'">Open checklist →</button></div>';
+    }
 
     // Management assigns a department by hand, the same way a fault is
     // assigned. Only on a real Task — a recurring schedule row has no

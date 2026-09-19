@@ -204,6 +204,26 @@
     });
   }
 
+  // A deep link straight into one target's own checklist — Mark,
+  // 2026-09-19: "i would like to also be able to access the room and
+  // vehicle inspection check directly from the schedule page - as we
+  // do with the schedules that have been created." Schedule's own
+  // "Open checklist →" always meant a consolidated/random-draw
+  // schedule (D-066/D-079); a plain on-occupancy Room/Vehicle Task had
+  // nothing equivalent to link to at all — this is that link's actual
+  // destination. Read once, on load, before the picker even renders;
+  // skips straight to renderChecklist() exactly as if the picker had
+  // been used, so nothing downstream needs to know this page was
+  // reached any differently.
+  var deepLinkTarget = null, deepLinkType = null;
+  (function () {
+    var params = new URLSearchParams(location.search);
+    if (params.get("target") && params.get("target_type")) {
+      deepLinkTarget = params.get("target");
+      deepLinkType = params.get("target_type");
+    }
+  })();
+
   if (signedInAs) {
   fetch(FN + (campParam() ? "?" + campParam().slice(1) : "")).then(function (r) { return r.json(); }).then(function (data) {
     state.people = data.people; state.rooms = data.rooms; state.areas = data.areas;
@@ -220,6 +240,18 @@
     a.innerHTML = '<option value="">Select one</option>' +
       data.areas.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.available ? "" : " (coming soon)") + '</option>'; }).join("") +
       '<option value="__report__">Report a fault</option>';
+
+    if (deepLinkTarget) {
+      targetType = deepLinkType;
+      pendingRoomId = deepLinkTarget;
+      fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + deepLinkTarget + "&target_type=" + deepLinkType + campParam())
+        .then(function (resp) { return resp.json(); })
+        .then(function (checklistData) {
+          if (checklistData.error) { alert(checklistData.error); return; }
+          renderChecklist(checklistData, myPersonId, deepLinkTarget);
+        })
+        .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+    }
   }).catch(function (e) {
     document.getElementById("start").innerHTML = "<p>Couldn't reach the checklist data. This is a fault in the page, not your connection or phone — please tell Mark/Claude. (" + esc(e.message) + ")</p>";
   });
