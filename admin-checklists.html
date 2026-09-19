@@ -193,7 +193,7 @@
     <!-- Only shown for an actual target's own checklist, wired in
          loadTemplate() — removing a whole area's own checklist, or
          Guest Rooms/Vehicles, isn't this button's job (D-074). -->
-    <button class="danger" id="removeTargetBtn" hidden>Remove this target</button>
+    <button class="danger" id="removeTargetBtn" hidden>Remove this asset</button>
   </div>
 </div>
 </div>
@@ -307,7 +307,7 @@
           html += a.targets.map(function (t) { return templateCard(t, t.asset_id); }).join("");
         }
         if (a.can_add_target) {
-          html += '<div class="acts"><button class="ghost" data-add-target="' + a.area_id + '" data-area-name="' + esc(a.area_name) + '">+ Add a target</button></div>';
+          html += '<div class="acts"><button class="ghost" data-add-target="' + a.area_id + '" data-area-name="' + esc(a.area_name) + '">+ Add an asset</button></div>';
         }
         html += '</div>';
         return html;
@@ -317,7 +317,7 @@
       });
       Array.prototype.forEach.call(list.querySelectorAll("[data-add-target]"), function (b) {
         b.onclick = function () {
-          var name = prompt('New target in "' + b.dataset.areaName + '" — what is it called?');
+          var name = prompt('New asset in "' + b.dataset.areaName + '" — what is it called?');
           if (!name) return;
           api("admin_add_target", { body: { admin_person_id: me.id, location_id: currentLoc, area_id: b.dataset.addTarget, name: name } })
             .then(function (out) {
@@ -361,7 +361,7 @@
   document.getElementById("removeTargetBtn").onclick = function () {
     if (!currentAssetId) return;
     var title = document.getElementById("editorTitle").textContent;
-    if (!confirm('Remove "' + title + '" as a target? Its history stays on record — this only stops it being offered for new checks and schedules.')) return;
+    if (!confirm('Remove "' + title + '" as an asset? Its history stays on record — this only stops it being offered for new checks and schedules.')) return;
     var reason = prompt("Why (optional)?") || "";
     api("retire_asset", { body: { by_person_id: me.id, kind: "asset", id: currentAssetId, reason: reason } })
       .then(function (out) {

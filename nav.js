@@ -33,6 +33,14 @@ function navHtml(me, active) {
     links.push({ href: "./assets.html", label: "Assets" });
     links.push({ href: "./staff.html", label: "Staff" });
   }
+  if (me && (me.is_manager || me.is_administrator)) {
+    // Reports (tool-local D-080) — Mark: "only visible to camp
+    // managers, base managers and admin - as we have done with other
+    // buttons." Every real base manager also carries is_manager true
+    // (checked directly), so this is the same single check Assets and
+    // Staff already use, not a new flag to keep in step with those.
+    links.push({ href: "./reports.html", label: "Reports" });
+  }
   if (me && me.locations && me.locations.length > 1) {
     links.push({ href: "./base-dashboard.html", label: "Base Dashboard" });
   }

@@ -78,7 +78,7 @@
   <h1 id="scheduleTitle"></h1>
   <p class="sub" id="scheduleSub"></p>
   <div class="progress-bar">
-    <span><span class="count" id="progressCount"></span> targets checked</span>
+    <span><span class="count" id="progressCount"></span> assets checked</span>
     <button class="secondary small" id="holdBtn" style="margin:0">Hold — come back later</button>
   </div>
   <div id="targetsBox"></div>
@@ -186,7 +186,7 @@
     show("checklist");
     document.getElementById("scheduleTitle").textContent = data.schedule_name;
     document.getElementById("scheduleSub").textContent =
-      campName() + " — " + data.target_count + " target" + (data.target_count === 1 ? "" : "s") + " in this schedule. Leave an item alone if it's fine.";
+      campName() + " — " + data.target_count + " asset" + (data.target_count === 1 ? "" : "s") + " in this schedule. Leave an item alone if it's fine.";
     document.getElementById("progressCount").textContent = data.done_count + " of " + data.target_count;
     document.getElementById("holdBtn").onclick = function () { location.href = "./schedule.html"; };
 
@@ -444,7 +444,7 @@
       }).join(", ");
       document.getElementById("doneBox").innerHTML =
         "<p>" + esc(document.getElementById("scheduleTitle").textContent) + ", " + esc(campName()) + ".</p>" +
-        "<p>" + out.targets_completed + " target" + (out.targets_completed === 1 ? "" : "s") + " checked — " + esc(whoLines) + ".</p>" +
+        "<p>" + out.targets_completed + " asset" + (out.targets_completed === 1 ? "" : "s") + " checked — " + esc(whoLines) + ".</p>" +
         (out.next_due_date ? "<p>Next due " + new Date(out.next_due_date).toLocaleDateString() + ".</p>" : "");
       show("done");
     }).catch(function (e) {

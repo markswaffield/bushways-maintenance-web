@@ -354,7 +354,7 @@
     var list = document.getElementById("list");
     var html = '<h1>Fix a Fault' + (shownCampName() ? ' — ' + esc(shownCampName()) : "") + '</h1>' + signedInBoxHtml() + navHtml(me, "Fix a fault");
 
-    html += '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
+    html += '<p class="order-note">Grouped by maintenance area, then asset — each asset\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
 
     html += '<div class="filters">';
@@ -372,7 +372,7 @@
       '</select></div>';
 
     html += '<div class="filter-section"><div class="title">Date</div>' +
-      '<label>Order (within each target)</label><select id="fixDateDirection" onchange="onFixDateDirection()">' +
+      '<label>Order (within each asset)</label><select id="fixDateDirection" onchange="onFixDateDirection()">' +
       '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
       '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
       '</select>' +
@@ -392,7 +392,7 @@
       }).join("") + '</select>';
     if (filterAreaId) {
       var ts = targetsIn(filterAreaId);
-      html += '<label>Target</label><select id="fixTarget" onchange="onFixTarget()">' +
+      html += '<label>Asset</label><select id="fixTarget" onchange="onFixTarget()">' +
         '<option value="">All in this area</option>' +
         ts.map(function (t) {
           return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';

@@ -1,0 +1,252 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Chobe Elephant Camp — Reports</title>
+<!--
+  Reports — tool-local D-080, 2026-09-19. Mark: "we needed to build a
+  Reports Page for maintenance... this is where we want to be able to
+  review the audit trails." Camp managers, base managers and
+  administrators only (nav.js gates the link; requireReportsAccess()
+  in the Edge Function checks again, since a direct API call skips
+  the nav entirely).
+
+  Three reports, one shared filter shape — date range, maintenance
+  area, asset, and who: Schedule History (schedule_changes +
+  schedule_runs — the latter new, see D-080), Asset Checks
+  (inspections — every real check ever submitted), Fault History
+  (issues — every fault ever raised, open or resolved).
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 4px}
+  .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+  .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
+  .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
+  .nav a{color:#232019;text-decoration:none}
+  @media (max-width:700px){ .nav{font-size:13px;gap:6px} .nav a,.nav b{padding:6px 10px} }
+
+  .reportTabs{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+  .reportTabs button{padding:8px 14px;font-size:13.5px;font-weight:600;border:1px solid #43594A;border-radius:6px;background:#fff;color:#43594A;cursor:pointer}
+  .reportTabs button.active{background:#43594A;color:#fff}
+
+  .filters{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  @media (min-width:900px){ .filters{flex-direction:row} .filter-section{flex:1;margin-top:0} }
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section label:first-of-type{margin-top:0}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+
+  button.primary{padding:10px 16px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff;cursor:pointer}
+  button.secondary{padding:8px 14px;font-size:13px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;color:#5B5344;cursor:pointer}
+  .actionsRow{display:flex;gap:10px;margin-top:14px;align-items:center;flex-wrap:wrap}
+  .resultCount{font-size:13px;color:#6B6455}
+
+  .note{font-size:12.5px;color:#8C6A2F;font-style:italic;margin-top:10px}
+  .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:16px}
+  .loading{color:#6B6455;font-size:14px;margin-top:20px}
+
+  .tableWrap{margin-top:16px;overflow-x:auto;background:#fff;border:1px solid #E3DFD3;border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;white-space:nowrap}
+  th{text-align:left;padding:10px 12px;background:#EAF1EC;color:#43594A;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0}
+  td{padding:9px 12px;border-top:1px solid #E3DFD3}
+  tr:nth-child(even) td{background:#FBFAF7}
+  td.wrap,th.wrap{white-space:normal;min-width:220px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
+  .badge.open{background:#F4CFC2;color:#A8502F}
+  .badge.closed{background:#E3DFD3;color:#5B5344}
+  .badge.change{background:#E3DFD3;color:#5B5344}
+  .badge.completed{background:#D9E8DD;color:#43594A}
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1>Reports — <span id="campTitle">Chobe Elephant Camp</span></h1>
+<p class="sub">The audit trail — what was checked, what was raised, and what changed, over any stretch of time.</p>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+
+<div class="reportTabs" id="tabs"></div>
+<div class="filters" id="filtersRow"></div>
+<div class="actionsRow">
+  <button class="primary" onclick="runReport()">Run report</button>
+  <span class="resultCount" id="resultCount"></span>
+</div>
+<div id="results"><p class="loading">Choose a report above.</p></div>
+
+<script>
+  var API = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+
+  var me = null;
+  try { var saved = sessionStorage.getItem("bw_signin"); if (saved) me = JSON.parse(saved); } catch (e) {}
+  if (!me) { location.href = "./"; }
+  var camp = null;
+  try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+  var shownCamp = camp || (me && me.locations && me.locations[0]);
+  if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
+  var CAMP_PARAM = "&person_id=" + encodeURIComponent(me.id) + (shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "");
+
+  (function () {
+    document.getElementById("navRow").innerHTML = navHtml(me, "Reports");
+  })();
+
+  var REPORTS = [
+    { key: "report_schedule_history", label: "Schedule History" },
+    { key: "report_asset_checks", label: "Asset Checks" },
+    { key: "report_fault_history", label: "Fault History" },
+  ];
+  var currentReport = null;
+  var people = [];
+  var areasList = [];
+  var targetsByArea = {};
+
+  document.getElementById("tabs").innerHTML = REPORTS.map(function (r) {
+    return '<button data-key="' + r.key + '" onclick="pickReport(\'' + r.key + '\')">' + r.label + "</button>";
+  }).join("");
+
+  window.pickReport = function (key) {
+    currentReport = key;
+    document.querySelectorAll("#tabs button").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.key === key);
+    });
+    renderFilters();
+    document.getElementById("results").innerHTML = '<p class="empty">Set your filters — a date range is optional, everything else defaults to "all" — then Run report.</p>';
+    document.getElementById("resultCount").textContent = "";
+  };
+
+  function renderFilters() {
+    var whoLabel = currentReport === "report_fault_history" ? "Who logged it" : "Who did it";
+    var html =
+      '<div class="filter-section"><div class="title">Date</div>' +
+        '<div class="daterange">' +
+          '<input type="date" id="dateFrom"><span>to</span><input type="date" id="dateTo">' +
+        "</div></div>" +
+      '<div class="filter-section"><div class="title">Maintenance area</div>' +
+        '<label>Area</label><select id="areaFilter" onchange="onAreaChange()"><option value="">All areas</option>' +
+        areasList.map(function (a) { return '<option value="' + esc(a.id) + '">' + esc(a.name) + "</option>"; }).join("") +
+        "</select></div>" +
+      '<div class="filter-section"><div class="title">Asset</div>' +
+        '<label>Asset</label><select id="assetFilter"><option value="">All assets</option></select></div>' +
+      '<div class="filter-section"><div class="title">Who</div>' +
+        "<label>" + whoLabel + "</label><select id=\"whoFilter\"><option value=\"\">Anyone</option>" +
+        people.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + "</option>"; }).join("") +
+        "</select></div>";
+    document.getElementById("filtersRow").innerHTML = html;
+    populateAssetFilter();
+  }
+
+  function populateAssetFilter() {
+    var areaId = document.getElementById("areaFilter").value;
+    var sel = document.getElementById("assetFilter");
+    var pool = [];
+    if (areaId && targetsByArea[areaId]) pool = targetsByArea[areaId];
+    else Object.keys(targetsByArea).forEach(function (a) { pool = pool.concat(targetsByArea[a]); });
+    pool = pool.slice().sort(function (a, b) { return a.label.localeCompare(b.label, undefined, { numeric: true }); });
+    sel.innerHTML = '<option value="">All assets</option>' +
+      pool.map(function (t) { return '<option value="' + esc(t.type) + ":" + esc(t.id) + '">' + esc(t.label) + "</option>"; }).join("");
+  }
+  window.onAreaChange = populateAssetFilter;
+
+  window.runReport = function () {
+    if (!currentReport) return;
+    var from = document.getElementById("dateFrom").value;
+    var to = document.getElementById("dateTo").value;
+    var areaId = document.getElementById("areaFilter").value;
+    var assetVal = document.getElementById("assetFilter").value;
+    var who = document.getElementById("whoFilter").value;
+    var targetType = "", targetId = "";
+    if (assetVal) { var parts = assetVal.split(":"); targetType = parts[0]; targetId = parts.slice(1).join(":"); }
+
+    var qs = "&action=" + currentReport + CAMP_PARAM;
+    if (from) qs += "&from=" + encodeURIComponent(from);
+    if (to) qs += "&to=" + encodeURIComponent(to);
+    if (areaId) qs += "&area_id=" + encodeURIComponent(areaId);
+    if (targetType) qs += "&target_type=" + encodeURIComponent(targetType) + "&target_id=" + encodeURIComponent(targetId);
+    if (who) qs += "&who=" + encodeURIComponent(who);
+
+    document.getElementById("results").innerHTML = '<p class="loading">Running…</p>';
+    fetch(API + "?" + qs.replace(/^&/, "")).then(function (r) { return r.json(); }).then(function (data) {
+      if (data.error) { document.getElementById("results").innerHTML = '<p class="empty">' + esc(data.error) + "</p>"; return; }
+      renderResults(data);
+    }).catch(function () {
+      document.getElementById("results").innerHTML = '<p class="empty">Something went wrong loading this report.</p>';
+    });
+  };
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function renderResults(data) {
+    var rows = data.rows || [];
+    document.getElementById("resultCount").textContent = rows.length + (rows.length === 1 ? " result" : " results");
+    var note = data.note ? '<p class="note">' + esc(data.note) + "</p>" : "";
+    if (!rows.length) {
+      document.getElementById("results").innerHTML = note + '<p class="empty">Nothing matches these filters.</p>';
+      return;
+    }
+    var html = note + '<div class="tableWrap"><table>';
+    if (currentReport === "report_schedule_history") {
+      html += "<tr><th>When</th><th>Schedule</th><th>Area</th><th>Event</th><th class=\"wrap\">Details</th></tr>";
+      rows.forEach(function (r) {
+        var area = (data.areas || []).find(function (a) { return a.id === r.area_id; });
+        html += "<tr><td>" + fmtDateTime(r.at) + "</td><td>" + esc(r.schedule_name) + "</td><td>" + esc(area ? area.name : "—") +
+          '</td><td><span class="badge ' + (r.kind === "completed" ? "completed" : "change") + '">' + esc(r.kind === "completed" ? "Completed" : r.action) + "</span></td>" +
+          '<td class="wrap">' + esc(r.summary) + (r.by ? " — " + esc(r.by) : "") + "</td></tr>";
+      });
+    } else if (currentReport === "report_asset_checks") {
+      html += "<tr><th>When</th><th>Asset</th><th>Area</th><th>Type</th><th>Done by</th></tr>";
+      rows.forEach(function (r) {
+        var area = (data.areas || []).find(function (a) { return a.id === r.area_id; });
+        html += "<tr><td>" + fmtDateTime(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(area ? area.name : "—") +
+          "</td><td>" + esc(r.asset_type) + "</td><td>" + esc(r.by || "—") + "</td></tr>";
+      });
+    } else {
+      html += "<tr><th>Raised</th><th>Asset</th><th>Area</th><th>Fault type</th><th class=\"wrap\">Note</th><th>Raised by</th><th>Status</th></tr>";
+      rows.forEach(function (r) {
+        html += "<tr><td>" + fmtDate(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(r.area || "—") +
+          "</td><td>" + esc(r.fault_type || "—") + '</td><td class="wrap">' + esc(r.note || "—") + "</td><td>" + esc(r.raised_by || "—") +
+          '</td><td><span class="badge ' + (r.status === "open" ? "open" : "closed") + '">' + esc(r.status) + "</span>" +
+          (r.status !== "open" && r.resolved_by ? "<br><span style=\"font-size:11.5px;color:#6B6455\">by " + esc(r.resolved_by) + " on " + fmtDate(r.resolved_at) + "</span>" : "") +
+          "</td></tr>";
+      });
+    }
+    html += "</table></div>";
+    document.getElementById("results").innerHTML = html;
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // Filter dropdowns share bootstrap()'s own people/areas — the same
+  // "who am I" list every other page already loads — and
+  // allAreaTargets() for the asset picker, which already flattens
+  // rooms and vehicles in under Guest Rooms/Vehicles alongside every
+  // real split Asset (D-068), so one dropdown covers all three.
+  fetch(API + "?action=bootstrap" + CAMP_PARAM).then(function (r) { return r.json(); }).then(function (data) {
+    people = data.people || [];
+    areasList = (data.areas || []).filter(function (a) { return a.available; });
+  });
+  fetch(API + "?action=all_area_targets" + CAMP_PARAM).then(function (r) { return r.json(); }).then(function (data) {
+    targetsByArea = data.targets_by_area || {};
+  });
+</script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    });
+  }
+</script>
+</body></html>

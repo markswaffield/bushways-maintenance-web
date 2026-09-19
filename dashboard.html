@@ -72,7 +72,7 @@
 </style></head><body>
 
 <h1>To-Do — <span id="campTitle">Chobe Elephant Camp</span></h1>
-<p class="sub">Every open fault, grouped by area and target. Anything <em>due</em> lives on the Schedule.</p>
+<p class="sub">Every open fault, grouped by area and asset. Anything <em>due</em> lives on the Schedule.</p>
 <script src="./nav.js"></script>
 <div id="navRow"></div>
 <script>
@@ -189,11 +189,11 @@
     // left." Built separately now so it sits on its own line above
     // the row, not as an unintended fourth flex item shrunk to the
     // left of it.
-    var note = '<p class="order-note">Grouped by maintenance area, then target — each target\'s own faults ' +
+    var note = '<p class="order-note">Grouped by maintenance area, then asset — each asset\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
 
     var html = '<div class="filter-section"><div class="title">Date</div>' +
-      '<label>Order (within each target)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
+      '<label>Order (within each asset)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
       '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
       '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
       '</select>' +
@@ -211,8 +211,8 @@
         return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
       }).join("") + '</select>';
     if (filterAreaId && targets.length) {
-      html += '<label>Target</label><select id="targetFilter" onchange="onTargetFilterChange()">' +
-        '<option value="">All targets in this area</option>' +
+      html += '<label>Asset</label><select id="targetFilter" onchange="onTargetFilterChange()">' +
+        '<option value="">All assets in this area</option>' +
         targets.map(function (t) {
           return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
         }).join("") + '</select>';

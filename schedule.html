@@ -825,8 +825,8 @@
     if (!areaIds.length) return '<div id="f_targetsrow" hidden></div>';
     var checkedIds = {};
     (rule && rule.targets || []).forEach(function (t) { checkedIds[t.type + ":" + t.id] = true; });
-    return '<div id="f_targetsrow"><label>Which targets does this cover?</label>' +
-      '<p class="rmeta" style="margin:2px 0 6px">Pick as many as this schedule should combine into one checklist, from any area — leave none picked for an ordinary single-target schedule.</p>' +
+    return '<div id="f_targetsrow"><label>Which assets does this cover?</label>' +
+      '<p class="rmeta" style="margin:2px 0 6px">Pick as many as this schedule should combine into one checklist, from any area — leave none picked for an ordinary single-asset schedule.</p>' +
       areaIds.map(function (areaId) {
         var opts = targetsByArea[areaId];
         return '<p class="rmeta" style="margin:10px 0 2px;font-weight:700;color:#43594A">' + esc(areaNameById(areaId) || "") + '</p>' +
