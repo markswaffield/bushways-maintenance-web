@@ -183,6 +183,63 @@
   .warn{font-size:12.5px;color:#A8502F;margin:8px 0 0}
   .loading{color:#6B6455;margin-top:18px}
 
+
+  /* ── Small screens ──────────────────────────────────────────────────
+     Mark, 2026-09-19: "the day sheet works on the computer screen and I
+     do not want change that... the top menu blocks and buttons consume
+     most of the screen space - so you cannot see the matrix and move
+     around in it."
+
+     Everything below is inside max-width queries, so the desktop layout
+     is untouched by design, not by care. Two separate problems get
+     solved: the chrome above the grid, and the frozen columns.
+
+     THE FROZEN COLUMNS ARE THE BIGGER ONE, and it is not obvious. Room,
+     Status, Pax, Type and Names come to 464px. A phone is 390px wide, so
+     the frozen block alone is wider than the screen — there is literally
+     nowhere for the scrolling columns to appear, and the grid looks
+     broken rather than cramped. Fewer columns are frozen the narrower
+     the screen gets. */
+
+  /* "More grid" — hides everything above the toolbar and the toolbar's
+     own optional buttons, so the matrix gets the rest. Useful on a
+     laptop, close to essential on a phone, where the chrome was most of
+     the screen. Deliberately a toggle rather than auto-hide-on-scroll:
+     the grid is the only thing that scrolls, so a scroll-driven header
+     would flicker every time somebody moved sideways. */
+  body.lean h1, body.lean .sub, body.lean .nav{display:none}
+  body.lean .toolbar{margin-top:0}
+  body.lean .toolbar .lean-hide{display:none}
+
+  @media (max-width: 1024px) {
+    body{padding:8px 8px 0}
+    h1{font-size:16px;margin:0}
+    .sub{display:none}                  /* explanatory, not operational */
+    .nav{margin:6px 0 0}
+    .toolbar{gap:6px;padding:7px 8px;margin-top:6px}
+    .toolbar label{font-size:10px;margin:0 0 1px}
+    .toolbar button,.toolbar input,.toolbar select{padding:5px 9px;font-size:13px}
+    .scroll{margin-top:6px}
+    /* iPad: Names is the column worth keeping beside the room number,
+       so Pax and Type give up their frozen place. */
+    td.c-pax,th.c-pax,td.c-type,th.c-type{position:static}
+    td.c-names,th.c-names{left:154px}
+  }
+
+  @media (max-width: 700px) {
+    /* A phone. Only the room number stays pinned — it is the one thing
+       you need to know which row you are reading. */
+    td.c-names,th.c-names,td.status-cell,th.c-status{position:static}
+    td.c-names,th.c-names{border-right:0}
+    td.room,th.c-room{border-right:2px solid #C9C2AC}
+    /* The header collapses to one line: title, then the buttons wrap
+       under it only if they must. */
+    h1{font-size:15px}
+    .toolbar{padding:6px}
+    .toolbar .full-only{display:none}   /* Print and Refresh: not phone jobs */
+    .whoami{font-size:12px}
+  }
+
   @media print{
     body{padding:0;background:#fff;font-size:10px}
     .toolbar,.nav,.below .panel.addbooking,.place .row,button{display:none!important}
@@ -213,12 +270,13 @@
 </p>
 
 <div class="toolbar">
-  <div><label>Signed in as</label><span class="whoami" id="whoami"></span></div>
+  <div class="lean-hide"><label>Signed in as</label><span class="whoami" id="whoami"></span></div>
   <div><label for="date">Date</label><input type="date" id="date"></div>
   <div><button id="save" disabled>Save changes</button></div>
-  <div><button class="ghost" id="reload">Refresh</button></div>
-  <div><button class="ghost" id="print">Print</button></div>
+  <div class="full-only"><button class="ghost" id="reload">Refresh</button></div>
+  <div class="full-only lean-hide"><button class="ghost" id="print">Print</button></div>
   <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
+  <div><button class="ghost" id="leanBtn" title="Give the grid the whole screen">⤢ More grid</button></div>
   <div style="align-self:center"><span class="status" id="status"></span></div>
 </div>
 
@@ -738,6 +796,18 @@ document.addEventListener("click", function(e){
 el("save").addEventListener("click", saveAll);
 el("reload").addEventListener("click", load);
 el("print").addEventListener("click", function(){ window.print(); });
+// Remembered per browser, because somebody working on a phone wants it
+// on every time, and somebody on a laptop never wants it.
+try {
+  if (localStorage.getItem("bw_daysheet_lean") === "1") document.body.classList.add("lean");
+} catch (e) {}
+el("leanBtn").textContent = document.body.classList.contains("lean") ? "⤡ Less grid" : "⤢ More grid";
+el("leanBtn").addEventListener("click", function(){
+  var on = document.body.classList.toggle("lean");
+  this.textContent = on ? "⤡ Less grid" : "⤢ More grid";
+  try { localStorage.setItem("bw_daysheet_lean", on ? "1" : "0"); } catch (e) {}
+});
+
 el("drawerBtn").addEventListener("click", function(){
   drawerOpen = !drawerOpen;
   this.textContent = drawerOpen ? "Hide bookings & notes" : "Bookings & notes";
