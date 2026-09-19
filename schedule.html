@@ -101,8 +101,8 @@
   .card .meta{font-size:12px;color:#6B6455;margin:4px 0 0}
   .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
   .badge.overdue{background:#F4CFC2;color:#A8502F}
-  .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
-  .badge.upcoming{background:#E3DFD3;color:#5B5344}
+  .badge.active{background:#D9E8DD;color:#43594A}
+  .badge.upcoming{background:#F4E3D3;color:#8C6A2F}
   .badge.handover{background:#D9E6DC;color:#2F6B45;margin-right:6px}
   .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .who{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-top:4px}
@@ -230,6 +230,7 @@
   var direction = "oldest";
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
+  var filterStatus = "";   // "" all · overdue · active · upcoming — Mark, 2026-09-19
   var mine = false, filterDept = "", filterPerson = "";
   var people = [], departments = [], areas = [], boot_vehicles = [];
   var VEHICLE_AREA_ID = null, addForVehicle = null;
@@ -260,7 +261,7 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function badgeText(s) { return s === "overdue" ? "Overdue" : s === "due_soon" ? "Due" : "Upcoming"; }
+  function badgeText(s) { return s === "overdue" ? "Overdue" : s === "active" ? "Active" : "Upcoming"; }
   function dueText(s) {
     var d = new Date(s.due_date);
     var when = d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -289,6 +290,7 @@
     from = document.getElementById("from").value; to = document.getElementById("to").value; render();
   };
   window.onKind = function () { kind = document.getElementById("kind").value; render(); };
+  window.onStatusFilter = function () { filterStatus = document.getElementById("statusFilterDue").value; render(); };
   window.clearRange = function () { from = ""; to = ""; render(); };
   window.signOut = function () {
     sessionStorage.removeItem("bw_signin");
@@ -349,6 +351,7 @@
     if (!lastData) return; // nothing to draw yet — reload() calls this again once there is
     var all = (lastData.schedules || []);
     var shown = all.filter(function (s) {
+      if (filterStatus && s.status !== filterStatus) return false;
       if (kind && kindOf(s) !== kind) return false;
       if (mine && me) {
         var isMine = s.assigned_person_id === me.id ||
@@ -425,6 +428,14 @@
       html += '<p style="margin-top:8px"><button class="primary" onclick="clearWhoFilter()">Show everything again</button></p>';
     }
     html += '</div>';
+
+    html += '<div class="filter-section"><div class="title">Status</div>' +
+      '<label>Show</label><select id="statusFilterDue" onchange="onStatusFilter()">' +
+      '<option value=""' + (!filterStatus ? " selected" : "") + '>Everything</option>' +
+      '<option value="overdue"' + (filterStatus === "overdue" ? " selected" : "") + '>Overdue</option>' +
+      '<option value="active"' + (filterStatus === "active" ? " selected" : "") + '>Active</option>' +
+      '<option value="upcoming"' + (filterStatus === "upcoming" ? " selected" : "") + '>Upcoming</option>' +
+      '</select></div>';
 
     html += '<div class="filter-section"><div class="title">Kind</div>' +
       '<label>Show</label><select id="kind" onchange="onKind()">' +

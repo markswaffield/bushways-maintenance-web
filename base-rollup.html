@@ -76,8 +76,8 @@
   .card .meta{font-size:12px;color:#6B6455;margin:4px 0 0}
   .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em}
   .badge.overdue{background:#F4CFC2;color:#A8502F}
-  .badge.due_soon{background:#F4E3D3;color:#8C6A2F}
-  .badge.upcoming{background:#E3DFD3;color:#5B5344}
+  .badge.active{background:#D9E8DD;color:#43594A}
+  .badge.upcoming{background:#F4E3D3;color:#8C6A2F}
   .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
@@ -140,7 +140,7 @@
     return "due in " + s.days_until + " day" + (s.days_until === 1 ? "" : "s");
   }
   function badgeText(status) {
-    return { overdue: "Overdue", due_soon: "Due soon", upcoming: "Upcoming" }[status];
+    return { overdue: "Overdue", active: "Active", upcoming: "Upcoming" }[status];
   }
 
   window.signOut = function () {
