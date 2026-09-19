@@ -134,7 +134,12 @@
       '<div class="filter-section"><div class="title">Who</div>' +
         "<label>" + whoLabel + "</label><select id=\"whoFilter\"><option value=\"\">Anyone</option>" +
         people.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + "</option>"; }).join("") +
-        "</select></div>";
+        "</select></div>" +
+      (currentReport === "report_fault_history"
+        ? '<div class="filter-section"><div class="title">Status</div>' +
+          '<label>Status</label><select id="statusFilter"><option value="">Open and closed</option>' +
+          '<option value="open">Open only</option><option value="closed">Closed only</option></select></div>'
+        : "");
     document.getElementById("filtersRow").innerHTML = html;
     populateAssetFilter();
   }
@@ -158,6 +163,8 @@
     var areaId = document.getElementById("areaFilter").value;
     var assetVal = document.getElementById("assetFilter").value;
     var who = document.getElementById("whoFilter").value;
+    var statusEl = document.getElementById("statusFilter");
+    var status = statusEl ? statusEl.value : "";
     var targetType = "", targetId = "";
     if (assetVal) { var parts = assetVal.split(":"); targetType = parts[0]; targetId = parts.slice(1).join(":"); }
 
@@ -167,6 +174,7 @@
     if (areaId) qs += "&area_id=" + encodeURIComponent(areaId);
     if (targetType) qs += "&target_type=" + encodeURIComponent(targetType) + "&target_id=" + encodeURIComponent(targetId);
     if (who) qs += "&who=" + encodeURIComponent(who);
+    if (status) qs += "&status=" + encodeURIComponent(status);
 
     document.getElementById("results").innerHTML = '<p class="loading">Running…</p>';
     fetch(API + "?" + qs.replace(/^&/, "")).then(function (r) { return r.json(); }).then(function (data) {
@@ -213,9 +221,9 @@
           "</td><td>" + esc(r.asset_type) + "</td><td>" + esc(r.by || "—") + "</td></tr>";
       });
     } else {
-      html += "<tr><th>Raised</th><th>Asset</th><th>Area</th><th>Fault type</th><th class=\"wrap\">Note</th><th>Raised by</th><th>Status</th></tr>";
+      html += "<tr><th>Raised</th><th>Asset</th><th>Item</th><th>Area</th><th>Fault type</th><th class=\"wrap\">Note</th><th>Raised by</th><th>Status</th></tr>";
       rows.forEach(function (r) {
-        html += "<tr><td>" + fmtDate(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(r.area || "—") +
+        html += "<tr><td>" + fmtDate(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(r.item_label || "—") + "</td><td>" + esc(r.area || "—") +
           "</td><td>" + esc(r.fault_type || "—") + '</td><td class="wrap">' + esc(r.note || "—") + "</td><td>" + esc(r.raised_by || "—") +
           '</td><td><span class="badge ' + (r.status === "open" ? "open" : "closed") + '">' + esc(r.status) + "</span>" +
           (r.status !== "open" && r.resolved_by ? "<br><span style=\"font-size:11.5px;color:#6B6455\">by " + esc(r.resolved_by) + " on " + fmtDate(r.resolved_at) + "</span>" : "") +
