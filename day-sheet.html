@@ -56,13 +56,43 @@
   .status.dirty{color:#8C6A2F;font-weight:600}
   .whoami{display:inline-block;font-size:13.5px;font-weight:600;padding:6px 0;color:#232019}
 
-  .scroll{overflow-x:auto;margin-top:12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff}
+  /* The header was already marked sticky and never stuck. A container
+     with overflow-x:auto computes overflow-y to auto as well, which makes
+     it its own scroll box — so "top:0" pinned the header to a box that
+     never scrolled vertically, while the page scrolled underneath it.
+     Giving the box a real height moves the vertical scrolling inside it,
+     and both the header and the frozen columns then work.
+     Mark, 2026-09-19: "can we fix the header row so it stays static". */
+  .scroll{overflow:auto;max-height:calc(100vh - 190px);margin-top:12px;
+          border:1px solid #C9C2AC;border-radius:8px;background:#fff}
   table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
   th,td{border-right:1px solid #EDE9DE;border-bottom:1px solid #EDE9DE;padding:0;vertical-align:top}
   thead th{position:sticky;top:0;z-index:10;background:#4C3B2C;color:#fff;font-weight:700;
            text-align:left;padding:5px 6px;font-size:11px;letter-spacing:.02em;white-space:nowrap}
   thead tr.groups th{top:0;font-size:11px;text-transform:uppercase;letter-spacing:.05em;text-align:center;padding:4px 6px}
-  thead tr.cols th{top:26px}
+  thead tr.cols th{top:25px}
+
+  /* Frozen down the left, through the guest name — Mark: "can we fix up
+     to the guest name row so it also remains static". Five columns, each
+     offset by the sum of those before it, so they have to carry explicit
+     widths. Header cells sit above body cells at the same offset. */
+  td.room,      th.c-room   {position:sticky;left:0;    width:58px; min-width:58px}
+  td.status-cell,th.c-status{position:sticky;left:58px; width:96px; min-width:96px}
+  td.c-pax,     th.c-pax    {position:sticky;left:154px;width:46px; min-width:46px}
+  td.c-type,    th.c-type   {position:sticky;left:200px;width:92px; min-width:92px}
+  td.c-names,   th.c-names  {position:sticky;left:292px;width:172px;min-width:172px}
+  tbody td.room,tbody td.status-cell,tbody td.c-pax,tbody td.c-type,tbody td.c-names{z-index:5}
+  thead th.c-room,thead th.c-status,thead th.c-pax,thead th.c-type,thead th.c-names{z-index:20}
+  /* The last frozen column carries the seam, so the join reads as one
+     edge rather than five. */
+  td.c-names,th.c-names{border-right:2px solid #C9C2AC}
+  /* Frozen body cells need an opaque background or the scrolling columns
+     show through them. */
+  tbody td.status-cell,tbody td.c-pax,tbody td.c-type,tbody td.c-names{background:#fff}
+  tbody tr:nth-child(even) td.status-cell,
+  tbody tr:nth-child(even) td.c-pax,
+  tbody tr:nth-child(even) td.c-type,
+  tbody tr:nth-child(even) td.c-names{background:#FCFBF8}
   th.g-arr{background:#3F6B4C}
   th.g-stay{background:#5B5344}
   th.g-dep{background:#8C6A2F}
@@ -85,9 +115,8 @@
   tbody tr.st-empty td{background:#FAF9F5}
   tbody tr.st-empty td.room{background:#F1EDE4;color:#A8A192}
   th.g-room{background:#4C3B2C}
-  td.room{position:sticky;left:0;z-index:5;background:#F1EDE4;font-weight:700;text-align:center;
-          padding:6px 8px;white-space:nowrap;border-right:2px solid #C9C2AC}
-  thead th.room{position:sticky;left:0;z-index:15}
+  td.room{background:#F1EDE4;font-weight:700;text-align:center;
+          padding:6px 8px;white-space:nowrap}
   tbody tr:nth-child(even) td{background:#FCFBF8}
   tbody tr:nth-child(even) td.room{background:#EDE8DC}
   tbody tr.turnover td.room{background:#F4CFC2;color:#A8502F}
@@ -132,7 +161,9 @@
     .toolbar,.nav,.below .panel.addbooking,.place .row,button{display:none!important}
     .scroll{overflow:visible;border:0}
     thead th{position:static;color:#000;background:#EEE!important;border:1px solid #999}
-    td.room{position:static}
+    td.room,td.status-cell,td.c-pax,td.c-type,td.c-names,
+    th.c-room,th.c-status,th.c-pax,th.c-type,th.c-names{position:static}
+    .scroll{max-height:none}
     td,th{border:1px solid #BBB}
     td input,td select,td textarea{border:0;padding:2px}
   }
@@ -270,12 +301,12 @@ function cellText(row,key,scope){
 // first names as well for a more personalised touch."
 function cellNames(row){
   var b = (row.stay && row.stay.booking) || null;
-  if (!b) return '<td class="ro dim"></td>';
+  if (!b) return '<td class="ro dim c-names"></td>';
   var h = '<span class="name">'+esc(b.guest_name)+"</span>";
   if (b.booking_ref) h += ' <span class="ref">'+esc(b.booking_ref)+"</span>";
   h += '<input type="text" class="sub" placeholder="guest names…" data-room="'+row.room_id
     +  '" data-key="guest_names" data-scope="stay" value="'+esc(row.stay.guest_names || "")+'">';
-  return '<td class="ro two">'+h+"</td>";
+  return '<td class="ro two c-names">'+h+"</td>";
 }
 
 // Same idea for notes. Dietary and special requests come from the
@@ -293,26 +324,31 @@ function cellNotes(row){
   return '<td class="ro two">'+h+"</td>";
 }
 function cellPax(b){
-  if (!b) return '<td class="ro dim"></td>';
+  if (!b) return '<td class="ro dim c-pax"></td>';
   var p = [];
   if (b.adults) p.push(b.adults+"A");
   if (b.children) p.push(b.children+"C");
-  return '<td class="ro">'+esc(p.join(" "))+"</td>";
+  return '<td class="ro c-pax">'+esc(p.join(" "))+"</td>";
 }
 
 var HEAD =
   '<thead>'
 + '<tr class="groups">'
-+   '<th class="room g-room" rowspan="2">Room</th>'
-+   '<th class="g-room" rowspan="2">Status</th>'
-+   '<th class="g-stay" colspan="7">The stay</th>'
++   '<th class="room c-room g-room" rowspan="2">Room</th>'
++   '<th class="c-status g-room" rowspan="2">Status</th>'
+    // "The stay" is split in two so its label sits in the frozen part and
+    // stays on screen when the grid is scrolled right. The second cell is
+    // the same colour and unlabelled, so the band still reads as one.
++   '<th class="c-pax g-stay" colspan="3">The stay</th>'
++   '<th class="g-stay" colspan="4"></th>'
 +   '<th class="g-arr" colspan="4">Arrivals</th>'
 +   '<th class="g-dep" colspan="5">Departures</th>'
 +   '<th class="g-act" colspan="2">Activities</th>'
 +   '<th class="g-mnt" rowspan="2">Maintenance</th>'
 + "</tr>"
 + '<tr class="cols">'
-+   "<th>Pax</th><th>Type</th><th>Names</th><th>Housekeeper</th><th>Guide</th><th>Vehicle</th><th>Notes</th>"
++   '<th class="c-pax">Pax</th><th class="c-type">Type</th><th class="c-names">Names</th>'
++   "<th>Housekeeper</th><th>Guide</th><th>Vehicle</th><th>Notes</th>"
 +   "<th>Driver/Guide</th><th>Vehicle</th><th>Arrival details</th><th>ETA</th>"
 +   "<th>Names</th><th>Driver/Guide</th><th>Vehicle</th><th>Departure details</th><th>ETD</th>"
 +   "<th>Activity</th><th>Time</th>"
@@ -334,7 +370,7 @@ function rowHtml(row){
 
   // ---- Sector 1: the stay ----
   h += cellPax(b);
-  h += '<td class="ro'+(b?"":" dim")+'">'+esc(b && b.room_type_needed || "")+"</td>";
+  h += '<td class="ro c-type'+(b?"":" dim")+'">'+esc(b && b.room_type_needed || "")+"</td>";
   h += cellNames(row);
   h += cellSelect(row,"housekeeper_id",people,"stay");
   h += cellSelect(row,"guide_id",people,"stay");
