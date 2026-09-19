@@ -38,7 +38,17 @@
 -->
 <style>
   *{box-sizing:border-box}
-  body{font:14px/1.35 -apple-system,system-ui,sans-serif;margin:0;padding:14px 14px 60px;background:#F7F5F0;color:#232019}
+  /* The page itself must not scroll. Mark, 2026-09-19: "the header line
+     moves when you go right down to the bottom of the page and the chart
+     floats around the page as well" — both are the same cause. With the
+     page scrolling as well as the grid, the box the header is pinned to
+     was itself travelling up the screen, so the header moved with it.
+     Locking the page to the viewport leaves exactly one scroller, the
+     grid, and everything holds still. */
+  html,body{height:100%}
+  body{font:14px/1.35 -apple-system,system-ui,sans-serif;margin:0;padding:14px 14px 0;background:#F7F5F0;color:#232019;
+       height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  #app{flex:1;min-height:0;display:flex;flex-direction:column}
   h1{font-size:18px;margin:0 0 3px}
   .sub{color:#6B6455;font-size:12.5px;margin:0 0 4px}
   .nav{font-size:12.5px;margin:8px 0 0}
@@ -63,7 +73,10 @@
      Giving the box a real height moves the vertical scrolling inside it,
      and both the header and the frozen columns then work.
      Mark, 2026-09-19: "can we fix the header row so it stays static". */
-  .scroll{overflow:auto;max-height:calc(100vh - 190px);margin-top:12px;
+  /* The one scroller on the page, filling whatever height is left.
+     min-height:0 is what lets a flex child actually shrink and scroll
+     rather than growing to fit its content and pushing the page taller. */
+  .scroll{flex:1;min-height:0;overflow:auto;margin-top:10px;
           border:1px solid #C9C2AC;border-radius:8px;background:#fff}
   table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
   th,td{border-right:1px solid #EDE9DE;border-bottom:1px solid #EDE9DE;padding:0;vertical-align:top}
@@ -140,7 +153,13 @@
   .overload{outline:2px solid #B8860B;outline-offset:-2px;background:#FBF3DF!important}
   .warn.amber{color:#8C6A2F}
 
-  .below{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+  /* Bookings, notes and adding a booking used to sit under the grid,
+     which is what made the page taller than the screen in the first
+     place. They are a drawer now: closed by default, so the grid gets
+     the whole window, and opening one does not move the grid's header. */
+  .drawer{flex:none;max-height:42vh;overflow:auto;margin-top:10px;padding-bottom:12px}
+  .drawer[hidden]{display:none}
+  .below{display:flex;gap:14px;flex-wrap:wrap;margin-top:0}
   .panel{flex:1 1 320px;background:#fff;border:1px solid #C9C2AC;border-radius:8px;padding:11px 13px}
   .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#43594A;margin:0 0 8px}
   .panel textarea{width:100%;border:1px solid #C9C2AC;border-radius:5px;padding:7px}
@@ -163,7 +182,10 @@
     thead th{position:static;color:#000;background:#EEE!important;border:1px solid #999}
     td.room,td.status-cell,td.c-pax,td.c-type,td.c-names,
     th.c-room,th.c-status,th.c-pax,th.c-type,th.c-names{position:static}
-    .scroll{max-height:none}
+    html,body{height:auto;overflow:visible;display:block}
+    #app{display:block}
+    .scroll{max-height:none;flex:none;overflow:visible}
+    .drawer{max-height:none;overflow:visible}
     td,th{border:1px solid #BBB}
     td input,td select,td textarea{border:0;padding:2px}
   }
@@ -188,6 +210,7 @@
   <div><button id="save" disabled>Save changes</button></div>
   <div><button class="ghost" id="reload">Refresh</button></div>
   <div><button class="ghost" id="print">Print</button></div>
+  <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
   <div style="align-self:center"><span class="status" id="status"></span></div>
 </div>
 
@@ -196,6 +219,9 @@
 <script>
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/day-sheet";
 var boot = null, sheet = null, unplaced = [], placed = [], dirty = {};
+// The drawer holding bookings, notes and add-a-booking. Closed by
+// default so the grid gets the whole window.
+var drawerOpen = false;
 
 // A real sign-in gate — tool-local D-008, 2026-09-18. This page had
 // none at all before: anyone with the link could open and edit any
@@ -495,7 +521,7 @@ function render(){
   h += "</tbody></table></div>";
   h += '<p class="warn" id="clashnote"></p><p class="warn amber" id="guidenote"></p>';
 
-  h += '<div class="below">';
+  h += '<div class="drawer"' + (drawerOpen ? "" : " hidden") + '><div class="below">';
   h += '<div class="panel"><h2>Notes not tied to one room</h2>'
      + '<textarea id="general" rows="4" placeholder="Dietary notes, a pickup arrangement…">'
      + esc(sheet.sheet && sheet.sheet.general_notes || "") + "</textarea></div>";
@@ -543,6 +569,7 @@ function render(){
     +  '<span class="status" id="msg-add"></span></div></div>';
   h += "</div>";
 
+  h += "</div>";   // closes .drawer
   el("app").innerHTML = h;
   markClashes();
   markGuideLoad();
@@ -687,6 +714,12 @@ document.addEventListener("click", function(e){
 el("save").addEventListener("click", saveAll);
 el("reload").addEventListener("click", load);
 el("print").addEventListener("click", function(){ window.print(); });
+el("drawerBtn").addEventListener("click", function(){
+  drawerOpen = !drawerOpen;
+  this.textContent = drawerOpen ? "Hide bookings & notes" : "Bookings & notes";
+  var d = document.querySelector(".drawer");
+  if (d) d.hidden = !drawerOpen;
+});
 window.addEventListener("beforeunload", function(e){
   if (Object.keys(dirty).length){ e.preventDefault(); e.returnValue = ""; }
 });
