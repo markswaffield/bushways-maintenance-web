@@ -365,6 +365,21 @@ function cellPax(b){
   return '<td class="ro c-pax">'+esc(p.join(" "))+"</td>";
 }
 
+// One entry per column, in order. Change a width here and the frozen
+// columns' left offsets in the stylesheet must change with it.
+var COLS = [
+  58, 96,                       // Room, Status            (frozen)
+  46, 92, 172,                  // Pax, Type, Names        (frozen)
+  130, 130, 130, 190,           // Housekeeper, Guide, Vehicle, Notes
+  130, 130, 165, 90,            // Arrivals
+  150, 130, 130, 165, 90,       // Departures
+  150, 80,                      // Activities
+  210                           // Maintenance
+];
+var COLGROUP = "<colgroup>" + COLS.map(function (w) {
+  return '<col style="width:' + w + 'px">';
+}).join("") + "</colgroup>";
+
 var HEAD =
   COLGROUP
 + '<thead>'
@@ -388,21 +403,6 @@ var HEAD =
 +   "<th>Names</th><th>Driver/Guide</th><th>Vehicle</th><th>Departure details</th><th>ETD</th>"
 +   "<th>Activity</th><th>Time</th>"
 + "</tr></thead>";
-
-// One entry per column, in order. Change a width here and the frozen
-// columns' left offsets in the stylesheet must change with it.
-var COLS = [
-  58, 96,                       // Room, Status            (frozen)
-  46, 92, 172,                  // Pax, Type, Names        (frozen)
-  130, 130, 130, 190,           // Housekeeper, Guide, Vehicle, Notes
-  130, 130, 165, 90,            // Arrivals
-  150, 130, 130, 165, 90,       // Departures
-  150, 80,                      // Activities
-  210                           // Maintenance
-];
-var COLGROUP = "<colgroup>" + COLS.map(function (w) {
-  return '<col style="width:' + w + 'px">';
-}).join("") + "</colgroup>";
 
 var STATUS_LABEL = { arriving:"Arriving", departing:"Departing", turnover:"Turnover", staying:"Staying", empty:"Empty" };
 
