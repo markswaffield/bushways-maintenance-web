@@ -284,19 +284,49 @@
           list.map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join("");
         enterRoomStep();
       } else {
-        // Every other real area — Pathways, Pool Area, and so on — is a
-        // whole-area check with nothing to pick first, per Mark,
-        // 2026-09-16: all 15 areas have confirmed content behind them
-        // now, so "coming soon" was only ever standing in for a target
-        // type this screen didn't know how to run yet. Straight to the
-        // checklist itself.
-        targetType = "area";
-        pendingRoomId = area.id;
-        fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + area.id + "&target_type=area" + campParam())
+        // Every other real area — Pathways, Pool Area, and so on.
+        // A real, live bug caught 2026-09-21: this always went straight
+        // to one whole-area checklist, which was only ever right for
+        // an area with nothing to pick first. Eleven real areas have
+        // since been split into their own named targets (D-064,
+        // 2026-09-18) — Main Area into Dining Area/Bar and Lounge/Bar
+        // Store and Curio/Guest Toilet/Boma, and so on — but this
+        // screen never learned that, so picking one of them still
+        // served the OLD, un-split whole-area content straight
+        // through, stale and in one case carrying a literal leftover
+        // planning question as a section heading ("not one of Mark's
+        // four named targets — fold into Dining Area, or its own
+        // target?"). Mark: "the page is showing older versions that
+        // say a target has not been identified." Fixed the same way
+        // schedule.html's own target picker already works — check
+        // area_targets first; a real target list means asking which
+        // one, exactly like Vehicles/Guest Rooms above; nothing there
+        // means this area was genuinely never split, and stays a
+        // single whole-area check same as before.
+        fetch(FN + "?action=area_targets&area=" + area.id + campParam())
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            if (data.error) { alert(data.error); return; }
-            renderChecklist(data, myPersonId, area.id);
+            var targets = data.targets || [];
+            if (targets.length) {
+              targetType = "asset";
+              document.getElementById("targetTitle").textContent = area.name;
+              document.getElementById("targetSub").textContent = campName() + " — which one are you checking?";
+              document.getElementById("targetLabel").textContent = "Which one?";
+              document.getElementById("room").innerHTML =
+                '<option value="">Select one</option>' +
+                targets.map(function (t) { return '<option value="' + t.id + '">' + esc(t.label) + '</option>'; }).join("");
+              enterRoomStep();
+            } else {
+              targetType = "area";
+              pendingRoomId = area.id;
+              fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + area.id + "&target_type=area" + campParam())
+                .then(function (r2) { return r2.json(); })
+                .then(function (checklistData) {
+                  if (checklistData.error) { alert(checklistData.error); return; }
+                  renderChecklist(checklistData, myPersonId, area.id);
+                })
+                .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+            }
           })
           .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
       }
