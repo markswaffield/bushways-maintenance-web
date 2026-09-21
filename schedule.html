@@ -104,6 +104,17 @@
   .badge.active{background:#D9E8DD;color:#43594A}
   .badge.upcoming{background:#F4E3D3;color:#8C6A2F}
   .badge.handover{background:#D9E6DC;color:#2F6B45;margin-right:6px}
+  /* On Hold — tool-local D-078's own progress badge, made a real
+     fourth status alongside Overdue/Active/Upcoming per Mark,
+     2026-09-21: "we should also include On-Hold - and we need to
+     highlight the On-Hold in the screen more... makes it easier for
+     individuals to find schedules that are on hold." A colour of its
+     own (none of the other three reused — Upcoming's amber already
+     means something else), and the whole card gets a matching left
+     edge so an on-hold row reads as different while just scrolling,
+     not only when its badge text is actually read. */
+  .badge.onhold{background:#E4DEEE;color:#5B4B8A}
+  .card.on-hold{border-left:4px solid #5B4B8A;background:#FBFAFD}
   .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .who{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-top:4px}
   .who.dept{background:#E3DFD3;color:#5B5344}
@@ -230,7 +241,7 @@
   var direction = "oldest";
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
-  var filterStatus = "";   // "" all · overdue · active · upcoming — Mark, 2026-09-19
+  var filterStatus = "";   // "" all · overdue · active · upcoming · on_hold — Mark, 2026-09-19, extended 2026-09-21
   var mine = false, filterDept = "", filterPerson = "";
   var people = [], departments = [], areas = [], boot_vehicles = [];
   var VEHICLE_AREA_ID = null, addForVehicle = null;
@@ -351,7 +362,11 @@
     if (!lastData) return; // nothing to draw yet — reload() calls this again once there is
     var all = (lastData.schedules || []);
     var shown = all.filter(function (s) {
-      if (filterStatus && s.status !== filterStatus) return false;
+      // On Hold is independent of the date status (a schedule stopped
+      // mid-run can be overdue, active or upcoming at the same time),
+      // so it's checked separately rather than folded into s.status.
+      if (filterStatus === "on_hold" && !s.on_hold) return false;
+      if (filterStatus && filterStatus !== "on_hold" && s.status !== filterStatus) return false;
       if (kind && kindOf(s) !== kind) return false;
       if (mine && me) {
         var isMine = s.assigned_person_id === me.id ||
@@ -435,6 +450,7 @@
       '<option value="overdue"' + (filterStatus === "overdue" ? " selected" : "") + '>Overdue</option>' +
       '<option value="active"' + (filterStatus === "active" ? " selected" : "") + '>Active</option>' +
       '<option value="upcoming"' + (filterStatus === "upcoming" ? " selected" : "") + '>Upcoming</option>' +
+      '<option value="on_hold"' + (filterStatus === "on_hold" ? " selected" : "") + '>On Hold</option>' +
       '</select></div>';
 
     html += '<div class="filter-section"><div class="title">Kind</div>' +
@@ -1296,19 +1312,29 @@
     // already starts "Handover — ..." (built server-side); this just
     // makes it visible without having to read the whole line.
     var isHandover = s.name.indexOf("Handover") === 0;
-    var h = '<div class="card"><div class="sched-row"><div>' +
+    // Hold and resume, tool-local D-078, 2026-09-18 — Mark: "Due List
+    // must clearly show that the check is ON HOLD." Purely computed
+    // (checked_count/target_count from the server, not a flag anyone
+    // sets), so it's correct whether or not whoever stopped actually
+    // tapped a Hold button on the way out. Made a real fourth status
+    // and given the whole row its own highlight, 2026-09-21 (D-078's
+    // own follow-up) — Mark: "we should also include On-Hold - and we
+    // need to highlight the On-Hold in the screen more. This makes it
+    // easier for individuals to find schedules that are on hold and
+    // can continue with the check." The badge moves up next to the
+    // date status rather than sitting in the meta text below, and the
+    // card itself picks up a coloured edge — both readable while just
+    // scrolling, not only once the text is actually read.
+    var h = '<div class="card' + (s.on_hold ? ' on-hold' : '') + '"><div class="sched-row"><div>' +
       '<p style="font-weight:700;margin:0">' +
       (isHandover ? '<span class="badge handover">Handover</span> ' : "") +
       esc(s.name) + '</p>' +
       '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
       who +
-      // Hold and resume, tool-local D-078, 2026-09-18 — Mark: "Due
-      // List must clearly show that the check is ON HOLD." Purely
-      // computed (checked_count/target_count from the server, not a
-      // flag anyone sets), so it's correct whether or not whoever
-      // stopped actually tapped a Hold button on the way out.
-      (s.on_hold ? '<p class="meta"><span class="badge due_soon">ON HOLD</span> ' + s.checked_count + ' of ' + s.target_count + ' done</p>' : '') +
-      '</div><span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></div>';
+      (s.on_hold ? '<p class="meta">' + s.checked_count + ' of ' + s.target_count + ' done — pick up where you left off</p>' : '') +
+      '</div><span style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end">' +
+      (s.on_hold ? '<span class="badge onhold">On Hold</span>' : '') +
+      '<span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></span></div>';
 
     // Completing sits here, beside the thing that is due, rather than in
     // the Schedules section below — Mark, 2026-09-12. Completing removes
