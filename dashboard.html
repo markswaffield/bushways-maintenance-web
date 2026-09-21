@@ -128,6 +128,13 @@
   var filterAreaId = "";
   var filterTarget = "";
   var filterDepartmentId = "";
+  // Status — All / Unassigned / Assigned, same filter Fix a Fault
+  // already has (tool-local, 2026-09-17), added here 2026-09-21 per
+  // Mark: "on the To-do List - we need to add one more filter for
+  // Status - the same as Fix a Fault - this will be for All, Assigned
+  // and Unassigned." Separate from Department below, same as there —
+  // status and who it's assigned to are two different questions.
+  var filterStatus = "";          // "" | "unassigned" | "assigned"
   // The scheduled section has its own ordering, separate from the faults
   // above — per Mark, 2026-09-11, and defaulting to newest first at his
   // request. Note what that means for a schedule: "newest" is the
@@ -192,7 +199,14 @@
     var note = '<p class="order-note">Grouped by maintenance area, then asset — each asset\'s own faults ' +
       (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
 
-    var html = '<div class="filter-section"><div class="title">Date</div>' +
+    var html = '<div class="filter-section"><div class="title">Status</div>' +
+      '<label>Status</label><select id="statusFilter" onchange="onStatusFilterChange()">' +
+      '<option value=""' + (!filterStatus ? " selected" : "") + '>All</option>' +
+      '<option value="unassigned"' + (filterStatus === "unassigned" ? " selected" : "") + '>Unassigned</option>' +
+      '<option value="assigned"' + (filterStatus === "assigned" ? " selected" : "") + '>Assigned</option>' +
+      '</select></div>';
+
+    html += '<div class="filter-section"><div class="title">Date</div>' +
       '<label>Order (within each asset)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
       '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
       '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
@@ -232,6 +246,10 @@
     else { document.getElementById("app").insertAdjacentHTML("beforebegin", wrapped); }
   }
 
+  window.onStatusFilterChange = function () {
+    filterStatus = document.getElementById("statusFilter").value;
+    renderIssues(applyFilters(lastData));
+  };
   window.onDateDirectionChange = function () {
     dateDirection = document.getElementById("dateDirection").value;
     renderFilters(lastData);
@@ -265,6 +283,8 @@
   // order must remain the same for the rest."
   function applyFilters(data) {
     var issues = (data.issues || []).filter(function (f) {
+      if (filterStatus === "unassigned" && f.assigned_department_id) return false;
+      if (filterStatus === "assigned" && !f.assigned_department_id) return false;
       if (filterDepartmentId && f.assigned_department_id !== filterDepartmentId) return false;
       if (dateFrom && new Date(f.raised_at) < new Date(dateFrom)) return false;
       if (dateTo && new Date(f.raised_at) > new Date(dateTo + "T23:59:59")) return false;
@@ -319,7 +339,7 @@
   function renderIssues(data) {
     var html = "";
     var faultCount = data.issues.length;
-    var filtered = filterAreaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
+    var filtered = filterStatus || filterAreaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
     html += '<h2>Open faults <span class="count">' + faultCount + '</span></h2>';
     if (!data.issues.length) {
       html += '<p class="empty">Nothing open' + (filtered ? " for this filter" : " — every recorded fault has been resolved") + '.</p>';
