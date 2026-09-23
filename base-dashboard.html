@@ -54,11 +54,21 @@
      leave any plain text inside this white card just as light, and
      therefore invisible against it. Caught live: "As Mark Swaffield"
      rendered nearly white-on-white until this. */
-  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff;margin-top:10px;color:#232019}
-  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
-  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:9px 10px;background:#fff;margin-top:10px;color:#232019}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:1px 8px;margin:0 0 7px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
   .filter-section label:first-of-type{margin-top:0}
-  @media (min-width:700px){ .signin-box{max-width:420px} }
+  /* The sign-in bar — was the same padded card as the filter-section
+     above; too big on a phone, Mark, 2026-09-23: "that block showing
+     who is signed in... is too big - especially for the phone
+     screen." One compact row. Explicit dark text, same reason as
+     .filter-section above — this sits on the light card, not the dark
+     photo, and must not inherit the body's light colour. */
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
+    border:1px solid #C9C2AC;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;margin-top:10px;color:#232019}
+  .whobar b{color:#122D31}
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .whobar-btns button{width:auto;padding:6px 11px;font-size:12.5px;margin:0}
   /* Option A and Option B, side by side on a wide screen, stacked on
      a phone — the same shape every other filter row here already
      uses (dashboard.html first). */
@@ -89,18 +99,19 @@
      and already known to be Base Management (the landing page routes
      everyone else straight to their own lodge); arriving here with no
      session sends you back there instead of showing a picker. -->
-<div class="filter-section signin-box" id="whoSignedIn">
-  <div class="title">Signed in</div>
-  <p style="margin:0;font-size:13.5px">As <b id="whoName"></b></p>
-  <!-- Mark, 2026-09-18: "we need a button that takes you back to the
-       page where you can select which tool you want to work with."
-       Deliberately not signOut() — it stays the same signed-in
-       session, just back to the group's own tool picker (root
-       D-025/D-026). route() there routes a Base Manager straight back
-       to that same picker on its own, resumed session or not, so a
-       plain link to "./" is all this needs. -->
-  <button onclick="location.href='./'" style="width:100%;margin-top:10px">← Change tool</button>
-  <button class="primary" onclick="signOut()" style="width:100%;margin-top:8px">Sign out</button>
+<div class="whobar" id="whoSignedIn">
+  <span>👤 <b id="whoName"></b></span>
+  <span class="whobar-btns">
+    <!-- Mark, 2026-09-18: "we need a button that takes you back to the
+         page where you can select which tool you want to work with."
+         Deliberately not signOut() — it stays the same signed-in
+         session, just back to the group's own tool picker (root
+         D-025/D-026). route() there routes a Base Manager straight back
+         to that same picker on its own, resumed session or not, so a
+         plain link to "./" is all this needs. -->
+    <button onclick="location.href='./'">← Change tool</button>
+    <button onclick="signOut()">Sign out</button>
+  </span>
 </div>
 
 <div id="app"><p class="empty">Loading…</p></div>

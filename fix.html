@@ -23,16 +23,16 @@
   /* Side by side on a laptop, stacked on a phone — the same fix
      schedule.html's own filters got, Mark: "you need to apply the same
      to all of the pages." */
-  .filters{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  .filters{display:flex;flex-direction:column;gap:8px;margin-top:10px}
   @media (min-width:700px){
     .filters{flex-direction:row}
     .filter-section{flex:1;margin-top:0}
   }
-  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:12px;background:#fff}
-  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:2px 9px;margin:0 0 10px}
-  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px}
+  .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:9px 10px;background:#fff}
+  .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:1px 8px;margin:0 0 7px}
+  .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
   .filter-section label:first-of-type{margin-top:0}
-  .filter-section select,.filter-section input[type=date]{width:100%;padding:9px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
+  .filter-section select,.filter-section input[type=date]{width:100%;padding:7px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
   /* The PIN field was falling back to the bare browser default here —
      the general input rule below only ever covered input[type=text],
      never password. Mark: "the area to fill in the Pin is very small
@@ -44,10 +44,6 @@
   input[type=password]{width:100%;padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
   .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
-  /* The sign-in box, same look as the filter boxes above — Mark,
-     2026-09-17: "for the sign in on all necessary pages i would like
-     the same look as we did for the ordering filters." */
-  @media (min-width:700px){ .signin-box{max-width:420px} }
   .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
   .area-group{margin-top:22px}
   .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
@@ -58,6 +54,15 @@
   button{padding:10px 16px;font-size:14px;font-weight:600;border:none;border-radius:6px;background:#43594A;color:#fff}
   button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
   button.small{padding:7px 12px;font-size:13px}
+  /* The sign-in bar — was a full filter-section card; too big on a
+     phone, Mark, 2026-09-23: "that block showing who is signed in...
+     is too big - especially for the phone screen." One compact row,
+     same idea as the nav row, not a card of its own. */
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
+    border:1px solid #E3DFD3;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;margin-top:10px}
+  .whobar b{color:#122D31}
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .whobar-btns button{width:auto;padding:6px 11px;font-size:12.5px;margin:0;font-weight:400}
   .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
   .card .item{font-size:14.5px;font-weight:700;margin:0 0 4px}
   .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F;margin-right:6px}
@@ -208,13 +213,14 @@
     return c ? c.name : "";
   }
   function signedInBoxHtml() {
-    return '<div class="filter-section signin-box"><div class="title">Signed in</div>' +
-      '<p style="margin:0;font-size:13.5px">As <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + '</p>' +
-      (camp && me.locations && me.locations.length > 1
-        ? '<p style="margin:6px 0 0;font-size:13.5px">Camp: <b>' + esc(camp.name) + '</b></p>' +
-          '<button class="secondary small" style="width:100%;margin-top:6px" onclick="location.href=\'./base-dashboard.html\'">Change camp</button>'
-        : "") +
-      '<button onclick="signOut()" style="width:100%;margin-top:10px">Sign out</button></div>';
+    var campBit = (camp && me.locations && me.locations.length > 1)
+      ? ' · <b>' + esc(camp.name) + '</b>' : "";
+    var changeCampBtn = (camp && me.locations && me.locations.length > 1)
+      ? '<button class="secondary" onclick="location.href=\'./base-dashboard.html\'">Change camp</button>' : "";
+    return '<div class="whobar">' +
+      '<span>👤 <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + campBit + '</span>' +
+      '<span class="whobar-btns">' + changeCampBtn + '<button class="secondary" onclick="signOut()">Sign out</button></span>' +
+      '</div>';
   }
 
   // Coming straight here from a specific fault on the To-do list —
