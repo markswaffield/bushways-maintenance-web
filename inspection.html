@@ -45,6 +45,19 @@
   .btnrow{display:flex;gap:10px;margin-top:22px}
   .btnrow button{margin-top:0}
   .btn-secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344}
+  /* The sign-in bar — this page had just a bare "Signed in as X" line
+     and a plain Sign out, no camp shown at all, until Mark, having
+     just seen Schedule's, asked directly: "what appears at the top
+     for each page is different... I want the same layout as Schedule
+     across all pages." */
+  #whoRow{margin:10px 0 0}
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
+    border:1px solid #E3DFD3;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px}
+  .whobar b{color:#122D31}
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .whobar-btns button{width:auto;padding:6px 11px;font-size:12.5px;margin:0}
+  .whobar .whobar-btns button{color:#232019}
+  .whobar .whobar-btns button:last-child{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620;font-weight:600}
   .urgent-row{display:flex;align-items:center;gap:8px;margin-top:16px}
   .urgent-row input{width:20px;height:20px}
   .urgent-row label{margin:0;font-size:14px;color:#232019}
@@ -58,8 +71,16 @@
 
 <div id="start">
   <h1 id="campTitle">Chobe Elephant Camp</h1>
-  <p class="sub">Signed in as <b id="whoAmI"></b> — what would you like to do?</p>
-  <button class="btn-secondary" id="signOut" style="width:auto;padding:7px 13px;margin-bottom:14px">Sign out</button>
+  <p class="sub">What would you like to do?</p>
+  <div id="whoRow">
+    <div class="whobar" id="whoSignedIn">
+      <span>👤 <b id="whoAmI"></b><span id="campLine" hidden> · <b id="campName"></b></span></span>
+      <span class="whobar-btns">
+        <button id="changeCampBtn" hidden class="btn-secondary" onclick="location.href='./base-dashboard.html'">Change camp</button>
+        <button class="btn-secondary" id="signOut">Sign out</button>
+      </span>
+    </div>
+  </div>
   <script src="./nav.js"></script>
   <div id="navRow"></div>
   <script>
@@ -189,6 +210,14 @@
     };
     document.getElementById("campTitle").textContent = campName();
     document.getElementById("reportSub").textContent = campName() + ' — say or type the room or department first, then what\'s wrong, e.g. "Room 5, towel rail loose" or "Guest kitchen, light bulbs broken."';
+    // Same sign-in bar as every other page now (Mark: "I want the same
+    // layout as Schedule across all pages") — "Camp: X · Change camp"
+    // stays multi-camp-only, same as Schedule's own rule.
+    if (camp && signedInAs.locations && signedInAs.locations.length > 1) {
+      document.getElementById("campName").textContent = camp.name;
+      document.getElementById("campLine").hidden = false;
+      document.getElementById("changeCampBtn").hidden = false;
+    }
   }
   var mediaRecorder, chunks = [], recordedBlob = null, timerInterval, seconds = 0;
   var MAX_SECONDS = 120; // a voice note, not a long recording — keeps uploads small

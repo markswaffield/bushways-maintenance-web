@@ -31,6 +31,19 @@
   .reportTabs button{padding:8px 14px;font-size:13.5px;font-weight:600;border:1px solid #43594A;border-radius:6px;background:#fff;color:#43594A;cursor:pointer}
   .reportTabs button.active{background:#43594A;color:#fff}
 
+  /* The sign-in bar — this page had none at all before, unlike every
+     other page, until Mark asked directly: "what appears at the top
+     for each page is different... I want the same layout as Schedule
+     across all pages." */
+  #whoRow{margin:10px 0 0}
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
+    border:1px solid #E3DFD3;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px}
+  .whobar b{color:#122D31}
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .whobar-btns button{width:auto;padding:6px 11px;font-size:12.5px;margin:0}
+  .whobar .whobar-btns button{color:#232019}
+  .whobar .whobar-btns button:last-child{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620;font-weight:600}
+
   .filters{display:flex;flex-direction:column;gap:8px;margin-top:14px}
   @media (min-width:900px){ .filters{flex-direction:row} .filter-section{flex:1;margin-top:0} }
   .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:9px 10px;background:#fff}
@@ -67,6 +80,15 @@
 
 <h1>Reports — <span id="campTitle">Chobe Elephant Camp</span></h1>
 <p class="sub">The audit trail — what was checked, what was raised, and what changed, over any stretch of time.</p>
+<div id="whoRow">
+  <div class="whobar" id="whoSignedIn">
+    <span>👤 <b id="whoName"></b><span id="campLine" hidden> · <b id="campName"></b></span></span>
+    <span class="whobar-btns">
+      <button id="changeCampBtn" hidden class="secondary" onclick="location.href='./base-dashboard.html'">Change camp</button>
+      <button class="secondary" onclick="signOut()">Sign out</button>
+    </span>
+  </div>
+</div>
 <script src="./nav.js"></script>
 <div id="navRow"></div>
 
@@ -100,6 +122,19 @@
   try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
   var shownCamp = camp || (me && me.locations && me.locations[0]);
   if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
+  // Same sign-in bar as every other page now (Mark: "I want the same
+  // layout as Schedule across all pages").
+  window.signOut = function () {
+    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_camp");
+    location.href = "./";
+  };
+  document.getElementById("whoName").textContent = me.name;
+  if (camp && me.locations && me.locations.length > 1) {
+    document.getElementById("campName").textContent = camp.name;
+    document.getElementById("campLine").hidden = false;
+    document.getElementById("changeCampBtn").hidden = false;
+  }
   var CAMP_PARAM = "&person_id=" + encodeURIComponent(me.id) + (shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "");
 
   (function () {
