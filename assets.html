@@ -118,8 +118,18 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>Assets — Chobe Elephant Camp</h1>
+<h1>Assets — <span id="campTitle">Chobe Elephant Camp</span></h1>
 <p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
+<div id="whoRow">
+  <div class="whobar" id="whoSignedIn">
+    <span>👤 <b id="whoName"></b><span id="campLine" hidden> · <b id="campName"></b></span></span>
+    <span class="whobar-btns">
+      <button id="changeCampBtn" hidden onclick="location.href='./base-dashboard.html'">Change camp</button>
+      <button onclick="signOut()">Sign out</button>
+    </span>
+  </div>
+  <label class="check whobar-extra"><input type="checkbox" id="showRetired"> Show retired</label>
+</div>
 <script src="./nav.js"></script>
 <div id="navRow"></div>
 <script>
@@ -130,38 +140,25 @@
   })();
 </script>
 
-<div id="whoSignedIn" hidden>
-  <div class="whobar">
-    <span>👤 <b id="whoName"></b></span>
-    <span class="whobar-btns"><button onclick="signOut()">Sign out</button></span>
-  </div>
-  <label class="check whobar-extra"><input type="checkbox" id="showRetired"> Show retired</label>
-</div>
-<div class="filter-section signin-box" id="whoPicker">
-  <div class="title">Sign in</div>
-  <label for="whoDept">Department</label><select id="whoDept"></select>
-  <label for="who">You are</label><select id="who"></select>
-  <label for="whoPin">PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6">
-  <div id="whoSetPin" hidden><label for="whoNewPin">New PIN (4–6 digits)</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6"></div>
-  <div id="whoSetPinBtn" hidden style="margin-top:10px"><button onclick="doWhoSetPin()" style="width:100%">Set PIN</button></div>
-  <button class="primary" onclick="doWhoLogin()" style="width:100%;margin-top:10px">Sign in</button>
-  <label class="check" style="margin-top:10px"><input type="checkbox" id="showRetired2"> Show retired</label>
-  <p class="note" id="whoErr" style="color:#A8502F" hidden></p>
-</div>
-
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
-var me = null, people = [], data = null, locations = [], showRetired = false;
+var data = null, locations = [], showRetired = false;
 var editing = null, transferring = null, historyFor = null, historyRows = [];
-// A group-wide roll-up, filterable by camp — per Mark, 2026-09-18:
-// "Assets - i think this also needs be visible as a rollup - showing
-// all the listed assets for the whole group, or filtered by lodge."
-// viewableLocations is just Chobe for an ordinary manager (unchanged
-// from before this) — the Camp filter box only appears once there's
-// actually more than one camp to choose between.
-var viewableLocations = [], filterLocationId = "";
+// Scoped to one camp now, same as Schedule — Mark, 2026-09-23: "when
+// we are logged into a camp - these should only reflect the camp
+// Assets, Staff and Reporting... The option to view all the assets
+// and staff will remain within the Roll-up Page only." The group-wide
+// view (filterable by camp) this page used to offer directly moved to
+// base-rollup.html, D-091 — this page now always shows one camp,
+// switched the same way every other page switches camp.
+var me = null;
+try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+if (!me) { location.href = "./"; }
+var camp = null;
+try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+var shownCamp = camp || (me && me.locations && me.locations[0]);
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -186,7 +183,7 @@ function post(action, body){
   }).then(function(r){return r.json();});
 }
 
-window.startAdd = function(kind){ editing = { kind: kind, location_id: filterLocationId || null }; transferring = null; render(); };
+window.startAdd = function(kind){ editing = { kind: kind, location_id: shownCamp ? shownCamp.id : null }; transferring = null; render(); };
 window.startEdit = function(kind, id){
   var a = (data[kind] || []).filter(function(x){ return x.id === id; })[0];
   editing = Object.assign({}, a); transferring = null; render();
@@ -268,23 +265,8 @@ function transferForm(){
     '<button onclick="cancel()">Cancel</button></div></div>';
 }
 
-// Only shown once there's actually more than one camp to choose
-// between — an ordinary manager's own viewableLocations is just
-// Chobe, so this stays invisible and nothing about the page changes
-// for them. Per Mark, 2026-09-18: "showing all the listed assets for
-// the whole group, or filtered by lodge."
-function campFilterHtml(){
-  if (viewableLocations.length < 2) return "";
-  return '<div class="filter-section" style="max-width:300px"><div class="title">Camp</div>' +
-    '<label>Site</label><select id="campFilter" onchange="onLocationFilterChange()">' +
-    '<option value="">All camps you can see</option>' +
-    viewableLocations.map(function(l){
-      return '<option value="' + esc(l.id) + '"' + (filterLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-    }).join("") + '</select></div>';
-}
-
 function render(){
-  var h = campFilterHtml();
+  var h = "";
   KINDS.forEach(function(k){
     var kind = k[0], title = k[1], movable = k[2];
     // This page is for moveable equipment, not what's fixed to a
@@ -307,22 +289,13 @@ function render(){
     // just looking at a transfer record isn't the thing being locked
     // down. The server enforces the same split — not just this hiding.
     if (me && me.is_administrator && !(editing && editing.kind === kind && !editing.id)) {
-      // Which camp a new row belongs to is ambiguous while looking at
-      // "All camps" — pick a specific one in the Camp filter first,
-      // rather than guessing (or silently defaulting to Chobe the way
-      // an ordinary single-camp manager never has to think about).
-      if (viewableLocations.length > 1 && !filterLocationId) {
-        h += '<p class="note">Pick a camp above to add ' + esc(title.toLowerCase()) + ' there.</p>';
-      } else {
-        h += '<div class="acts"><button onclick="startAdd(\'' + kind + '\')">+ Add</button></div>';
-      }
+      h += '<div class="acts"><button onclick="startAdd(\'' + kind + '\')">+ Add</button></div>';
     }
     if (editing && editing.kind === kind && !editing.id) h += assetForm();
 
     list.forEach(function(a){
       h += '<div class="row' + (a.retired ? " retired" : "") + '">' +
         '<p class="nm">' +
-        (viewableLocations.length > 1 ? '<span class="camp">' + esc(a.location) + '</span> ' : "") +
         (a.area ? '<span class="area">' + esc(a.area) + '</span> ' : "") +
         esc(a.name) + (a.description ? ' — ' + esc(a.description) : "") +
         (a.retired ? " · retired" : "") + '</p>' +
@@ -364,105 +337,38 @@ function render(){
 // data it shouldn't) and on the server (so a direct API call is
 // refused too, not just this page's own hiding of it).
 function load(){
-  if (!me) {
-    el("app").innerHTML = '<p class="note">Sign in as management to view this.</p>';
-    return Promise.resolve();
-  }
   if (!me.is_manager) {
     el("app").innerHTML = '<p class="note">Only management can view this.</p>';
     return Promise.resolve();
   }
   var url = FN + "?action=assets_list&person_id=" + encodeURIComponent(me.id);
-  if (filterLocationId) url += "&location_id=" + encodeURIComponent(filterLocationId);
+  if (shownCamp) url += "&location_id=" + encodeURIComponent(shownCamp.id);
   return fetch(url)
     .then(function(r){return r.json();}).then(function(d){
       if (d.error) { el("app").innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
-      data = d; locations = d.locations || []; viewableLocations = d.viewable_locations || []; render();
+      data = d; locations = d.locations || []; render();
     });
 }
 
-window.onLocationFilterChange = function(){
-  filterLocationId = el("campFilter").value;
-  editing = null; transferring = null;
-  load();
-};
-
 el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
 
-// Department first, then name — per Mark, 2026-09-17, once the real
-// staff list made this dropdown long: "the list is very long - i think
-// we need some filter options to shorten the list. department picker -
-// then name picker." Never hides anyone with no department set.
-function renderWhoOptions(deptFilter){
-  var shown = !deptFilter ? people : people.filter(function(p){ return p.department === deptFilter; });
-  el("who").innerHTML = '<option value="">— nobody —</option>' + shown.map(function(p){
-    return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
-  }).join("");
-  el("who").onchange = function(){
-    var opt = el("who").selectedOptions[0];
-    var need = !!opt && opt.dataset.pinSet === "false";
-    el("whoSetPin").hidden = !need; el("whoSetPinBtn").hidden = !need;
-  };
-}
-
-// Group-wide PIN sign-in — per Mark, 2026-09-17: "I would like the
-// group wide sign in option... doing this once now solves the problem
-// of identifying who worked on something right now." Kept only in
-// sessionStorage, clearing the moment the tab or browser closes — the
-// same reasoning Edit Checklists' own Administrator sign-in already
-// had (D-037), generalised to any real person.
-window.doWhoSetPin = function(){
-  var id = el("who").value, pin = el("whoNewPin").value;
-  fetch(FN + "?action=set_pin", {
-    method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({ person_id: id, pin: pin }),
-  }).then(function(r){return r.json();}).then(function(out){
-    if (out.error) { alert(out.error); return; }
-    el("whoSetPin").hidden = true; el("whoSetPinBtn").hidden = true;
-    el("whoPin").value = pin;
-    alert("PIN set. Sign in below.");
-  });
-};
-window.doWhoLogin = function(){
-  var id = el("who").value, pin = el("whoPin").value;
-  var err = el("whoErr"); err.hidden = true;
-  if (!id || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
-  fetch(FN + "?action=login", {
-    method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({ person_id: id, pin: pin }),
-  }).then(function(r){return r.json();}).then(function(out){
-    if (out.error) { err.textContent = out.error; err.hidden = false; return; }
-    me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator };
-    sessionStorage.setItem("bw_signin", JSON.stringify(me));
-    showSignedIn();
-  });
-};
+// Same sign-in bar as every other page now (Mark: "the standard Name
+// + Change Camp + Sign Out box must be the same across all sheets
+// when you are in a page").
 window.signOut = function(){
   sessionStorage.removeItem("bw_signin");
-  location.reload();
+  sessionStorage.removeItem("bw_camp");
+  location.href = "./";
 };
-function showSignedIn(){
-  el("whoPicker").hidden = true;
-  el("whoSignedIn").hidden = false;
-  el("whoName").textContent = me.name;
-  el("showRetired").parentElement.hidden = !me.is_manager;
-  load();
+if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
+document.getElementById("whoName").textContent = me.name;
+if (camp && me.locations && me.locations.length > 1) {
+  document.getElementById("campName").textContent = camp.name;
+  document.getElementById("campLine").hidden = false;
+  document.getElementById("changeCampBtn").hidden = false;
 }
-
-fetch(FN).then(function(r){return r.json();}).then(function(b){
-  people = b.people || [];
-  var deptNames = (b.departments || []).map(function(d){ return d.name; })
-    .filter(function(n){ return people.some(function(p){ return p.department === n; }); });
-  el("whoDept").innerHTML = '<option value="">All departments</option>' +
-    deptNames.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
-  el("whoDept").addEventListener("change", function(){ renderWhoOptions(this.value); });
-  renderWhoOptions("");
-  try {
-    var saved = sessionStorage.getItem("bw_signin");
-    if (saved) { me = JSON.parse(saved); showSignedIn(); return; }
-  } catch (e) {}
-  return load();
-}).catch(function(e){ el("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>'; });
+el("showRetired").parentElement.hidden = !me.is_manager;
+load();
 </script>
 <script>
   /* Root D-023. Registered on every page so each one is saved on the phone

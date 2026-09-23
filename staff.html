@@ -134,8 +134,18 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>Staff — Bush Ways</h1>
-<p class="sub">Every real person across the group. Nothing here is ever deleted — retiring keeps the history.</p>
+<h1>Staff — <span id="campTitle">Chobe Elephant Camp</span></h1>
+<p class="sub">Everyone based at this camp. Nothing here is ever deleted — retiring keeps the history.</p>
+<div id="whoRow">
+  <div class="whobar" id="whoSignedIn">
+    <span>👤 <b id="whoName"></b><span id="campLine" hidden> · <b id="campName"></b></span></span>
+    <span class="whobar-btns">
+      <button id="changeCampBtn" hidden onclick="location.href='./base-dashboard.html'">Change camp</button>
+      <button onclick="signOut()">Sign out</button>
+    </span>
+  </div>
+  <label class="check whobar-extra"><input type="checkbox" id="showRetired"> Show retired</label>
+</div>
 <script src="./nav.js"></script>
 <div id="navRow"></div>
 <script>
@@ -146,34 +156,26 @@
   })();
 </script>
 
-<div id="whoSignedIn" hidden>
-  <div class="whobar">
-    <span>👤 <b id="whoName"></b></span>
-    <span class="whobar-btns"><button onclick="signOut()">Sign out</button></span>
-  </div>
-  <label class="check whobar-extra"><input type="checkbox" id="showRetired"> Show retired</label>
-</div>
-<div class="filter-section signin-box" id="whoPicker">
-  <div class="title">Sign in</div>
-  <label for="whoDept">Department</label><select id="whoDept"></select>
-  <label for="who">You are</label><select id="who"></select>
-  <label for="whoPin">PIN</label><input type="password" id="whoPin" inputmode="numeric" maxlength="6">
-  <div id="whoSetPin" hidden><label for="whoNewPin">New PIN (4–6 digits)</label><input type="password" id="whoNewPin" inputmode="numeric" maxlength="6"></div>
-  <div id="whoSetPinBtn" hidden style="margin-top:10px"><button onclick="doWhoSetPin()" style="width:100%">Set PIN</button></div>
-  <button class="primary" onclick="doWhoLogin()" style="width:100%;margin-top:10px">Sign in</button>
-  <label class="check" style="margin-top:10px"><input type="checkbox" id="showRetired2"> Show retired</label>
-  <div style="width:100%"><p class="note" id="whoErr" style="color:#A8502F" hidden></p></div>
-</div>
-
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
-var me = null, bootPeople = [], data = null, showRetired = false;
+var data = null, showRetired = false;
 var editing = null;
-// Collapsed by default — 227 people across 8 locations would otherwise
-// be one very long scroll. Click a location's own heading to open it.
-var openLocations = {};
+// Scoped to one camp now, same as Schedule and Assets — Mark,
+// 2026-09-23: "when we are logged into a camp - these should only
+// reflect the camp Assets, Staff and Reporting... The option to view
+// all the assets and staff will remain within the Roll-up Page only."
+// The group-wide view (every location, collapsible) this page used to
+// show directly moved to base-rollup.html, D-091 — this page now
+// always shows one camp's people, switched the same way every other
+// page switches camp.
+var me = null;
+try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+if (!me) { location.href = "./"; }
+var camp = null;
+try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+var shownCamp = camp || (me && me.locations && me.locations[0]);
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -186,12 +188,8 @@ function post(action, body){
   }).then(function(r){return r.json();});
 }
 
-window.toggleLocation = function(id){
-  openLocations[id] = !openLocations[id]; render();
-};
-
-window.startAdd = function(locationId){
-  editing = { home_location_id: locationId }; render();
+window.startAdd = function(){
+  editing = { home_location_id: shownCamp ? shownCamp.id : null }; render();
 };
 window.startEdit = function(id){
   var p = data.people.filter(function(x){ return x.id === id; })[0];
@@ -286,47 +284,35 @@ function personRow(p){
 
 function render(){
   var h = "";
-  var byLoc = {};
-  (data.people || []).forEach(function(p){
-    (byLoc[p.home_location_id] = byLoc[p.home_location_id] || []).push(p);
-  });
-  data.locations.forEach(function(loc){
-    var all = byLoc[loc.id] || [];
-    if (!all.length) return; // no real staff there yet (Kalahari Adventures)
-    var list = showRetired ? all : all.filter(function(p){ return !p.retired; });
-    var retiredCount = all.filter(function(p){ return p.retired; }).length;
-    list.sort(function(a,b){ return a.name.localeCompare(b.name); });
-    var open = !!openLocations[loc.id];
+  var all = data.people || [];
+  var list = showRetired ? all : all.filter(function(p){ return !p.retired; });
+  var retiredCount = all.filter(function(p){ return p.retired; }).length;
+  list.sort(function(a,b){ return a.name.localeCompare(b.name); });
 
-    h += '<h2 onclick="toggleLocation(\'' + loc.id + '\')">' + (open ? "▾" : "▸") + ' ' + esc(loc.name) +
-      ' <span class="count">' + list.length +
-      (retiredCount && !showRetired ? " · " + retiredCount + " retired" : "") +
-      (open ? "" : " — tap to open") + '</span></h2>';
-    if (!open) return;
+  if (me && me.is_administrator && !(editing && !editing.id)) {
+    h += '<div class="acts"><button onclick="startAdd()">+ Add</button></div>';
+  }
+  if (editing && !editing.id) h += personForm();
 
-    if (me && me.is_administrator && !(editing && !editing.id && editing.home_location_id === loc.id)) {
-      h += '<div class="acts"><button onclick="startAdd(\'' + loc.id + '\')">+ Add</button></div>';
-    }
-    if (editing && !editing.id && editing.home_location_id === loc.id) h += personForm();
+  list.forEach(function(p){ h += personRow(p); });
+  if (!list.length) h += '<p class="note">None' + (retiredCount ? " showing" : "") + '.</p>';
 
-    list.forEach(function(p){ h += personRow(p); });
-    if (!list.length) h += '<p class="note">None' + (retiredCount ? " showing" : "") + '.</p>';
-  });
   el("app").innerHTML = h;
 }
 
 // Visible to management, invisible to everyone else — per Mark,
-// 2026-09-18. Enforced here and on the server, same as assets.html.
+// 2026-09-18. Enforced here (so the page doesn't even try to show data
+// it shouldn't) and on the server (so a direct API call is refused
+// too, not just this page's own hiding of it) — same split as
+// assets.html.
 function load(){
-  if (!me) {
-    el("app").innerHTML = '<p class="note">Sign in as management to view this.</p>';
-    return Promise.resolve();
-  }
   if (!me.is_manager) {
     el("app").innerHTML = '<p class="note">Only management can view this.</p>';
     return Promise.resolve();
   }
-  return fetch(FN + "?action=staff_list&person_id=" + encodeURIComponent(me.id))
+  var url = FN + "?action=staff_list&person_id=" + encodeURIComponent(me.id);
+  if (shownCamp) url += "&location_id=" + encodeURIComponent(shownCamp.id);
+  return fetch(url)
     .then(function(r){return r.json();}).then(function(d){
       if (d.error) { el("app").innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
       data = d; render();
@@ -335,80 +321,23 @@ function load(){
 
 el("showRetired").addEventListener("change", function(){ showRetired = this.checked; render(); });
 
-// Department first, then name — per Mark, 2026-09-17, once the real
-// staff list made this dropdown long: "the list is very long - i think
-// we need some filter options to shorten the list. department picker -
-// then name picker." Never hides anyone with no department set.
-function renderWhoOptions(deptFilter){
-  var shown = !deptFilter ? bootPeople : bootPeople.filter(function(p){ return p.department === deptFilter; });
-  el("who").innerHTML = '<option value="">— nobody —</option>' + shown.map(function(p){
-    return '<option value="' + esc(p.id) + '" data-pin-set="' + p.pin_set + '">' + esc(p.name) + (p.is_manager ? " (management)" : "") + '</option>';
-  }).join("");
-  el("who").onchange = function(){
-    var opt = el("who").selectedOptions[0];
-    var need = !!opt && opt.dataset.pinSet === "false";
-    el("whoSetPin").hidden = !need; el("whoSetPinBtn").hidden = !need;
-  };
-}
-
-// Group-wide PIN sign-in — per Mark, 2026-09-17: "I would like the
-// group wide sign in option... doing this once now solves the problem
-// of identifying who worked on something right now." Kept only in
-// sessionStorage, clearing the moment the tab or browser closes — the
-// same reasoning Edit Checklists' own Administrator sign-in already
-// had (D-037), generalised to any real person.
-window.doWhoSetPin = function(){
-  var id = el("who").value, pin = el("whoNewPin").value;
-  fetch(FN + "?action=set_pin", {
-    method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({ person_id: id, pin: pin }),
-  }).then(function(r){return r.json();}).then(function(out){
-    if (out.error) { alert(out.error); return; }
-    el("whoSetPin").hidden = true; el("whoSetPinBtn").hidden = true;
-    el("whoPin").value = pin;
-    alert("PIN set. Sign in below.");
-  });
-};
-window.doWhoLogin = function(){
-  var id = el("who").value, pin = el("whoPin").value;
-  var err = el("whoErr"); err.hidden = true;
-  if (!id || !pin) { err.textContent = "Pick your name and enter your PIN."; err.hidden = false; return; }
-  fetch(FN + "?action=login", {
-    method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({ person_id: id, pin: pin }),
-  }).then(function(r){return r.json();}).then(function(out){
-    if (out.error) { err.textContent = out.error; err.hidden = false; return; }
-    me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator };
-    sessionStorage.setItem("bw_signin", JSON.stringify(me));
-    showSignedIn();
-  });
-};
+// Same sign-in bar as every other page now (Mark: "the standard Name
+// + Change Camp + Sign Out box must be the same across all sheets
+// when you are in a page").
 window.signOut = function(){
   sessionStorage.removeItem("bw_signin");
-  location.reload();
+  sessionStorage.removeItem("bw_camp");
+  location.href = "./";
 };
-function showSignedIn(){
-  el("whoPicker").hidden = true;
-  el("whoSignedIn").hidden = false;
-  el("whoName").textContent = me.name;
-  el("showRetired").parentElement.hidden = !me.is_manager;
-  load();
+if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
+document.getElementById("whoName").textContent = me.name;
+if (camp && me.locations && me.locations.length > 1) {
+  document.getElementById("campName").textContent = camp.name;
+  document.getElementById("campLine").hidden = false;
+  document.getElementById("changeCampBtn").hidden = false;
 }
-
-fetch(FN).then(function(r){return r.json();}).then(function(b){
-  bootPeople = b.people || [];
-  var deptNames = (b.departments || []).map(function(d){ return d.name; })
-    .filter(function(n){ return bootPeople.some(function(p){ return p.department === n; }); });
-  el("whoDept").innerHTML = '<option value="">All departments</option>' +
-    deptNames.map(function(n){ return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("");
-  el("whoDept").addEventListener("change", function(){ renderWhoOptions(this.value); });
-  renderWhoOptions("");
-  try {
-    var saved = sessionStorage.getItem("bw_signin");
-    if (saved) { me = JSON.parse(saved); showSignedIn(); return; }
-  } catch (e) {}
-  return load();
-}).catch(function(e){ el("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>'; });
+el("showRetired").parentElement.hidden = !me.is_manager;
+load();
 </script>
 <script>
   /* Root D-023. Registered on every page so each one is saved on the phone
