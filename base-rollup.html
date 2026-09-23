@@ -71,8 +71,23 @@
   .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
     border:1px solid #E3DFD3;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;margin-top:10px}
   .whobar b{color:#122D31}
-  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap}
+  /* margin-left:auto is the real fix, not justify-content alone — once
+     the name/camp text and this button group can't both fit one line,
+     flex-wrap drops this group onto its own line, alone — and
+     space-between has nothing left to space against there, so it fell
+     back to sitting at the left. Mark, on a real phone screenshot:
+     "i want all the sign out buttons moved to the right in the
+     block." auto margin pushes it to the end of whatever line it's
+     actually on, wrapped or not. */
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
   .whobar-btns button{width:auto;padding:6px 11px;font-size:12.5px;margin:0}
+  /* Darker text on both (Mark: "make the text darker for both so it
+     is easier to read") and Sign out picked out with its own colour
+     ("highlighted the sign out") — :last-child rather than a new
+     class, since Sign out is always the last button in this row
+     wherever it appears. */
+  .whobar .whobar-btns button{color:#232019}
+  .whobar .whobar-btns button:last-child{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620;font-weight:600}
   .area-group{margin-top:22px}
   .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
   .target-group{margin-top:14px}
