@@ -238,7 +238,7 @@
     todo: { camp: "", order: "newest", status: "", area: "", target: "", dept: "" },
     completed: { camp: "", order: "newest", area: "", target: "", dept: "" },
     assets: { camp: "" },
-    staff: { camp: "" },
+    staff: { camp: "", dept: "" },
   };
 
   function esc(s) {
@@ -694,12 +694,25 @@
 
   function renderStaff() {
     var camp = F.staff.camp;
-    setFilters("", [campBox("staff", staffData.viewable_locations || staffData.locations || [])]);
     var all = (staffData.people || []).filter(function (p) { return !p.retired; });
     if (camp) all = all.filter(function (p) { return p.home_location_id === camp; });
+    // Department by name, not id — Mark, 2026-09-23: "For the Staff -
+    // can we have a Department filter as well?" Each camp has its own
+    // department rows, so "Housekeeping" should find housekeeping at
+    // every camp. Offered from whoever the Camp filter leaves showing.
+    var deptNames = [];
+    all.forEach(function (p) { if (p.department && deptNames.indexOf(p.department) === -1) deptNames.push(p.department); });
+    deptNames.sort(function (a, b) { return a.localeCompare(b); });
+    if (F.staff.dept && deptNames.indexOf(F.staff.dept) === -1) F.staff.dept = "";
+    setFilters("", [
+      campBox("staff", staffData.viewable_locations || staffData.locations || []),
+      box("Department", '<label>Department</label>' +
+        select("staff", "dept", [["", "All departments"]].concat(deptNames.map(function (d) { return [d, d]; })))),
+    ]);
+    if (F.staff.dept) all = all.filter(function (p) { return p.department === F.staff.dept; });
     all = all.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
     var html = '<h2>Staff <span class="count">' + all.length + '</span></h2>';
-    if (!all.length) html += '<p class="empty">None' + (camp ? " at this camp" : "") + '.</p>';
+    if (!all.length) html += '<p class="empty">None' + (camp || F.staff.dept ? " for this filter" : "") + '.</p>';
     all.forEach(function (p) {
       html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(p.home_location) + '</span>' + esc(p.name) +
         (p.department ? ' — <span class="fault">' + esc(p.department) + '</span>' : "") +
