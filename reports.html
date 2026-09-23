@@ -136,6 +136,20 @@
     document.getElementById("changeCampBtn").hidden = false;
   }
   var CAMP_PARAM = "&person_id=" + encodeURIComponent(me.id) + (shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "");
+  // Camp filter, tool-local D-092 — Mark: "add in a filter for Camp."
+  // Only for someone who can actually see more than one camp, and for
+  // them it opens on every camp at once ("" = all). Everyone else keeps
+  // exactly what they had: the one camp they're signed into.
+  var multiCamp = !!(me.locations && me.locations.length > 1);
+  var reportCamp = multiCamp ? "" : (shownCamp ? shownCamp.id : "");
+  function campNameOf(id) {
+    var l = (me.locations || []).filter(function (x) { return x.id === id; })[0];
+    return l ? l.name : "";
+  }
+  function showReportCampTitle() {
+    document.getElementById("campTitle").textContent = reportCamp ? (campNameOf(reportCamp) || (shownCamp && shownCamp.name) || "") : "All camps";
+  }
+  if (multiCamp) showReportCampTitle();
 
   (function () {
     document.getElementById("navRow").innerHTML = navHtml(me, "Reports");
@@ -172,6 +186,13 @@
   function renderFilters() {
     var whoLabel = currentReport === "report_fault_history" ? "Who logged it" : "Who did it";
     var html =
+      (multiCamp
+        ? '<div class="filter-section"><div class="title">Camp</div>' +
+          '<label>Site</label><select id="campFilter" onchange="onCampChange()"><option value="">All camps</option>' +
+          me.locations.map(function (l) {
+            return '<option value="' + esc(l.id) + '"' + (reportCamp === l.id ? " selected" : "") + '>' + esc(l.name) + "</option>";
+          }).join("") + "</select></div>"
+        : "") +
       '<div class="filter-section"><div class="title">Order</div>' +
         '<label>Sort</label><select id="orderFilter">' +
           '<option value="desc">Newest to oldest</option>' +
@@ -192,7 +213,17 @@
           '<label>Status</label><select id="statusFilter"><option value="">Open and closed</option>' +
           '<option value="open">Open only</option><option value="closed">Closed only</option></select></div>'
         : "");
+    // Keep whatever was already chosen — this re-runs when a camp's
+    // pick lists arrive, not only on switching report.
+    var keep = {};
+    ["orderFilter", "areaFilter", "whoFilter", "statusFilter"].forEach(function (id) {
+      var el = document.getElementById(id); if (el) keep[id] = el.value;
+    });
     document.getElementById("filtersRow").innerHTML = html;
+    Object.keys(keep).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && Array.prototype.some.call(el.options, function (o) { return o.value === keep[id]; })) el.value = keep[id];
+    });
     populateAssetFilter();
   }
 
@@ -207,6 +238,16 @@
       pool.map(function (t) { return '<option value="' + esc(t.type) + ":" + esc(t.id) + '">' + esc(t.label) + "</option>"; }).join("");
   }
   window.onAreaChange = populateAssetFilter;
+  // A different camp means different people and different assets to
+  // pick from — reloaded for that camp. "All camps" keeps the lists of
+  // the camp you're signed into; the report itself still spans them all.
+  window.onCampChange = function () {
+    reportCamp = document.getElementById("campFilter").value;
+    showReportCampTitle();
+    loadPickLists();
+    document.getElementById("results").innerHTML = '<p class="empty">Camp changed — Run report to see it.</p>';
+    document.getElementById("resultCount").textContent = "";
+  };
 
   window.runReport = function () {
     if (!currentReport) return;
@@ -221,7 +262,8 @@
     var targetType = "", targetId = "";
     if (assetVal) { var parts = assetVal.split(":"); targetType = parts[0]; targetId = parts.slice(1).join(":"); }
 
-    var qs = "&action=" + currentReport + CAMP_PARAM + "&order=" + encodeURIComponent(order);
+    var qs = "&action=" + currentReport + "&person_id=" + encodeURIComponent(me.id) +
+      (reportCamp ? "&location_id=" + encodeURIComponent(reportCamp) : "") + "&order=" + encodeURIComponent(order);
     if (from) qs += "&from=" + encodeURIComponent(from);
     if (to) qs += "&to=" + encodeURIComponent(to);
     if (areaId) qs += "&area_id=" + encodeURIComponent(areaId);
@@ -260,21 +302,24 @@
       return;
     }
     var html = note + '<div class="tableWrap"><table>';
+    // Several camps in one report — say which camp each row is from.
+    var campTh = reportCamp ? "" : "<th>Camp</th>";
+    function campTd(r) { return reportCamp ? "" : "<td>" + esc(r.location || "—") + "</td>"; }
     if (currentReport === "report_schedule_history") {
-      html += "<tr><th>Became active</th><th>Schedule</th><th>Area</th><th>Completed</th><th>By</th><th>Faults/notes</th><th></th></tr>";
+      html += "<tr>" + campTh + "<th>Became active</th><th>Schedule</th><th>Area</th><th>Completed</th><th>By</th><th>Faults/notes</th><th></th></tr>";
       rows.forEach(function (r) {
         var area = (data.areas || []).find(function (a) { return a.id === r.area_id; });
-        html += "<tr><td>" + fmtDate(r.became_active) + "</td><td>" + esc(r.schedule_name) + "</td><td>" + esc(area ? area.name : "—") +
+        html += "<tr>" + campTd(r) + "<td>" + fmtDate(r.became_active) + "</td><td>" + esc(r.schedule_name) + "</td><td>" + esc(area ? area.name : "—") +
           "</td><td>" + fmtDateTime(r.completed_at) + "</td><td>" + esc((r.completed_by || []).join(", ") || "—") +
           '</td><td>' + (r.fault_count ? '<span class="badge open">' + r.fault_count + (r.fault_count === 1 ? " fault" : " faults") + '</span>' : "none") +
           '</td><td><button class="secondary" onclick="toggleRunDetail(\'' + esc(r.id) + '\', this)">View →</button></td></tr>' +
-          '<tr class="detailRow" id="detail-' + esc(r.id) + '" hidden><td colspan="7"></td></tr>';
+          '<tr class="detailRow" id="detail-' + esc(r.id) + '" hidden><td colspan="' + (reportCamp ? 7 : 8) + '"></td></tr>';
       });
     } else if (currentReport === "report_asset_checks") {
-      html += "<tr><th>When</th><th>Asset</th><th>Area</th><th>Type</th><th>Done by</th></tr>";
+      html += "<tr>" + campTh + "<th>When</th><th>Asset</th><th>Area</th><th>Type</th><th>Done by</th></tr>";
       rows.forEach(function (r) {
         var area = (data.areas || []).find(function (a) { return a.id === r.area_id; });
-        html += "<tr><td>" + fmtDateTime(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(area ? area.name : "—") +
+        html += "<tr>" + campTd(r) + "<td>" + fmtDateTime(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(area ? area.name : "—") +
           "</td><td>" + esc(r.asset_type) + "</td><td>" + esc(r.by || "—") + "</td></tr>";
       });
     } else {
@@ -284,11 +329,11 @@
       // lag time for fault completions." One column, two meanings —
       // still open counts from raised to now; closed counts from
       // raised to resolved, and stops there for good.
-      html += "<tr><th>Raised</th><th>Asset</th><th>Item</th><th>Area</th><th>Fault type</th><th class=\"wrap\">Note</th><th>Raised by</th><th>Status</th><th>Days open / to close</th></tr>";
+      html += "<tr>" + campTh + "<th>Raised</th><th>Asset</th><th>Item</th><th>Area</th><th>Fault type</th><th class=\"wrap\">Note</th><th>Raised by</th><th>Status</th><th>Days open / to close</th></tr>";
       rows.forEach(function (r) {
         var days = daysBetween(r.at, r.status === "open" ? new Date().toISOString() : r.resolved_at);
         var daysLabel = days == null ? "—" : days + (days === 1 ? " day" : " days") + (r.status === "open" ? " open" : " to close");
-        html += "<tr><td>" + fmtDate(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(r.item_label || "—") + "</td><td>" + esc(r.area || "—") +
+        html += "<tr>" + campTd(r) + "<td>" + fmtDate(r.at) + "</td><td>" + esc(r.asset_label) + "</td><td>" + esc(r.item_label || "—") + "</td><td>" + esc(r.area || "—") +
           "</td><td>" + esc(r.fault_type || "—") + '</td><td class="wrap">' + esc(r.note || "—") + "</td><td>" + esc(r.raised_by || "—") +
           '</td><td><span class="badge ' + (r.status === "open" ? "open" : "closed") + '">' + esc(r.status) + "</span>" +
           (r.status !== "open" && r.resolved_by ? "<br><span style=\"font-size:11.5px;color:#6B6455\">by " + esc(r.resolved_by) + " on " + fmtDate(r.resolved_at) + "</span>" : "") +
@@ -366,13 +411,20 @@
   // allAreaTargets() for the asset picker, which already flattens
   // rooms and vehicles in under Guest Rooms/Vehicles alongside every
   // real split Asset (D-068), so one dropdown covers all three.
-  fetch(API + "?action=bootstrap" + CAMP_PARAM).then(function (r) { return r.json(); }).then(function (data) {
-    people = data.people || [];
-    areasList = (data.areas || []).filter(function (a) { return a.available; });
-  });
-  fetch(API + "?action=all_area_targets" + CAMP_PARAM).then(function (r) { return r.json(); }).then(function (data) {
-    targetsByArea = data.targets_by_area || {};
-  });
+  function loadPickLists() {
+    var param = "&person_id=" + encodeURIComponent(me.id) +
+      ((reportCamp || (shownCamp && shownCamp.id)) ? "&location_id=" + encodeURIComponent(reportCamp || shownCamp.id) : "");
+    fetch(API + "?action=bootstrap" + param).then(function (r) { return r.json(); }).then(function (data) {
+      people = data.people || [];
+      areasList = (data.areas || []).filter(function (a) { return a.available; });
+      if (currentReport) renderFilters();
+    });
+    fetch(API + "?action=all_area_targets" + param).then(function (r) { return r.json(); }).then(function (data) {
+      targetsByArea = data.targets_by_area || {};
+      if (currentReport) populateAssetFilter();
+    });
+  }
+  loadPickLists();
 </script>
 <script>
   if ("serviceWorker" in navigator) {

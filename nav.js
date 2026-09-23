@@ -20,8 +20,16 @@
    — `me` is whatever that page already read from `sessionStorage`
    itself; a null/missing `me` renders just the everyone-tier links,
    which never actually shows in practice since every page that
-   carries this row already gates on being signed in first. */
-function navHtml(me, active) {
+   carries this row already gates on being signed in first.
+
+   A third, optional `hide` array drops specific labels for one page
+   only — added 2026-09-23 for base-rollup.html, Mark: "on the Roll-up
+   page the following are not required: Inspection, Fix a Fault." Both
+   are single-item, single-camp workflows that don't fit a cross-camp
+   read-only roll-up; every other page still shows them, since this
+   only ever filters what one specific caller asked to drop. The
+   roll-up also drops the five its own tabs replace (D-092). */
+function navHtml(me, active, hide) {
   var links = [
     { href: "./schedule.html", label: "Schedule" },
     { href: "./inspection.html", label: "Inspection" },
@@ -46,6 +54,10 @@ function navHtml(me, active) {
   }
   if (me && me.is_administrator) {
     links.push({ href: "./admin-checklists.html", label: "Edit Checklists" });
+  }
+  // Last, so it can drop any tier's links, not only the everyone tier.
+  if (hide && hide.length) {
+    links = links.filter(function (l) { return hide.indexOf(l.label) === -1; });
   }
   return '<p class="nav">' + links.map(function (l) {
     return active === l.label ? "<b>" + l.label + "</b>" : '<a href="' + l.href + '">' + l.label + "</a>";

@@ -32,6 +32,15 @@
   filter shape this reuses (tool-local D-034) — same rules here, with
   one addition: Camp, since this is the one screen that spans more
   than one location at a time.
+
+  Rebuilt as tabs, 2026-09-23 (tool-local D-092) — Mark: "above all
+  the buttons for the pages I want a date range that will be fixed for
+  all pages that are accessed", then Schedule, To-Do-List, Completed,
+  Assets and Staff each opening on the whole group with their own
+  filters, Camp first on every one. One tab on screen at a time; the
+  date range above the tab buttons is the only filter they share.
+  Each tab fetches its own data the first time it's opened, not all
+  five up front — bandwidth in Maun is limited.
 -->
 <style>
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
@@ -48,22 +57,34 @@
     .nav a,.nav b{padding:6px 10px}
   }
   select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
-  input[type=password]{padding:8px;font-size:14px}
   button{padding:6px 11px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:5px;cursor:pointer}
   button.primary{background:#43594A;color:#fff}
   .order-note{font-size:12.5px;color:#6B6455;margin:14px 0 0;font-style:italic}
   .filters{display:flex;flex-direction:column;gap:8px;margin-top:10px}
   @media (min-width:700px){
     .filters{flex-direction:row}
-    .filter-section{flex:1;margin-top:0}
+    .filters .filter-section{flex:1;margin-top:0}
   }
   .filter-section{border:1px solid #C9C2AC;border-radius:8px;padding:9px 10px;background:#fff;margin-top:10px}
   .filter-section .title{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#43594A;border:1px solid #43594A;border-radius:5px;display:inline-block;padding:1px 8px;margin:0 0 7px}
   .filter-section label{display:block;font-size:12px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:8px 0 3px}
   .filter-section label:first-of-type{margin-top:0}
   .filter-section select,.filter-section input[type=date]{width:100%;padding:7px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box}
-  .filter-section .daterange{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .filter-section .daterange{display:flex;gap:8px;align-items:center}
   .filter-section .daterange span{font-size:12.5px;color:#6B6455;flex:none}
+  .filter-section .hint{margin:8px 0 0;font-size:12.5px;color:#6B6455}
+  /* The date range every tab shares (D-092) — sits above the tab
+     buttons, so it reads as belonging to all of them, not one. */
+  #rangeBox{margin-top:12px}
+  #rangeBox .range-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  #rangeBox .daterange{flex:1;min-width:240px}
+  #rangeBox button{width:auto}
+  /* One tab per section — real buttons, per the standing hard rule
+     (root CLAUDE.md, D-057), the chosen one filled in. */
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .tabs button{padding:8px 14px;font-size:14px;border-color:#C9C2AC;color:#232019;border-radius:6px}
+  .tabs button.on{background:#43594A;border-color:#43594A;color:#fff;font-weight:600}
+  @media (max-width:700px){ .tabs button{padding:7px 11px;font-size:13.5px} }
   /* The sign-in bar — was the same padded card as the filter boxes
      above; too big on a phone, Mark, 2026-09-23: "that block showing
      who is signed in... is too big - especially for the phone
@@ -92,8 +113,11 @@
   .area-group .area-heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
   .target-group{margin-top:14px}
   .target-group .target-heading{font-size:13.5px;font-weight:700;color:#5B5344;margin:0 0 6px}
+  .group{margin-top:20px}
+  .group .heading{font-size:14px;font-weight:700;color:#43594A;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #43594A}
   .card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:10px 14px;margin-top:6px}
   .card .fault-line{font-size:13.5px;margin:0}
+  .card .item{font-size:14.5px;font-weight:700;margin:0 0 4px}
   .card .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
   .card .camp{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-right:6px}
   .card .meta{font-size:12px;color:#6B6455;margin:4px 0 0}
@@ -101,21 +125,49 @@
   .badge.overdue{background:#F4CFC2;color:#A8502F}
   .badge.active{background:#D9E8DD;color:#43594A}
   .badge.upcoming{background:#F4E3D3;color:#8C6A2F}
+  .badge.handover{background:#D9E6DC;color:#2F6B45;margin-right:6px}
+  /* On Hold — same colour and card edge as schedule.html (D-087). */
+  .badge.onhold{background:#E4DEEE;color:#5B4B8A}
+  .card.on-hold{border-left:4px solid #5B4B8A;background:#FBFAFD}
   .sched-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .owner{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-top:4px}
+  .owner.dept{background:#E3DFD3;color:#5B5344}
+  .owner.none{background:#F1EDE4;color:#A8A192;font-weight:400;font-style:italic}
+  /* Completed's own raised → assigned → fixed flow, same as completed.html. */
+  .flow{margin-top:10px;padding-top:10px;border-top:1px solid #E3DFD3}
+  .step{display:flex;gap:10px;padding:4px 0}
+  .step .dot{width:9px;height:9px;border-radius:50%;background:#43594A;margin-top:5px;flex:none}
+  .step.pending .dot{background:#E3DFD3}
+  .step .text{font-size:13px}
+  .step .who{font-weight:600}
+  .step .when{color:#6B6455;font-size:12px;display:block}
+  .fixnote{background:#EFECE3;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:13px}
+  .fixnote .part{color:#8C6A2F;font-size:12px;margin-top:2px}
+  .photos{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .photos a img{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
+  .notes{margin-top:8px}
+  .note-line{background:#EFECE3;border-radius:6px;padding:6px 10px;font-size:13px;margin-top:4px}
+  .note-line .note-who{font-weight:600;color:#5B5344}
   .empty{color:#8C6A2F;font-size:13.5px;font-style:italic;margin-top:10px}
   .loading{color:#6B6455;font-size:14px;margin-top:20px}
   [hidden]{display:none!important}
 </style></head><body>
 
 <h1>All Camps</h1>
-<p class="sub">Every camp Bush Ways operates, rolled up in one place — open faults, outstanding schedules, assets and staff, filterable by camp. To go and work at a specific camp instead, use <a href="./base-dashboard.html">Base Dashboard</a>.</p>
+<p class="sub">Every camp Bush Ways operates, rolled up in one place, filterable by camp. To go and work at a specific camp instead, use Base Dashboard.</p>
 <script src="./nav.js"></script>
 <div id="navRow"></div>
 <script>
   (function () {
     var m = null;
     try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
-    document.getElementById("navRow").innerHTML = navHtml(m, "");
+    // Inspection and Fix a fault per Mark (not wanted here at all);
+    // Schedule, To-do list, Completed, Assets and Staff because this
+    // page's own tabs below are those five, group-wide — two buttons
+    // with the same name going to different places is the confusion
+    // to avoid (D-092).
+    document.getElementById("navRow").innerHTML = navHtml(m, "",
+      ["Inspection", "Fix a fault", "Schedule", "To-do list", "Completed", "Assets", "Staff"]);
   })();
 </script>
 
@@ -130,35 +182,64 @@
   <span class="whobar-btns"><button onclick="signOut()">Sign out</button></span>
 </div>
 
+<div class="filter-section" id="rangeBox">
+  <div class="title">Date range</div>
+  <div class="range-row">
+    <div class="daterange">
+      <input type="date" id="rangeFrom" onchange="onRangeChange()" aria-label="From">
+      <span>to</span>
+      <input type="date" id="rangeTo" onchange="onRangeChange()" aria-label="To">
+    </div>
+    <button id="rangeClear" hidden onclick="clearRange()">Clear</button>
+  </div>
+  <p class="hint" id="rangeHint"></p>
+</div>
+
+<div class="tabs" id="tabs"></div>
+<div id="filtersRow"></div>
 <div id="app"><p class="loading">Loading…</p></div>
-<div id="assetsSection"></div>
-<div id="staffSection"></div>
 
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
   var me = null;
-  var lastData = null;
-  // Same D-034 grouping and filters the to-do list uses, plus one more
-  // — Camp — since this is the one screen that spans more than one
-  // location at a time. Per Mark, 2026-09-18.
-  var dateDirection = "newest";
-  var dateFrom = "", dateTo = "";
-  var filterAreaId = "", filterTarget = "";
-  var filterDepartmentId = "";
-  var filterLocationId = "";
 
-  // Assets and Staff, added 2026-09-23 (D-091) — Mark: "I think that
-  // when we are logged into a camp - these should only reflect the
-  // camp Assets, Staff and Reporting... The option to view all the
-  // assets and staff will remain within the Roll-up Page only." Moved
-  // here wholesale from assets.html's own old group-wide view, with
-  // the same "Camp: all camps / one camp" filter style Mark asked
-  // Staff to share with Assets. Read-only here, deliberately — editing
-  // stays on assets.html/staff.html, camp by camp, where the
-  // Administrator gate already lives; this page is the one place to
-  // just look across all of them at once.
-  var assetsData = null, staffData = null;
-  var filterAssetsLocationId = "", filterStaffLocationId = "";
+  var TABS = [
+    { key: "schedule", label: "Schedule" },
+    { key: "todo", label: "To-Do list" },
+    { key: "completed", label: "Completed" },
+    { key: "assets", label: "Assets" },
+    { key: "staff", label: "Staff" },
+  ];
+  var tab = "schedule";
+  try { var savedTab = sessionStorage.getItem("bw_rollup_tab"); if (savedTab) tab = savedTab; } catch (e) {}
+  if (!TABS.some(function (t) { return t.key === tab; })) tab = "schedule";
+
+  // The one filter every tab shares (D-092). What "date" means depends
+  // on the tab — due date, date raised, date fixed — said on screen in
+  // the hint under it rather than left to guess.
+  var rangeFrom = "", rangeTo = "";
+  var RANGE_HINT = {
+    schedule: "Applies to every tab. On Schedule it's the due date.",
+    todo: "Applies to every tab. On To-Do list it's the date the fault was raised.",
+    completed: "Applies to every tab. On Completed it's the date the fault was fixed.",
+    assets: "Applies to every tab — Assets have no dates, so nothing here is filtered by it.",
+    staff: "Applies to every tab — Staff have no dates, so nothing here is filtered by it.",
+  };
+
+  // Each tab's own data, fetched the first time that tab opens. Schedule
+  // and To-Do list share one call (base_rollup returns both halves).
+  var rollup = null, completedData = null, assetsData = null, staffData = null;
+  var loading = {};
+
+  // Each tab's own filters — Mark's own list, per tab, Camp first on
+  // every one. Kept separately so switching tabs never loses them.
+  var F = {
+    schedule: { camp: "", order: "oldest", status: "", kind: "", dept: "" },
+    todo: { camp: "", order: "newest", status: "", area: "", target: "", dept: "" },
+    completed: { camp: "", order: "newest", area: "", target: "", dept: "" },
+    assets: { camp: "" },
+    staff: { camp: "" },
+  };
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -171,13 +252,29 @@
     if (mins < 1440) return Math.round(mins / 60) + "h ago";
     return Math.round(mins / 1440) + "d ago";
   }
+  function when(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + ", " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
   function dueText(s) {
-    if (s.days_until < 0) return "overdue by " + Math.abs(s.days_until) + " day" + (Math.abs(s.days_until) === 1 ? "" : "s");
-    if (s.days_until === 0) return "due now";
-    return "due in " + s.days_until + " day" + (s.days_until === 1 ? "" : "s");
+    var d = new Date(s.due_date);
+    var on = d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    if (s.days_until < 0) return "was due " + on + " (" + Math.abs(s.days_until) + " day" + (Math.abs(s.days_until) === 1 ? "" : "s") + " ago)";
+    if (s.days_until === 0) return "due today, " + on;
+    return "due " + on + " (in " + s.days_until + " day" + (s.days_until === 1 ? "" : "s") + ")";
   }
   function badgeText(status) {
     return { overdue: "Overdue", active: "Active", upcoming: "Upcoming" }[status];
+  }
+  function inRange(iso) {
+    if (!rangeFrom && !rangeTo) return true;
+    if (!iso) return false;
+    var d = new Date(iso);
+    if (rangeFrom && d < new Date(rangeFrom)) return false;
+    if (rangeTo && d > new Date(rangeTo + "T23:59:59")) return false;
+    return true;
   }
 
   window.signOut = function () {
@@ -186,175 +283,158 @@
     location.href = "./";
   };
 
+  // -- Tabs and the shared range -----------------------------------------
+
+  function renderTabs() {
+    document.getElementById("tabs").innerHTML = TABS.map(function (t) {
+      return '<button class="' + (t.key === tab ? "on" : "") + '" onclick="showTab(\'' + t.key + '\')">' + esc(t.label) + '</button>';
+    }).join("");
+    document.getElementById("rangeHint").textContent = RANGE_HINT[tab];
+  }
+  window.showTab = function (key) {
+    tab = key;
+    try { sessionStorage.setItem("bw_rollup_tab", key); } catch (e) {}
+    renderTabs();
+    ensureLoaded();
+  };
+  window.onRangeChange = function () {
+    rangeFrom = document.getElementById("rangeFrom").value;
+    rangeTo = document.getElementById("rangeTo").value;
+    document.getElementById("rangeClear").hidden = !(rangeFrom || rangeTo);
+    render();
+  };
+  window.clearRange = function () {
+    document.getElementById("rangeFrom").value = "";
+    document.getElementById("rangeTo").value = "";
+    onRangeChange();
+  };
+
   // Visible only to those `?action=base_rollup` actually grants —
   // enforced server-side (`accessibleLocations()`), not just this
   // page hiding it, same discipline D-051 set for Assets and Staff.
   // assets_list and staff_list called with no location_id come back
-  // scoped to everything this person can view (the same server-side
-  // set base_rollup itself uses) — exactly the group-wide list this
-  // page now exists to show, filtered further on the client the same
-  // way the fault/schedule Camp filter above already works.
-  function load() {
-    var app = document.getElementById("app");
-    if (!me) { app.innerHTML = '<p class="empty">Sign in above to view this.</p>'; return; }
-    app.innerHTML = '<p class="loading">Loading…</p>';
-    Promise.all([
-      fetch(FN + "?action=base_rollup&person_id=" + encodeURIComponent(me.id)).then(function (r) { return r.json(); }),
-      fetch(FN + "?action=assets_list&person_id=" + encodeURIComponent(me.id)).then(function (r) { return r.json(); }),
-      fetch(FN + "?action=staff_list&person_id=" + encodeURIComponent(me.id)).then(function (r) { return r.json(); }),
-    ]).then(function (results) {
-      var data = results[0], assets = results[1], staff = results[2];
-      if (data.error) { app.innerHTML = '<p class="empty">' + esc(data.error) + '</p>'; return; }
-      lastData = data;
-      renderFilters(data);
-      renderIssues(applyFilters(data));
-      assetsData = assets.error ? null : assets;
-      staffData = staff.error ? null : staff;
-      renderAssets();
-      renderStaff();
+  // scoped to everything this person can view — exactly the
+  // group-wide list this page exists to show.
+  function fetchJson(q) {
+    return fetch(FN + "?action=" + q + "&person_id=" + encodeURIComponent(me.id)).then(function (r) { return r.json(); });
+  }
+  function ensureLoaded() {
+    var need = (tab === "schedule" || tab === "todo") ? "rollup" : tab;
+    var have = { rollup: rollup, completed: completedData, assets: assetsData, staff: staffData }[need];
+    if (have) { render(); return; }
+    document.getElementById("filtersRow").innerHTML = "";
+    document.getElementById("app").innerHTML = '<p class="loading">Loading…</p>';
+    if (loading[need]) return;
+    loading[need] = true;
+    var action = { rollup: "base_rollup", completed: "base_rollup_completed", assets: "assets_list", staff: "staff_list" }[need];
+    fetchJson(action).then(function (data) {
+      loading[need] = false;
+      if (data.error) {
+        document.getElementById("app").innerHTML = '<p class="empty">' + esc(data.error) + '</p>';
+        return;
+      }
+      if (need === "rollup") rollup = data;
+      else if (need === "completed") completedData = data;
+      else if (need === "assets") assetsData = data;
+      else staffData = data;
+      render();
     }).catch(function (e) {
-      app.innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
+      loading[need] = false;
+      document.getElementById("app").innerHTML = "<p>Couldn't load — a fault in the page, not your phone. (" + esc(e.message) + ")</p>";
     });
   }
 
+  function render() {
+    if (tab === "schedule" && rollup) renderSchedule();
+    else if (tab === "todo" && rollup) renderTodo();
+    else if (tab === "completed" && completedData) renderCompleted();
+    else if (tab === "assets" && assetsData) renderAssets();
+    else if (tab === "staff" && staffData) renderStaff();
+  }
+
+  // One generic onchange for every filter select: data-tab + data-key
+  // say which setting it is. Choosing an area resets its asset.
+  window.onFilter = function (el) {
+    var t = el.getAttribute("data-tab"), k = el.getAttribute("data-key");
+    F[t][k] = el.value;
+    if (k === "area") F[t].target = "";
+    render();
+  };
+
+  // -- Filter building blocks --------------------------------------------
+
+  function select(t, key, options) {
+    return '<select data-tab="' + t + '" data-key="' + key + '" onchange="onFilter(this)">' +
+      options.map(function (o) {
+        return '<option value="' + esc(o[0]) + '"' + (F[t][key] === o[0] ? " selected" : "") + '>' + esc(o[1]) + '</option>';
+      }).join("") + '</select>';
+  }
+  function box(title, inner) {
+    return '<div class="filter-section"><div class="title">' + esc(title) + '</div>' + inner + '</div>';
+  }
+  function campBox(t, locations) {
+    var chosen = F[t].camp && (locations || []).filter(function (l) { return l.id === F[t].camp; })[0];
+    return box("Camp", '<label>Site</label>' +
+      select(t, "camp", [["", "All camps"]].concat((locations || []).map(function (l) { return [l.id, l.name]; }))) +
+      // A pure filter on this page — narrows what's shown, nothing
+      // more. Entering a camp to actually work there happens on Base
+      // Dashboard, per Mark, 2026-09-18, never from here.
+      (chosen ? '<p class="hint">To go and work at ' + esc(chosen.name) + ', use Base Dashboard.</p>' : ""));
+  }
+  function orderBox(t, title, label, oldestDefault) {
+    return box(title, '<label>' + esc(label) + '</label>' + select(t, "order", oldestDefault
+      ? [["oldest", "Oldest to newest (default)"], ["newest", "Newest to oldest"]]
+      : [["newest", "Newest to oldest (default)"], ["oldest", "Oldest to newest"]]));
+  }
   function topLevelAreas(areas) { return (areas || []).filter(function (a) { return !a.parent_area_id; }); }
-  function targetsIn(issues, areaId) {
+  function targetsIn(rows, areaId) {
     var seen = {}, out = [];
-    (issues || []).forEach(function (f) {
+    (rows || []).forEach(function (f) {
       if (f.target && f.area_id === areaId && !seen[f.target]) { seen[f.target] = true; out.push(f.target); }
     });
     return out.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
   }
-  // Department filter built from what's actually in the data, not a
+  function areaBox(t, areas, rows) {
+    var html = '<label>Area</label>' +
+      select(t, "area", [["", "All areas"]].concat(topLevelAreas(areas).map(function (a) { return [a.id, a.name]; })));
+    var targets = F[t].area ? targetsIn(rows, F[t].area) : [];
+    if (F[t].area && targets.length) {
+      html += '<label>Asset</label>' +
+        select(t, "target", [["", "All assets in this area"]].concat(targets.map(function (x) { return [x, x]; })));
+    }
+    return box("Maintenance area", html);
+  }
+  // Department list built from what's actually in the rows, not a
   // server-curated catalogue — different camps have genuinely
-  // different valid departments (D-043), so there's no one "the
-  // department list" that fits every camp at once here.
-  function departmentsPresent(data) {
+  // different valid departments (D-043), so there's no one list that
+  // fits every camp at once here.
+  function departmentsPresent(rows) {
     var seen = {}, out = [];
-    (data.issues || []).concat(data.schedules || []).forEach(function (f) {
+    (rows || []).forEach(function (f) {
       if (f.assigned_department_id && !seen[f.assigned_department_id]) {
         seen[f.assigned_department_id] = true;
-        out.push({ id: f.assigned_department_id, name: f.assigned_department });
+        out.push([f.assigned_department_id, f.assigned_department || "(unnamed)"]);
       }
     });
-    return out.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    return out.sort(function (a, b) { return a[1].localeCompare(b[1]); });
   }
-
-  function renderFilters(data) {
-    var areas = data.areas || [];
-    var html = '<p class="order-note">Grouped by maintenance area, then asset — each asset\'s own faults ' +
-      (dateDirection === "oldest" ? "oldest first" : "newest first") + '.</p>';
-
-    html += '<div class="filters">';
-
-    html += '<div class="filter-section"><div class="title">Camp</div>' +
-      '<label>Site</label><select id="locationFilter" onchange="onLocationFilterChange()">' +
-      '<option value="">All camps you can see</option>' +
-      data.locations.map(function (l) {
-        return '<option value="' + esc(l.id) + '"' + (filterLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-      }).join("") +
-      '</select>' +
-      // A pure filter on this page — narrows what's shown, nothing
-      // more. Entering a camp to actually work there is deliberately
-      // not offered here at all, per Mark, 2026-09-18: a clean
-      // "selector page that does not have all the standard boxes of
-      // Schedule - To-do-List etc" is what avoids the confusion, not
-      // this one doing double duty. That happens on Base Dashboard.
-      (filterLocationId
-        ? '<p style="margin:10px 0 0;font-size:12.5px;color:#6B6455">To go and work at ' + esc((data.locations.filter(function (l) { return l.id === filterLocationId; })[0] || {}).name || "this camp") + ', use <a href="./base-dashboard.html">Base Dashboard</a>.</p>'
-        : "") +
-      '</div>';
-
-    html += '<div class="filter-section"><div class="title">Date</div>' +
-      '<label>Order (within each asset)</label><select id="dateDirection" onchange="onDateDirectionChange()">' +
-      '<option value="newest"' + (dateDirection === "newest" ? " selected" : "") + '>Newest to oldest (default)</option>' +
-      '<option value="oldest"' + (dateDirection === "oldest" ? " selected" : "") + '>Oldest to newest</option>' +
-      '</select>' +
-      '<label>Custom date range (optional)</label>' +
-      '<div class="daterange">' +
-      '<input type="date" id="dateFrom" value="' + esc(dateFrom) + '" onchange="onDateRangeChange()">' +
-      '<span>to</span>' +
-      '<input type="date" id="dateTo" value="' + esc(dateTo) + '" onchange="onDateRangeChange()">' +
-      '</div></div>';
-
-    var targets = filterAreaId ? targetsIn(data.issues, filterAreaId) : [];
-    html += '<div class="filter-section"><div class="title">Maintenance area</div>' +
-      '<label>Area</label><select id="areaFilter" onchange="onAreaFilterChange()"><option value="">All areas</option>' +
-      topLevelAreas(areas).map(function (a) {
-        return '<option value="' + a.id + '"' + (filterAreaId === a.id ? " selected" : "") + '>' + esc(a.name) + '</option>';
-      }).join("") + '</select>';
-    if (filterAreaId && targets.length) {
-      html += '<label>Asset</label><select id="targetFilter" onchange="onTargetFilterChange()">' +
-        '<option value="">All assets in this area</option>' +
-        targets.map(function (t) {
-          return '<option value="' + esc(t) + '"' + (filterTarget === t ? " selected" : "") + '>' + esc(t) + '</option>';
-        }).join("") + '</select>';
+  function deptBox(t, rows, withUnassigned) {
+    var opts = [["", "All departments"]];
+    if (withUnassigned) {
+      var n = rows.filter(function (x) { return !x.assigned_department_id; }).length;
+      opts.push(["__unassigned__", "Unassigned" + (n ? " (" + n + ")" : "")]);
     }
-    html += '</div>';
-
-    var depts = departmentsPresent(data);
-    html += '<div class="filter-section"><div class="title">Department</div>' +
-      '<label>Department</label><select id="departmentFilter" onchange="onDepartmentFilterChange()">' +
-      '<option value="">All departments</option>' +
-      depts.map(function (d) {
-        return '<option value="' + esc(d.id) + '"' + (filterDepartmentId === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
-      }).join("") + '</select></div>';
-
-    html += '</div>'; // .filters
-
-    var existing = document.getElementById("filtersRow");
-    if (existing) { existing.outerHTML = '<div id="filtersRow">' + html + '</div>'; }
-    else { document.getElementById("app").insertAdjacentHTML("beforebegin", '<div id="filtersRow">' + html + '</div>'); }
+    return box("Department", '<label>Department</label>' + select(t, "dept", opts.concat(departmentsPresent(rows))));
   }
-
-  window.onLocationFilterChange = function () {
-    filterLocationId = document.getElementById("locationFilter").value;
-    renderFilters(lastData);
-    renderIssues(applyFilters(lastData));
-  };
-  window.onDateDirectionChange = function () {
-    dateDirection = document.getElementById("dateDirection").value;
-    renderFilters(lastData);
-    renderIssues(applyFilters(lastData));
-  };
-  window.onDateRangeChange = function () {
-    dateFrom = document.getElementById("dateFrom").value;
-    dateTo = document.getElementById("dateTo").value;
-    renderIssues(applyFilters(lastData));
-  };
-  window.onAreaFilterChange = function () {
-    filterAreaId = document.getElementById("areaFilter").value;
-    filterTarget = "";
-    renderFilters(lastData);
-    renderIssues(applyFilters(lastData));
-  };
-  window.onTargetFilterChange = function () {
-    filterTarget = document.getElementById("targetFilter").value;
-    renderIssues(applyFilters(lastData));
-  };
-  window.onDepartmentFilterChange = function () {
-    filterDepartmentId = document.getElementById("departmentFilter").value;
-    renderIssues(applyFilters(lastData));
-  };
-
-  function applyFilters(data) {
-    var issues = (data.issues || []).filter(function (f) {
-      if (filterLocationId && f.location_id !== filterLocationId) return false;
-      if (filterDepartmentId && f.assigned_department_id !== filterDepartmentId) return false;
-      if (dateFrom && new Date(f.raised_at) < new Date(dateFrom)) return false;
-      if (dateTo && new Date(f.raised_at) > new Date(dateTo + "T23:59:59")) return false;
-      if (filterAreaId && f.area_id !== filterAreaId) return false;
-      if (filterTarget && f.target !== filterTarget) return false;
-      return true;
-    });
-    var schedules = (data.schedules || []).filter(function (s) {
-      if (filterLocationId && s.location_id !== filterLocationId) return false;
-      if (filterDepartmentId && s.assigned_department_id !== filterDepartmentId) return false;
-      return true;
-    });
-    return { issues: issues, schedules: schedules };
+  function deptMatches(dept, row) {
+    if (!dept) return true;
+    if (dept === "__unassigned__") return !row.assigned_department_id;
+    return row.assigned_department_id === dept;
   }
-
+  function setFilters(note, boxes) {
+    document.getElementById("filtersRow").innerHTML =
+      (note ? '<p class="order-note">' + note + '</p>' : "") + '<div class="filters">' + boxes.join("") + '</div>';
+  }
   function sortNamesOtherLast(names, numeric) {
     return names.slice().sort(function (a, b) {
       if (a === "Other" && b !== "Other") return 1;
@@ -362,149 +442,280 @@
       return numeric ? a.localeCompare(b, undefined, { numeric: true }) : a.localeCompare(b);
     });
   }
-
-  function groupForDisplay(issues) {
+  function groupByAreaThenTarget(rows, dateKey, order) {
     var byArea = {};
-    issues.forEach(function (f) {
-      var areaName = f.area || "Other";
-      if (!byArea[areaName]) byArea[areaName] = {};
-      var targetName = f.target || "Other";
-      if (!byArea[areaName][targetName]) byArea[areaName][targetName] = [];
-      byArea[areaName][targetName].push(f);
+    rows.forEach(function (f) {
+      var a = f.area || "Other", t = f.target || "Other";
+      if (!byArea[a]) byArea[a] = {};
+      if (!byArea[a][t]) byArea[a][t] = [];
+      byArea[a][t].push(f);
     });
-    return sortNamesOtherLast(Object.keys(byArea), false).map(function (areaName) {
-      var targets = byArea[areaName];
+    return sortNamesOtherLast(Object.keys(byArea), false).map(function (a) {
       return {
-        name: areaName,
-        targets: sortNamesOtherLast(Object.keys(targets), true).map(function (targetName) {
-          var faults = targets[targetName].slice().sort(function (a, b) {
-            return dateDirection === "oldest"
-              ? new Date(a.raised_at) - new Date(b.raised_at)
-              : new Date(b.raised_at) - new Date(a.raised_at);
-          });
-          return { name: targetName, faults: faults };
+        name: a,
+        targets: sortNamesOtherLast(Object.keys(byArea[a]), true).map(function (t) {
+          return {
+            name: t,
+            rows: byArea[a][t].slice().sort(function (x, y) {
+              return order === "oldest" ? new Date(x[dateKey]) - new Date(y[dateKey]) : new Date(y[dateKey]) - new Date(x[dateKey]);
+            }),
+          };
         }),
       };
     });
   }
+  function anyFilter(t) {
+    var f = F[t];
+    return !!(rangeFrom || rangeTo || Object.keys(f).some(function (k) { return k !== "order" && f[k]; }));
+  }
 
-  function renderIssues(data) {
-    var html = "";
-    var faultCount = data.issues.length;
-    var filtered = filterLocationId || filterAreaId || filterTarget || filterDepartmentId || dateFrom || dateTo;
-    html += '<h2>Open faults <span class="count">' + faultCount + '</span></h2>';
-    if (!data.issues.length) {
-      html += '<p class="empty">Nothing open' + (filtered ? " for this filter" : " across every camp you can see") + '.</p>';
+  // -- Schedule ----------------------------------------------------------
+  // Same filters and card as schedule.html's own Due list (Order,
+  // Status incl. On Hold, Kind), plus Camp and Department — read-only
+  // here, no Complete/Open checklist buttons, since those only make
+  // sense inside one camp.
+
+  function kindOf(s) {
+    if (s.name.indexOf("Room Inspection") === 0) return "room";
+    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0) return "vehicle";
+    return "recurring";
+  }
+  function kindLabel(k) {
+    return k === "room" ? "Room inspections" : k === "vehicle" ? "Vehicle checks" : "Recurring maintenance";
+  }
+
+  function renderSchedule() {
+    var f = F.schedule;
+    var all = rollup.schedules || [];
+    var shown = all.filter(function (s) {
+      if (f.camp && s.location_id !== f.camp) return false;
+      // On Hold is independent of the date status, same as schedule.html.
+      if (f.status === "on_hold" && !s.on_hold) return false;
+      if (f.status && f.status !== "on_hold" && s.status !== f.status) return false;
+      if (f.kind && kindOf(s) !== f.kind) return false;
+      if (!deptMatches(f.dept, s)) return false;
+      return inRange(s.due_date);
+    }).sort(function (a, b) {
+      var da = new Date(a.due_date).getTime(), db = new Date(b.due_date).getTime();
+      return f.order === "oldest" ? da - db : db - da;
+    });
+
+    setFilters("Only what is coming up at each camp, the same list each camp's own Schedule shows.", [
+      campBox("schedule", rollup.locations),
+      orderBox("schedule", "Order", "By due date", true),
+      box("Status", '<label>Show</label>' + select("schedule", "status",
+        [["", "Everything"], ["overdue", "Overdue"], ["active", "Active"], ["upcoming", "Upcoming"], ["on_hold", "On Hold"]])),
+      box("Kind", '<label>Show</label>' + select("schedule", "kind",
+        [["", "Everything"], ["room", "Room inspections"], ["vehicle", "Vehicle checks"], ["recurring", "Recurring maintenance"]])),
+      deptBox("schedule", all, true),
+    ]);
+
+    var html = '<h2>Due <span class="count">' + shown.length + (shown.length !== all.length ? " of " + all.length : "") + '</span></h2>';
+    if (!shown.length) html += '<p class="empty">Nothing outstanding' + (anyFilter("schedule") ? " for this filter" : " across every camp you can see") + '.</p>';
+    if (f.kind) {
+      shown.forEach(function (s) { html += scheduleCard(s); });
+    } else {
+      ["room", "vehicle", "recurring"].forEach(function (k) {
+        var inKind = shown.filter(function (s) { return kindOf(s) === k; });
+        if (!inKind.length) return;
+        html += '<div class="group"><p class="heading">' + kindLabel(k) + " (" + inKind.length + ")</p>";
+        inKind.forEach(function (s) { html += scheduleCard(s); });
+        html += "</div>";
+      });
     }
-    groupForDisplay(data.issues).forEach(function (area) {
+    document.getElementById("app").innerHTML = html;
+  }
+
+  function scheduleCard(s) {
+    var owner = (s.assigned_department || s.assigned_person)
+      ? '<span class="owner' + (s.assigned_person ? "" : " dept") + '">' +
+        esc([s.assigned_department, s.assigned_person].filter(Boolean).join(" — ")) + '</span>'
+      : '<span class="owner none">Unassigned</span>';
+    var isHandover = s.name.indexOf("Handover") === 0;
+    return '<div class="card' + (s.on_hold ? " on-hold" : "") + '"><div class="sched-row"><div>' +
+      '<p class="fault-line" style="font-weight:700"><span class="camp">' + esc(s.location) + '</span>' +
+      (isHandover ? '<span class="badge handover">Handover</span> ' : "") + esc(s.name) + '</p>' +
+      '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' + owner +
+      (s.on_hold ? '<p class="meta">' + s.checked_count + " of " + s.target_count + " done</p>" : "") +
+      '</div><span style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end">' +
+      (s.on_hold ? '<span class="badge onhold">On Hold</span>' : "") +
+      '<span class="badge ' + s.status + '">' + badgeText(s.status) + '</span></span></div></div>';
+  }
+
+  // -- To-Do list --------------------------------------------------------
+  // Same Area → Asset grouping (D-034) and Status (All / Unassigned /
+  // Assigned) as dashboard.html, plus Camp.
+
+  function renderTodo() {
+    var f = F.todo;
+    var all = rollup.issues || [];
+    var shown = all.filter(function (x) {
+      if (f.camp && x.location_id !== f.camp) return false;
+      if (f.status === "unassigned" && x.assigned_department_id) return false;
+      if (f.status === "assigned" && !x.assigned_department_id) return false;
+      if (f.area && x.area_id !== f.area) return false;
+      if (f.target && x.target !== f.target) return false;
+      if (!deptMatches(f.dept, x)) return false;
+      return inRange(x.raised_at);
+    });
+
+    setFilters("Grouped by maintenance area, then asset — each asset's own faults " +
+      (f.order === "oldest" ? "oldest first" : "newest first") + ".", [
+      campBox("todo", rollup.locations),
+      orderBox("todo", "Date", "Order (within each asset)", false),
+      box("Status", '<label>Status</label>' + select("todo", "status", [["", "All"], ["unassigned", "Unassigned"], ["assigned", "Assigned"]])),
+      areaBox("todo", rollup.areas, all),
+      deptBox("todo", all, false),
+    ]);
+
+    var html = '<h2>Open faults <span class="count">' + shown.length + (shown.length !== all.length ? " of " + all.length : "") + '</span></h2>';
+    if (!shown.length) html += '<p class="empty">Nothing open' + (anyFilter("todo") ? " for this filter" : " across every camp you can see") + '.</p>';
+    groupByAreaThenTarget(shown, "raised_at", f.order).forEach(function (area) {
       html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
       area.targets.forEach(function (target) {
         html += '<div class="target-group"><p class="target-heading">' + esc(target.name) + '</p>';
-        target.faults.forEach(function (f) {
-          html += '<div class="card">' +
-            '<p class="fault-line">' + '<span class="camp">' + esc(f.location) + '</span> ' +
-            (f.urgent ? '<span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span> ' : '') + esc(f.label) +
-            (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
-            (f.action ? ' — ' + esc(f.action) : '') +
-            (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(f.assigned_department) + '</span>' : '') +
-            '</p>' +
-            '<p class="meta">' + esc(f.raised_by) + ', ' + timeAgo(f.raised_at) + '</p>' +
-            '</div>';
+        target.rows.forEach(function (x) {
+          html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(x.location) + '</span>' +
+            (x.urgent ? '<span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span> ' : "") + esc(x.label) +
+            (x.fault_type ? ' — <span class="fault">' + esc(x.fault_type) + '</span>' : "") +
+            (x.action ? " — " + esc(x.action) : "") +
+            (x.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(x.assigned_department) + '</span>' : "") +
+            '</p><p class="meta">' + esc(x.raised_by) + ", " + timeAgo(x.raised_at) + '</p></div>';
         });
         html += '</div>';
       });
       html += '</div>';
     });
-
-    html += '<h2>Outstanding schedules <span class="count">' + data.schedules.length + '</span></h2>';
-    if (!data.schedules.length) {
-      html += '<p class="empty">Nothing outstanding' + (filtered ? " for this filter" : " across every camp you can see") + '.</p>';
-    }
-    data.schedules.forEach(function (s) {
-      html += '<div class="card sched-row">' +
-        '<div><p class="fault-line"><span class="camp">' + esc(s.location) + '</span> ' + esc(s.name) + '</p>' +
-        '<p class="meta">' + esc(s.interval) + ' · ' + dueText(s) +
-        (s.assigned_department ? ' · ' + esc(s.assigned_department) : (s.assigned_person ? ' · ' + esc(s.assigned_person) : '')) +
-        '</p></div>' +
-        '<span class="badge ' + s.status + '">' + badgeText(s.status) + '</span>' +
-        '</div>';
-    });
-
     document.getElementById("app").innerHTML = html;
   }
+
+  // -- Completed ---------------------------------------------------------
+  // completed.html's own card and raised → assigned → fixed flow, fed
+  // by `base_rollup_completed` (every camp this person can see).
+
+  function renderCompleted() {
+    var f = F.completed;
+    var all = completedData.issues || [];
+    var locations = rollup ? rollup.locations : campsIn(all);
+    var shown = all.filter(function (x) {
+      if (f.camp && x.location_id !== f.camp) return false;
+      if (f.area && x.area_id !== f.area) return false;
+      if (f.target && x.target !== f.target) return false;
+      if (!deptMatches(f.dept, x)) return false;
+      return inRange(x.resolved_at);
+    });
+
+    setFilters("Grouped by maintenance area, then asset — each asset's own history " +
+      (f.order === "oldest" ? "oldest fixed first" : "newest fixed first") + ".", [
+      campBox("completed", locations),
+      orderBox("completed", "Date resolved", "Order (within each asset)", false),
+      areaBox("completed", completedData.areas, all),
+      deptBox("completed", all, false),
+    ]);
+
+    var html = '<h2>Completed <span class="count">' + shown.length + (shown.length !== all.length ? " of " + all.length : "") + '</span></h2>';
+    if (!shown.length) html += '<p class="empty">Nothing completed' + (anyFilter("completed") ? " for this filter" : " yet at any camp you can see") + '.</p>';
+    groupByAreaThenTarget(shown, "resolved_at", f.order).forEach(function (area) {
+      html += '<div class="area-group"><p class="area-heading">' + esc(area.name) + '</p>';
+      area.targets.forEach(function (target) {
+        html += '<div class="target-group"><p class="target-heading">' + esc(target.name) + '</p>';
+        target.rows.forEach(function (i) { html += completedCard(i); });
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    document.getElementById("app").innerHTML = html;
+  }
+  // Only reached if Completed is the first tab opened this visit —
+  // the camp list then comes from the rows themselves.
+  function campsIn(rows) {
+    var seen = {}, out = [];
+    rows.forEach(function (r) { if (r.location_id && !seen[r.location_id]) { seen[r.location_id] = true; out.push({ id: r.location_id, name: r.location }); } });
+    return out.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+  }
+
+  function completedCard(i) {
+    var html = '<div class="card"><p class="item"><span class="camp">' + esc(i.location) + '</span>' +
+      esc(i.target) + " — " + esc(i.label) +
+      (i.urgent ? ' <span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span>' : "") + '</p>' +
+      (i.fault_type ? '<span class="fault" style="margin-right:6px">' + esc(i.fault_type) + '</span>' : "") +
+      (i.note ? esc(i.note) : "");
+    if (i.audio_url) html += '<audio controls preload="none" src="' + esc(i.audio_url) + '" style="width:100%;margin-top:8px"></audio>';
+    html += '<div class="flow">' +
+      '<div class="step"><span class="dot"></span><span class="text">Raised by <span class="who">' + esc(i.raised_by) + '</span>' +
+      '<span class="when">' + when(i.raised_at) + '</span></span></div>';
+    html += i.assigned_department
+      ? '<div class="step"><span class="dot"></span><span class="text">Assigned to <span class="who">' + esc(i.assigned_department) + '</span>' +
+        '<span class="when">' + (i.assigned_at ? when(i.assigned_at) : "no date on record") + '</span></span></div>'
+      : '<div class="step pending"><span class="dot"></span><span class="text">Never formally assigned</span></div>';
+    html += '<div class="step"><span class="dot"></span><span class="text">Fixed by <span class="who">' + esc(i.resolved_by) + '</span>' +
+      '<span class="when">' + when(i.resolved_at) + '</span></span></div></div>';
+    if (i.actual_action_taken || i.actual_part_used) {
+      html += '<div class="fixnote">' + esc(i.actual_action_taken || "") +
+        (i.actual_part_used ? '<div class="part">Part used: ' + esc(i.actual_part_used) + '</div>' : "") + '</div>';
+    }
+    if (i.notes && i.notes.length) {
+      html += '<div class="notes">' + i.notes.map(function (n) {
+        return '<p class="note-line"><span class="note-who">' + esc(n.by || "Unknown") + '</span> — ' + esc(n.text) + '</p>';
+      }).join("") + '</div>';
+    }
+    if (i.photos && i.photos.length) {
+      html += '<div class="photos">' + i.photos.map(function (url) {
+        return '<a href="' + esc(url) + '" target="_blank"><img loading="lazy" src="' + esc(url) + '"></a>';
+      }).join("") + '</div>';
+    }
+    return html + '</div>';
+  }
+
+  // -- Assets and Staff (D-091) ------------------------------------------
+  // Read-only here, deliberately — editing stays on assets.html /
+  // staff.html, camp by camp, where the Administrator gate lives.
 
   var ASSET_KIND_GROUPS = [["vehicle", "Vehicles"], ["trailer", "Trailers"], ["asset", "Other equipment"]];
 
   function renderAssets() {
-    var box = document.getElementById("assetsSection");
-    if (!assetsData) { box.innerHTML = ""; return; }
-    var locs = assetsData.viewable_locations || assetsData.locations || [];
-    var html = '<h2>Assets</h2>';
-    html += '<div class="filter-section"><div class="title">Camp</div>' +
-      '<label>Site</label><select id="assetsLocationFilter" onchange="onAssetsLocationFilterChange()">' +
-      '<option value="">All camps</option>' +
-      locs.map(function (l) {
-        return '<option value="' + esc(l.id) + '"' + (filterAssetsLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-      }).join("") + '</select></div>';
-
+    var camp = F.assets.camp;
+    setFilters("", [campBox("assets", assetsData.viewable_locations || assetsData.locations || [])]);
+    var html = "";
     ASSET_KIND_GROUPS.forEach(function (k) {
-      var kind = k[0], title = k[1];
-      var all = (assetsData[kind] || []).filter(function (a) { return a.movable !== false && !a.retired; });
-      if (filterAssetsLocationId) all = all.filter(function (a) { return a.location_id === filterAssetsLocationId; });
-      html += '<div class="area-group"><p class="area-heading">' + esc(title) + ' <span style="font-weight:400;color:#8C6A2F">' + all.length + '</span></p>';
-      if (!all.length) html += '<p class="empty">None' + (filterAssetsLocationId ? " at this camp" : "") + '.</p>';
+      var all = (assetsData[k[0]] || []).filter(function (a) { return a.movable !== false && !a.retired; });
+      if (camp) all = all.filter(function (a) { return a.location_id === camp; });
+      html += '<div class="area-group"><p class="area-heading">' + esc(k[1]) + ' <span style="font-weight:400;color:#8C6A2F">' + all.length + '</span></p>';
+      if (!all.length) html += '<p class="empty">None' + (camp ? " at this camp" : "") + '.</p>';
       all.forEach(function (a) {
-        html += '<div class="card"><p class="fault-line">' +
-          '<span class="camp">' + esc(a.location) + '</span> ' +
-          (a.area ? '<span class="fault" style="background:#EDE6D6;color:#8C6A2F">' + esc(a.area) + '</span> ' : '') +
-          esc(a.name) + (a.description ? ' — ' + esc(a.description) : '') + '</p></div>';
+        html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(a.location) + '</span>' +
+          (a.area ? '<span class="fault" style="background:#EDE6D6;color:#8C6A2F">' + esc(a.area) + '</span> ' : "") +
+          esc(a.name) + (a.description ? " — " + esc(a.description) : "") + '</p></div>';
       });
       html += '</div>';
     });
-    box.innerHTML = html;
+    document.getElementById("app").innerHTML = html;
   }
-  window.onAssetsLocationFilterChange = function () {
-    filterAssetsLocationId = document.getElementById("assetsLocationFilter").value;
-    renderAssets();
-  };
 
   function renderStaff() {
-    var box = document.getElementById("staffSection");
-    if (!staffData) { box.innerHTML = ""; return; }
-    var locs = staffData.viewable_locations || staffData.locations || [];
+    var camp = F.staff.camp;
+    setFilters("", [campBox("staff", staffData.viewable_locations || staffData.locations || [])]);
     var all = (staffData.people || []).filter(function (p) { return !p.retired; });
-    if (filterStaffLocationId) all = all.filter(function (p) { return p.home_location_id === filterStaffLocationId; });
+    if (camp) all = all.filter(function (p) { return p.home_location_id === camp; });
     all = all.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
-
     var html = '<h2>Staff <span class="count">' + all.length + '</span></h2>';
-    html += '<div class="filter-section"><div class="title">Camp</div>' +
-      '<label>Site</label><select id="staffLocationFilter" onchange="onStaffLocationFilterChange()">' +
-      '<option value="">All camps</option>' +
-      locs.map(function (l) {
-        return '<option value="' + esc(l.id) + '"' + (filterStaffLocationId === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-      }).join("") + '</select></div>';
-
-    if (!all.length) html += '<p class="empty">None' + (filterStaffLocationId ? " at this camp" : "") + '.</p>';
+    if (!all.length) html += '<p class="empty">None' + (camp ? " at this camp" : "") + '.</p>';
     all.forEach(function (p) {
-      html += '<div class="card"><p class="fault-line">' +
-        '<span class="camp">' + esc(p.home_location) + '</span> ' + esc(p.name) +
-        (p.department ? ' — <span class="fault">' + esc(p.department) + '</span>' : '') +
-        (p.is_base_manager ? ' <span class="fault" style="background:#DDE6F4;color:#2F5B8C">Base Manager</span>' : '') +
+      html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(p.home_location) + '</span>' + esc(p.name) +
+        (p.department ? ' — <span class="fault">' + esc(p.department) + '</span>' : "") +
+        (p.is_base_manager ? ' <span class="fault" style="background:#DDE6F4;color:#2F5B8C">Base Manager</span>' : "") +
         '</p><p class="meta">' + (p.phone ? esc(p.phone) : "no number on file") + '</p></div>';
     });
-    box.innerHTML = html;
+    document.getElementById("app").innerHTML = html;
   }
-  window.onStaffLocationFilterChange = function () {
-    filterStaffLocationId = document.getElementById("staffLocationFilter").value;
-    renderStaff();
-  };
 
   try { var saved = sessionStorage.getItem("bw_signin"); if (saved) me = JSON.parse(saved); } catch (e) {}
   if (!me) {
     location.href = "./";
   } else {
     document.getElementById("whoName").textContent = me.name;
-    load();
+    renderTabs();
+    ensureLoaded();
   }
 </script>
 <script>
