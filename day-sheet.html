@@ -349,16 +349,27 @@ function val(row, key, scope){
 // master.docx. An unknown or missing department falls back to the whole
 // list rather than an empty box — better to show too many than to make a
 // role unfillable because somebody's department was not set.
+//
+// Guides and Drivers split in two, 2026-09-24 (maintenance tool-local
+// D-093). Mark's rules: game drives are guides only, so the guide box is
+// the Guides department; a guest transfer "can be driven by anyone
+// indicated within the Guest column", so both driver boxes list whoever
+// at this camp has can_drive_guests, whatever their department —
+// managers and maintenance staff included.
 var ROLE_DEPARTMENTS = {
   housekeeper_id: ["Housekeeping"],
-  guide_id: ["Guides and Drivers"],
-  arrival_driver_id: ["Guides and Drivers"],
-  departure_driver_id: ["Guides and Drivers"],
+  guide_id: ["Guides"],
 };
+var GUEST_DRIVER_ROLES = ["arrival_driver_id", "departure_driver_id"];
 function peopleFor(key){
-  var want = ROLE_DEPARTMENTS[key];
-  if (!want) return boot.people;
-  var matching = boot.people.filter(function (p) { return want.indexOf(p.department) !== -1; });
+  var matching;
+  if (GUEST_DRIVER_ROLES.indexOf(key) !== -1) {
+    matching = boot.people.filter(function (p) { return p.can_drive_guests; });
+  } else {
+    var want = ROLE_DEPARTMENTS[key];
+    if (!want) return boot.people;
+    matching = boot.people.filter(function (p) { return want.indexOf(p.department) !== -1; });
+  }
   return matching.length ? matching : boot.people;
 }
 

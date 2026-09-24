@@ -692,6 +692,15 @@
     document.getElementById("app").innerHTML = html;
   }
 
+  // Who may drive what, D-093 — the staff sheet's Guests / Utility / Boat.
+  function drivesText(p) {
+    var can = [];
+    if (p.can_drive_guests) can.push("Guests");
+    if (p.can_drive_utility) can.push("Utility");
+    if (p.can_operate_boats) can.push("Boats");
+    return can.length ? " · Drives: " + can.join(", ") : "";
+  }
+
   function renderStaff() {
     var camp = F.staff.camp;
     var all = (staffData.people || []).filter(function (p) { return !p.retired; });
@@ -717,7 +726,8 @@
       html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(p.home_location) + '</span>' + esc(p.name) +
         (p.department ? ' — <span class="fault">' + esc(p.department) + '</span>' : "") +
         (p.is_base_manager ? ' <span class="fault" style="background:#DDE6F4;color:#2F5B8C">Base Manager</span>' : "") +
-        '</p><p class="meta">' + (p.phone ? esc(p.phone) : "no number on file") + '</p></div>';
+        '</p><p class="meta">' + (p.phone ? esc(p.phone) : "no number on file") +
+        drivesText(p) + '</p></div>';
     });
     document.getElementById("app").innerHTML = html;
   }

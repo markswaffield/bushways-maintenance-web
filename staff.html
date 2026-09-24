@@ -205,6 +205,9 @@ window.savePerson = function(){
     home_location_id: el("f_loc").value,
     department_id: el("f_dept").value || null,
     is_manager: el("f_mgr").checked,
+    can_drive_guests: el("f_guests").checked,
+    can_drive_utility: el("f_utility").checked,
+    can_operate_boats: el("f_boat").checked,
   }).then(function(out){
     if (out.error) { alert(out.error); return; }
     editing = null; load();
@@ -253,8 +256,25 @@ function personForm(){
     '<label>Department</label><select id="f_dept">' + deptOptions(editing.home_location_id, editing.department_id) + '</select>' +
     '<label class="check" style="margin-top:10px">' +
     '<input type="checkbox" id="f_mgr"' + (editing.is_manager ? " checked" : "") + '> Management</label>' +
+    // Who may drive what — the staff sheet's Guests / Utility / Boat
+    // columns (D-093). Guests decides who the Day Sheet offers as a
+    // transfer driver at their camp.
+    '<label>Allowed to drive / operate</label>' +
+    '<label class="check"><input type="checkbox" id="f_guests"' + (editing.can_drive_guests ? " checked" : "") + '> Guests</label>' +
+    '<label class="check"><input type="checkbox" id="f_utility"' + (editing.can_drive_utility ? " checked" : "") + '> Utility vehicles</label>' +
+    '<label class="check"><input type="checkbox" id="f_boat"' + (editing.can_operate_boats ? " checked" : "") + '> Boats</label>' +
     '<div class="acts"><button class="primary" onclick="savePerson()">' + (isNew ? "Add" : "Save changes") + '</button>' +
     '<button onclick="cancel()">Cancel</button></div></div>';
+}
+
+// "Drives: Guests · Utility · Boats" — only what they're allowed, and
+// nothing at all for someone allowed none (D-093).
+function drivesLine(p){
+  var can = [];
+  if (p.can_drive_guests) can.push("Guests");
+  if (p.can_drive_utility) can.push("Utility vehicles");
+  if (p.can_operate_boats) can.push("Boats");
+  return can.length ? '<p class="mt">Drives: ' + can.join(" · ") + '</p>' : "";
 }
 
 function personRow(p){
@@ -265,6 +285,7 @@ function personRow(p){
     (p.is_base_manager ? '<span class="tag basemgr">Base Manager — all sites</span>' : "") +
     (p.retired ? " · retired" : "") + '</p>' +
     '<p class="mt">' + (p.phone ? esc(p.phone) : "no number on file") + '</p>' +
+    drivesLine(p) +
     (p.retired && p.retired_reason ? '<p class="mt">' + esc(p.retired_reason) + '</p>' : "");
   // Visible to all management, editable only by administrators — per
   // Mark, 2026-09-18: "Assets and Staff - visible to all management
