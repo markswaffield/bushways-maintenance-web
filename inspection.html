@@ -307,7 +307,11 @@
         // either way (2026-09-11, Mark: "please build the vehicle
         // inspection screen for the maintenance tool").
         targetType = area.name === "Vehicles" ? "vehicle" : "room";
-        var list = targetType === "vehicle" ? state.vehicles : state.rooms;
+        // Guest Rooms lists only real guest rooms — a room with its own
+        // area (Boteti's Campsites and Meru Tents, D-095) is listed under
+        // that area instead.
+        var list = targetType === "vehicle" ? state.vehicles
+          : state.rooms.filter(function (x) { return !x.area_id; });
         document.getElementById("targetTitle").textContent =
           targetType === "vehicle" ? "Vehicle Check" : "Guest Room Inspection";
         document.getElementById("targetSub").textContent = campName() + " — which "
@@ -343,7 +347,10 @@
           .then(function (data) {
             var targets = data.targets || [];
             if (targets.length) {
-              targetType = "asset";
+              // Named assets, or rooms that use this area's checklist
+              // (Campsites, Meru Tents — D-095). One area never mixes the
+              // two, so the first target's type is the list's type.
+              targetType = targets[0].type || "asset";
               document.getElementById("targetTitle").textContent = area.name;
               document.getElementById("targetSub").textContent = campName() + " — which one are you checking?";
               document.getElementById("targetLabel").textContent = "Which one?";
