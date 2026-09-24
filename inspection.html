@@ -265,9 +265,15 @@
     // Rooms has a real checklist behind it today; the rest show as
     // "(coming soon)" rather than disappearing, so the full property is
     // visible even before every area has a working screen.
+    //
+    // Only the areas this camp actually has, 2026-09-24 (D-094). Every
+    // one of the original 15 is live at every lodge now, so "(coming
+    // soon)" had come to mean "this camp doesn't have one at all" —
+    // Campsites, Meru Tents and Camp Ablutions are Boteti's only, and
+    // Chobe offering "Campsites (coming soon)" would be simply wrong.
     var a = document.getElementById("area");
     a.innerHTML = '<option value="">Select one</option>' +
-      data.areas.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.available ? "" : " (coming soon)") + '</option>'; }).join("") +
+      data.areas.filter(function (x) { return x.available; }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join("") +
       '<option value="__report__">Report a fault</option>';
 
     if (deepLinkTarget) {
