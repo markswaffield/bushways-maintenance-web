@@ -280,6 +280,13 @@
     return v ? (v.registration || v.label) : "";
   }
   var handovers = [], handoverPeople = [], raisingHandover = false, editingHandoverId = null;
+  // The camp this page is showing (from the server, so it's right for a
+  // single-camp person with no bw_camp too) and every lodge a vehicle
+  // could be handed to — D-100.
+  var HERE = null, allLodges = [];
+  // What's been picked so far on the raise/edit handover form, kept
+  // across the re-render each Lodge/Department choice triggers.
+  var ho = {};
   // The reference view of a completed handover's checklist, reopenable
   // any time — per Mark, 2026-09-17: "now when i sign off on it - i
   // want to be able to see the history of the handover so i can easily
@@ -365,8 +372,11 @@
   window.onFilterDept = function () {
     filterDept = document.getElementById("fDept").value; filterPerson = ""; mine = false; render();
   };
+  // Department first, then a person within it — Mark, 2026-09-25:
+  // "after selecting the department - the drop down menu shows the staff
+  // names of the whole group". Picking a person keeps the department.
   window.onFilterPerson = function () {
-    filterPerson = document.getElementById("fPerson").value; filterDept = ""; mine = false; render();
+    filterPerson = document.getElementById("fPerson").value; mine = false; render();
   };
   window.clearWhoFilter = function () { filterDept = ""; filterPerson = ""; mine = false; render(); };
   window.doAssignTask = function (taskId) {
@@ -449,9 +459,17 @@
       departments.map(function (d) {
         return '<option value="' + esc(d.name) + '"' + (filterDept === d.name ? " selected" : "") + '>' + esc(d.name) + '</option>';
       }).join("") + '</select>';
+    // Only this camp's own people (bootstrap() also returns every
+    // administrator and base manager group-wide), and only the chosen
+    // department's, when one is chosen (D-100).
+    var personChoices = people.filter(function (p) {
+      if (HERE && p.home_location_id !== HERE) return false;
+      if (filterDept && filterDept !== "__unassigned__" && p.department !== filterDept) return false;
+      return true;
+    });
     html += '<label>Person</label><select id="fPerson" onchange="onFilterPerson()">' +
-      '<option value="">Anyone</option>' +
-      people.map(function (p) {
+      '<option value="">' + (filterDept && filterDept !== "__unassigned__" ? "Anyone in " + esc(filterDept) : "Anyone") + '</option>' +
+      personChoices.map(function (p) {
         return '<option value="' + esc(p.id) + '"' + (filterPerson === p.id ? " selected" : "") + '>' +
           esc(p.name) + (p.department ? " · " + esc(p.department) : "") + '</option>';
       }).join("") + '</select>';
@@ -920,7 +938,10 @@
   // submit() in the Edge Function. "History", below, still opens the
   // read-only view of what the outgoing person recorded, any time —
   // a different, still-useful feature, untouched.
-  window.startRaiseHandover = function () { raisingHandover = true; editingHandoverId = null; render(); };
+  window.startRaiseHandover = function () {
+    ho = { to_lodge: HERE || "", on: new Date().toISOString().slice(0, 10), end: "" };
+    raisingHandover = true; editingHandoverId = null; render();
+  };
   window.cancelHandover = function () { raisingHandover = false; editingHandoverId = null; render(); };
 
   // Correcting a handover after it's raised — Mark, 2026-09-18: "If a
@@ -931,17 +952,26 @@
   // locks the moment they've actually done the outgoing check
   // (`handed_over_at` set) — the form below shows that as fixed text
   // rather than a picker once it does.
-  window.startEditHandover = function (id) { editingHandoverId = id; raisingHandover = false; render(); };
+  window.startEditHandover = function (id) {
+    var x = handovers.filter(function (h) { return h.id === id; })[0] || {};
+    var from = personById(x.from_person_id), to = personById(x.to_person_id);
+    ho = {
+      from: x.from_person_id || "", from_dept: from ? (from.department || "") : "",
+      to: x.to_person_id || "", to_lodge: (to && to.home_location_id) || HERE || "", to_dept: to ? (to.department || "") : "",
+      on: x.on, end: x.to_location_id && x.to_location_id !== HERE ? x.to_location_id : "", endTouched: true,
+    };
+    editingHandoverId = id; raisingHandover = false; render();
+  };
   window.doEditHandover = function (id, btn) {
     if (btn) btn.disabled = true;
     fetch(FN.replace("action=dashboard", "action=edit_handover"), {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({
         by_person_id: me && me.id, handover_id: id,
-        from_person_id: document.getElementById("eho_from") ? document.getElementById("eho_from").value : undefined,
-        to_person_id: document.getElementById("eho_to").value,
-        handover_on: document.getElementById("eho_on").value,
-        to_location_id: document.getElementById("eho_lodge").value || null,
+        from_person_id: document.getElementById("ho_from") ? document.getElementById("ho_from").value : undefined,
+        to_person_id: document.getElementById("ho_to").value,
+        handover_on: document.getElementById("ho_on").value,
+        to_location_id: document.getElementById("ho_end").value || null,
       }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
@@ -974,7 +1004,7 @@
         from_person_id: document.getElementById("ho_from").value,
         to_person_id: document.getElementById("ho_to").value,
         handover_on: document.getElementById("ho_on").value,
-        to_location_id: document.getElementById("ho_lodge").value || null,
+        to_location_id: document.getElementById("ho_end").value || null,
       }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
@@ -982,52 +1012,88 @@
     });
   };
 
-  function personOptions(sel) {
-    return handoverPeople.map(function (p) {
-      return '<option value="' + esc(p.id) + '"' + (sel === p.id ? " selected" : "") + '>' +
-        esc(p.name) + (p.department ? " · " + esc(p.department) : "") +
-        (p.lodge ? " · " + esc(p.lodge) : "") + '</option>';
-    }).join("");
+  // Lodge → Department → Name, per Mark, 2026-09-25: "when choosing a
+  // name - we need a department filter first, and same for if it is
+  // handing over to another lodge - Lodge Name > Department" (D-100).
+  // The one pair of pickers both the raise and the edit form use.
+  function personById(id) { return handoverPeople.filter(function (p) { return p.id === id; })[0]; }
+  function lodgeName(id) { var l = allLodges.filter(function (x) { return x.id === id; })[0]; return l ? l.name : ""; }
+  function deptsAt(loc) {
+    var seen = {}, out = [];
+    handoverPeople.forEach(function (p) {
+      if (p.home_location_id === loc && p.department && !seen[p.department]) { seen[p.department] = true; out.push(p.department); }
+    });
+    return out.sort();
+  }
+  function peopleAt(loc, dept) {
+    return handoverPeople.filter(function (p) { return p.home_location_id === loc && (!dept || p.department === dept); });
+  }
+  function hoSelect(key, first, options, sel) {
+    return '<select id="ho_' + key + '" onchange="onHoPick(\'' + key + '\')">' +
+      (first !== null ? '<option value="">' + esc(first) + '</option>' : '') +
+      options.map(function (o) {
+        return '<option value="' + esc(o[0]) + '"' + (sel === o[0] ? " selected" : "") + '>' + esc(o[1]) + '</option>';
+      }).join("") + '</select>';
+  }
+  function hoPeopleOptions(loc, dept) {
+    return peopleAt(loc, dept).map(function (p) { return [p.id, p.name + (dept ? "" : (p.department ? " · " + p.department : ""))]; });
+  }
+  function hoRead() {
+    ["vehicle", "from_dept", "from", "to_lodge", "to_dept", "to", "on", "end"].forEach(function (k) {
+      var el = document.getElementById("ho_" + k); if (el) ho[k] = el.value;
+    });
+  }
+  window.onHoPick = function (key) {
+    hoRead();
+    if (key === "from_dept") ho.from = "";
+    if (key === "to_dept") ho.to = "";
+    if (key === "to_lodge") {
+      ho.to_dept = ""; ho.to = "";
+      // Where the vehicle ends up follows who's receiving it, until
+      // someone sets it themselves.
+      if (!ho.endTouched) ho.end = ho.to_lodge && ho.to_lodge !== HERE ? ho.to_lodge : "";
+    }
+    if (key === "end") ho.endTouched = true;
+    render();
+  };
+  function hoPickers(lockedFromText) {
+    var here = HERE || "";
+    var h = '<label>Handed over by</label>';
+    if (lockedFromText) {
+      h += '<p class="rmeta" style="margin:2px 0 10px">' + esc(lockedFromText) + '</p>';
+    } else {
+      h += hoSelect("from_dept", "Department…", deptsAt(here).map(function (d) { return [d, d]; }), ho.from_dept || "") +
+        hoSelect("from", "Name…", hoPeopleOptions(here, ho.from_dept), ho.from || "");
+    }
+    h += '<label>Received by</label>' +
+      hoSelect("to_lodge", null, allLodges.map(function (l) { return [l.id, l.name + (l.id === here ? " (this lodge)" : "")]; }), ho.to_lodge || here) +
+      hoSelect("to_dept", "Department…", deptsAt(ho.to_lodge || here).map(function (d) { return [d, d]; }), ho.to_dept || "") +
+      hoSelect("to", "Name…", hoPeopleOptions(ho.to_lodge || here, ho.to_dept), ho.to || "");
+    h += '<label>On</label><input type="date" id="ho_on" value="' + esc(ho.on || "") + '">' +
+      '<label>Ending up at</label>' +
+      hoSelect("end", "Staying at this lodge", allLodges.filter(function (l) { return l.id !== here; }).map(function (l) { return [l.id, l.name]; }), ho.end || "") +
+      '<p class="rmeta" style="margin-top:4px">If it ends up at a different lodge, signing for it moves the vehicle there — ' +
+      'with its open faults, schedules and open checks.</p>';
+    return h;
   }
 
   function handoverForm() {
-    var today = new Date().toISOString().slice(0, 10);
     return '<div class="form">' +
       '<label>Vehicle</label><select id="ho_vehicle">' +
-      boot_vehicles.map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.label) + '</option>'; }).join("") +
+      boot_vehicles.map(function (v) { return '<option value="' + esc(v.id) + '"' + (ho.vehicle === v.id ? " selected" : "") + '>' + esc(v.label) + '</option>'; }).join("") +
       '</select>' +
-      '<label>Handed over by</label><select id="ho_from"><option value="">Choose…</option>' + personOptions(null) + '</select>' +
-      '<label>Received by</label><select id="ho_to"><option value="">Choose…</option>' + personOptions(null) + '</select>' +
-      '<label>On</label><input type="date" id="ho_on" value="' + today + '">' +
-      '<label>Ending up at</label><select id="ho_lodge">' +
-      '<option value="">Staying at this lodge</option>' +
-      (lastData.locations || []).map(function (l) {
-        return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>';
-      }).join("") + '</select>' +
-      '<p class="rmeta" style="margin-top:4px">If it ends up at a different lodge, signing for it moves the vehicle there — ' +
-      'with its open faults, schedules and open checks.</p>' +
+      hoPickers(null) +
       '<div class="racts"><button onclick="doRaiseHandover(this)">Raise handover</button>' +
       '<button onclick="cancelHandover()">Cancel</button></div></div>';
   }
 
-  // Same fields as raising one, pre-filled — "Handed over by" becomes
+  // Same pickers as raising one, pre-filled — "Handed over by" becomes
   // fixed text once that person's own check is already recorded
   // (`handed_over_at` set), since that can't change any more; every
   // other field stays open right up until the handover is done.
   function handoverEditForm(x) {
-    var fromLocked = !!x.handed_over_at;
     return '<div class="form">' +
-      '<label>Handed over by</label>' +
-      (fromLocked
-        ? '<p class="rmeta" style="margin:2px 0 10px">' + esc(x.from) + ' — the check is already recorded against them, so this can\'t change now.</p>'
-        : '<select id="eho_from"><option value="">Choose…</option>' + personOptions(x.from_person_id) + '</select>') +
-      '<label>Received by</label><select id="eho_to"><option value="">Choose…</option>' + personOptions(x.to_person_id) + '</select>' +
-      '<label>On</label><input type="date" id="eho_on" value="' + esc(x.on) + '">' +
-      '<label>Ending up at</label><select id="eho_lodge">' +
-      '<option value="">Staying at this lodge</option>' +
-      (lastData.locations || []).map(function (l) {
-        return '<option value="' + esc(l.id) + '"' + (x.to_location_id === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-      }).join("") + '</select>' +
+      hoPickers(x.handed_over_at ? x.from + " — the check is already recorded against them, so this can't change now." : null) +
       '<div class="racts"><button onclick="doEditHandover(\'' + x.id + '\', this)">Save changes</button>' +
       '<button onclick="cancelHandover()">Cancel</button></div></div>';
   }
@@ -1407,6 +1473,8 @@
     ]).then(function (res) {
       handovers = res[2].handovers || [];
       handoverPeople = res[2].people || [];
+      HERE = res[2].here || null;
+      allLodges = res[2].locations || [];
       lastData = res[0]; departments = res[0].departments || [];
       areas = (res[0].areas || []).filter(function (a) { return !a.parent_area_id; })
         .sort(function (a, b) { return a.name.localeCompare(b.name); });
