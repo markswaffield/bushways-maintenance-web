@@ -167,7 +167,10 @@
     // with the same name going to different places is the confusion
     // to avoid (D-092).
     document.getElementById("navRow").innerHTML = navHtml(m, "",
-      ["Inspection", "Fix a fault", "Schedule", "To-do list", "Completed", "Assets", "Staff"]);
+      ["Inspection", "Fix a fault", "Schedule", "To-do list", "Completed", "Assets", "Staff",
+       // The way back is the "← Base Dashboard" button in the sign-in
+       // bar below (D-103) — one clear button, not two with the same name.
+       "Base Dashboard"]);
   })();
 </script>
 
@@ -179,7 +182,11 @@
      arriving here with no session sends you back to the landing page. -->
 <div class="whobar" id="whoSignedIn">
   <span>👤 <b id="whoName"></b></span>
-  <span class="whobar-btns"><button onclick="signOut()">Sign out</button></span>
+  <!-- Back to the hub — Mark, 2026-09-25: "when you enter into the Roll
+       Up Screen - there is no option to go back to the Dashboard". The
+       same place every other page's "Change camp" goes, in the same
+       bar, a real button per the root hard rule (D-103). -->
+  <span class="whobar-btns"><button onclick="location.href='./base-dashboard.html'">← Base Dashboard</button><button onclick="signOut()">Sign out</button></span>
 </div>
 
 <div class="filter-section" id="rangeBox">
