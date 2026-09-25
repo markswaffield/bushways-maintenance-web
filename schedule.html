@@ -143,6 +143,21 @@
   .who.none{background:#F1EDE4;color:#A8A192;font-weight:400;font-style:italic}
   .who.pending{background:#F4E3D3;color:#8C6A2F}
   .ho-parties{margin:4px 0 0}
+  /* The two people in a handover, each in their own colour wherever
+     they appear — Mark, 2026-09-25: "colour code the 2 people involved
+     in the handover with different colours" (D-102). Blue hands over,
+     teal receives; whether each has checked yet reads from the tick and
+     a solid (done) or dashed (outstanding) outline, not the colour. */
+  .who.giver{background:#DDE6F4;color:#2F5B8C}
+  .who.taker{background:#D3ECE8;color:#1F6660}
+  .who.giver,.who.taker{border:1.5px dashed currentColor}
+  .who.giver.done,.who.taker.done{border-style:solid}
+  .ho-role{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .ho-role.giver{background:#2F5B8C}
+  .ho-role.taker{background:#1F6660}
+  button.ho-open.giver{border-color:#2F5B8C;color:#2F5B8C}
+  button.ho-open.taker{border-color:#1F6660;color:#1F6660}
+  .rule.just-raised{border-color:#2F5B8C;box-shadow:0 0 0 2px #DDE6F4}
   .ho-parties .arrow{color:#8C6A2F;margin:0 4px;font-size:11.5px}
   .ho-faults{font-size:13.5px;margin:4px 0 0}
   .sign-checklist{max-height:320px;overflow-y:auto;border:1px solid #E3DFD3;border-radius:6px;padding:8px 10px;margin-bottom:10px;background:#fff}
@@ -287,6 +302,9 @@
   // What's been picked so far on the raise/edit handover form, kept
   // across the re-render each Lodge/Department choice triggers.
   var ho = {};
+  // The handover just raised on this page, so it can sit first with its
+  // "Open checklist" button right there (D-102).
+  var justRaisedId = null;
   // The reference view of a completed handover's checklist, reopenable
   // any time — per Mark, 2026-09-17: "now when i sign off on it - i
   // want to be able to see the history of the handover so i can easily
@@ -1008,7 +1026,7 @@
       }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
-      raisingHandover = false; reload();
+      raisingHandover = false; justRaisedId = out.handover_id || null; reload();
     });
   };
 
@@ -1058,14 +1076,14 @@
   };
   function hoPickers(lockedFromText) {
     var here = HERE || "";
-    var h = '<label>Handed over by</label>';
+    var h = '<label><span class="ho-role giver"></span>Handed over by</label>';
     if (lockedFromText) {
       h += '<p class="rmeta" style="margin:2px 0 10px">' + esc(lockedFromText) + '</p>';
     } else {
       h += hoSelect("from_dept", "Department…", deptsAt(here).map(function (d) { return [d, d]; }), ho.from_dept || "") +
         hoSelect("from", "Name…", hoPeopleOptions(here, ho.from_dept), ho.from || "");
     }
-    h += '<label>Received by</label>' +
+    h += '<label><span class="ho-role taker"></span>Received by</label>' +
       hoSelect("to_lodge", null, allLodges.map(function (l) { return [l.id, l.name + (l.id === here ? " (this lodge)" : "")]; }), ho.to_lodge || here) +
       hoSelect("to_dept", "Department…", deptsAt(ho.to_lodge || here).map(function (d) { return [d, d]; }), ho.to_dept || "") +
       hoSelect("to", "Name…", hoPeopleOptions(ho.to_lodge || here, ho.to_dept), ho.to || "");
@@ -1132,7 +1150,13 @@
     }
     if (raisingHandover) h += handoverForm();
 
-    handovers.slice(0, 20).forEach(function (x) {
+    // The one just raised goes first, whatever its date.
+    var list = handovers.slice(0, 20);
+    if (justRaisedId) {
+      list = list.filter(function (x) { return x.id === justRaisedId; })
+        .concat(list.filter(function (x) { return x.id !== justRaisedId; }));
+    }
+    list.forEach(function (x) {
       // Both parties, each with their own status — not one combined
       // sentence. Per Mark, 2026-09-16: "show both parties that need
       // to check, and highlight when one has checked and the other is
@@ -1140,12 +1164,13 @@
       // that per-person signature, already tracked, just not shown
       // this plainly before.
       var fromDone = !!x.handed_over_at, toDone = !!x.received_at;
-      h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + '">' +
+      h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + (x.id === justRaisedId ? " just-raised" : "") + '">' +
+        (x.id === justRaisedId ? '<p class="order-note" style="margin:0 0 4px;color:#2F5B8C;font-weight:600">Handover raised.</p>' : '') +
         '<p class="rname">' + esc(x.vehicle) + '</p>' +
         '<p class="ho-parties">' +
-          '<span class="who' + (fromDone ? "" : " pending") + '">' + esc(x.from) + (fromDone ? " ✓ checked" : " — outstanding") + '</span>' +
+          '<span class="who giver' + (fromDone ? " done" : "") + '">' + esc(x.from) + (fromDone ? " ✓ checked" : " — outstanding") + '</span>' +
           '<span class="arrow">→</span>' +
-          '<span class="who' + (toDone ? "" : " pending") + '">' + esc(x.to) + (toDone ? " ✓ checked" : " — outstanding") + '</span>' +
+          '<span class="who taker' + (toDone ? " done" : "") + '">' + esc(x.to) + (toDone ? " ✓ checked" : " — outstanding") + '</span>' +
         '</p>' +
         '<p class="rmeta">' + esc(x.on) +
           (x.moves_lodge ? " · " + esc(x.from_lodge) + " → " + esc(x.to_lodge) : "") + '</p>';
@@ -1210,12 +1235,19 @@
       // comment above handoversSection's JS). Completing it is just
       // doing the vehicle's own check; this line only says whose turn
       // that is.
-      if (x.stage === "awaiting_receipt") {
-        h += '<p class="order-note" style="margin:4px 0 0">' +
-          (me && me.id === x.to_person_id
-            ? "Open this vehicle from Inspection and do a Vehicle Check — that completes the handover."
-            : "Waiting for " + esc(x.to) + " to do a Vehicle Check on this vehicle — that completes the handover.") +
-          '</p>';
+      // Straight to the vehicle's checklist — Mark, 2026-09-25: "after
+      // it has been raised I want a button that takes you straight to
+      // the checklist" (D-102). Whose turn it is decides the label and
+      // colour: the person handing over checks first, then the person
+      // receiving does theirs, which completes the handover.
+      if (x.stage !== "done" && x.vehicle_id) {
+        var giverTurn = x.stage === "awaiting_checklist";
+        h += '<div class="racts" style="margin-top:8px"><button class="ho-open ' + (giverTurn ? "giver" : "taker") +
+          '" onclick="location.href=\'./inspection.html?target=' + esc(x.vehicle_id) + '&target_type=vehicle\'">' +
+          'Open ' + esc(giverTurn ? x.from : x.to) + '\'s checklist →</button></div>' +
+          '<p class="order-note" style="margin:4px 0 0">' +
+          (giverTurn ? esc(x.from) + " checks the vehicle first, then " + esc(x.to) + " checks it to accept it."
+                     : esc(x.to) + "'s check on this vehicle completes the handover.") + '</p>';
       }
       h += '</div>';
     });
