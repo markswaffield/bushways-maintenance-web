@@ -971,7 +971,16 @@ function loadXlsx(){
 
 // "None", "N/A", "TBA" and friends are an ANSWER — the agent was asked and
 // said no. Treated as nothing to show, never as a failure to read.
-var NOTHING = /^\s*(n\/?a|none|nil|no|-|–|not applicable|tba|tbc|none\s+known|nothing)\s*\.?\s*$/i;
+// Spelled out rather than "anything starting with none", because "None of
+// the party eat pork" IS an answer and must not be swallowed. These are the
+// real forms seen across 172 bookings, typos included — agents write "None
+// advsed" and "None advied" as often as they spell it correctly.
+var NOTHING = new RegExp("^\\s*(?:" + [
+  "n\\.?/?a\\.?", "nil", "no", "-", "–", "not applicable", "tba", "tbc", "unknown",
+  "non[e]?\\s*(?:advised|advsed|advied|adviced|stated|provided|requested|known|noted|given|reported|for\\s+now|at\\s+this\\s+stage|so\\s+far)?",
+  "nothing\\s*(?:advised|noted|reported|specific)?",
+  "not\\s+advised", "none\\s+that\\s+we\\s+know\\s+of"
+].join("|") + ")\\s*\\.?\\s*$", "i");
 
 // Labels are classified by the WORDS THEY CONTAIN, not by the order those
 // words appear in. That matters: "Medical & dietary Requirement" and
@@ -1179,6 +1188,42 @@ function parseOpsChart(rows, campName){
   return { bookings: out, camps: camps };
 }
 
+// Which bookings are worth sending to the AI layer, and which are not.
+//
+// A booking is only worth reading if the rules found NO HEADING for a field.
+// "Dietary requirements: None" is an answer — the agent was asked and said
+// no — so that booking is finished and costs nothing. This keeps the bill to
+// the bookings that actually have prose nobody has labelled.
+//
+// extract() distinguishes the two: a heading that was found and said nothing
+// still returns an entry (with value null), whereas no heading at all returns
+// nothing for that field.
+function needsAi(b){
+  var x = b.extraction || {};
+  var open = ["dietary","medical","occasion"].some(function(k){ return !x[k]; })
+          || !x.bed || !x.basis;
+  if (!open) return false;
+  var text = [b.guest_details || "", b.special_requests || ""].join(" ").trim();
+  return text.length > 25;            // nothing to read in a line or two
+}
+
+// What gets merged back. The AI never overwrites something the rules read off
+// a real heading — a labelled value is better evidence than a sentence — so
+// this only ever fills gaps.
+function mergeAi(b, got){
+  if (!got) return;
+  var x = b.extraction || (b.extraction = {});
+  var into = { bed:"bed_type", basis:"booking_basis", dietary:"dietary",
+               medical:"medical", occasion:"special_occasion" };
+  Object.keys(into).forEach(function(k){
+    if (x[k]) return;                 // the rules already answered this one
+    var f = got[k];
+    if (!f || !f.value) return;
+    x[k] = f;
+    b[into[k]] = f.value;
+  });
+}
+
 var opsPending = null;
 
 function opsMsg(text, kind){
@@ -1196,6 +1241,14 @@ function showOpsReport(parsed, res){
         + ' — <b>'+withRoom+'</b> with a room allocated, <b>'+(parsed.bookings.length-withRoom)
         + '</b> still to place.</p>';
   if (other.length) h += '<p class="meta">Other camps in this file (ignored): '+esc(other.join(", "))+'.</p>';
+  if (parsed.aiRead){
+    h += '<p class="meta">'
+      + (parsed.aiOff
+          ? "Read " + parsed.aiRead + " booking(s) by label only — the AI reader is not configured."
+          : "Read " + parsed.aiRead + " booking(s) whose notes carry no headings; found something in <b>"
+            + (parsed.aiFilled || 0) + "</b>. Those show on the sheet marked as worth a look.")
+      + "</p>";
+  }
   if (!parsed.bookings.length){
     h += '<p class="warn">Nothing in this file is for this camp. Check you exported the right property, '
       +  'and that you are on the right camp\'s day sheet.</p>';
@@ -1236,6 +1289,28 @@ document.addEventListener("change", function(e){
       var rows = XLSX.utils.sheet_to_json(wb.Sheets["notes"], { header: 1, raw: false, defval: "" });
       var parsed = parseOpsChart(rows, shownCamp.name);
       if (!parsed.bookings.length){ showOpsReport(parsed, null); opsMsg(""); return; }
+      var ask = parsed.bookings.filter(needsAi);
+      var step = Promise.resolve();
+      if (ask.length){
+        opsMsg("Reading "+ask.length+" booking"+(ask.length===1?"":"s")+" the labels did not cover…");
+        step = post("ai_extract", {
+          items: ask.map(function(b, i){
+            b._ai = "b" + i;
+            return { id: b._ai, text: [b.guest_details || "", b.special_requests || ""].join("\n\n") };
+          })
+        }).then(function(res){
+          // A failure here is not an error: the rules already did their part,
+          // and an import must never depend on OpenRouter being reachable.
+          var r = (res && res.results) || {};
+          var filled = 0;
+          ask.forEach(function(b){ if (r[b._ai]){ mergeAi(b, r[b._ai]); filled++; } });
+          parsed.bookings.forEach(function(b){ delete b._ai; });
+          parsed.aiRead = ask.length;
+          parsed.aiFilled = filled;
+          parsed.aiOff = res && res.used === false;
+        });
+      }
+      return step.then(function(){
       opsMsg("Checking against what is already here…");
       // Always a dry run first. An import that quietly allocates thirty rooms
       // is not something to discover afterwards.
@@ -1250,6 +1325,7 @@ document.addEventListener("change", function(e){
         el("opsimport").textContent = "Import " + parsed.bookings.length + " booking"
           + (parsed.bookings.length===1?"":"s");
         opsMsg("Nothing changed yet", "dirty");
+      });
       });
     });
   }).catch(function(err){
