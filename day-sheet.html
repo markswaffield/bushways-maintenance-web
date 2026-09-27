@@ -150,7 +150,20 @@
   td.dim{background:#F7F5F0}
   tbody tr:nth-child(even) td.dim{background:#F2F0E9}
   .diet{display:block;font-size:11px;color:#A8502F;font-weight:600;margin-top:1px}
-  .diet.req{color:#6B5A8C}
+  .diet.req{color:#6B5A8C;font-weight:400}
+  .diet b{display:inline-block;min-width:13px;color:#6B6353}
+  /* The Type column's two tags: bed configuration and board basis. Short and
+     boxed so the column reads as a pair of codes at a glance, not as prose. */
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.3px;
+       padding:1px 4px;border-radius:3px;margin:1px 2px 1px 0;
+       background:#EDEAE0;color:#4A4437;border:1px solid #DCD7C8}
+  .tag.basis{background:#E4EDE6;color:#2F5A3C;border-color:#CBDCD1}
+  /* Anything read out of a sentence rather than a labelled line. It is
+     probably right, but a manager should glance at it — hover shows the
+     sentence it came from. Never styled the same as a confident value. */
+  .tag.unsure,.diet.unsure{border-style:dashed;opacity:.85}
+  .diet.unsure{text-decoration:underline dotted #C9A227}
+  [title]{cursor:help}
   .src{display:block;font-size:11px;color:#8C8571}
   .sub-name{display:block;font-size:11px;color:#5B5344;margin-top:1px}
   td.two{padding:4px 5px}
@@ -419,13 +432,68 @@ function cellNames(row){
 function cellNotes(row){
   if (!row.stay) return '<td class="dim"></td>';
   var b = row.stay.booking || {};
+  var x = b.extraction || {};
   var h = "";
-  if (b.dietary) h += '<span class="diet">'+esc(b.dietary)+"</span>";
-  if (b.special_requests) h += '<span class="diet req">'+esc(b.special_requests)+"</span>";
+
+  // Mark, 2026-09-27: "Notes can show the summary of Dietaries, Medical and
+  // Speecial Occossions." Three short lines, each hoverable back to the
+  // sentence it was read from.
+  //
+  // A combined label — "Medical & dietary Requirement: no shellfish" — is one
+  // answer to two questions, so it legitimately fills both fields. Shown once
+  // as D/M rather than twice, or the cell repeats itself.
+  function line(tag, value, ev){
+    if (!value) return "";
+    var unsure = ev && ev.confident === false ? " unsure" : "";
+    return '<span class="diet'+unsure+'" title="'+esc((ev && ev.source) || "from the booking")
+      +  '"><b>'+tag+"</b> "+esc(value)+"</span>";
+  }
+  if (b.dietary && b.medical && b.dietary === b.medical){
+    h += line("D/M", b.dietary, x.dietary);
+  } else {
+    h += line("D", b.dietary, x.dietary) + line("M", b.medical, x.medical);
+  }
+  h += line("★", b.special_occasion, x.occasion);
+
+  // The booking's own Notes block, still available but no longer the first
+  // thing in the cell — it is long prose and the summary above is what gets
+  // read at a glance.
+  // The booking's own Notes block. Kept, because it carries things nothing
+  // else does — "SELF DRIVE@CEC", "Boat cruise on the 21st" — but trimmed to
+  // one line, because it runs to paragraphs and would swamp the summary
+  // above it, which is the part that gets read at a glance. Hover for all of
+  // it; it is one line of prose, not a wall.
+  if (b.special_requests){
+    var full = String(b.special_requests).replace(/\s*\n+\s*/g, " · ").trim();
+    var shown = full.length > 64 ? full.slice(0, 63) + "…" : full;
+    h += '<span class="diet req" title="'+esc(full)+'">'+esc(shown)+"</span>";
+  }
   h += '<input type="text" class="sub" placeholder="camp notes…" data-room="'+row.room_id
     +  '" data-key="notes" data-scope="stay" value="'+esc(row.stay.notes || "")+'">';
   return '<td class="ro two">'+h+"</td>";
 }
+// The Type column. Mark, 2026-09-27: "In the Type Column - we can put in
+// the info for 'Twin' 'Double' or Triple and Fully Inclusive or Self Drive.
+// I would abreviate these to TWIN DBL TRIP and then FI and SD."
+//
+// NOT ResRequest's accommodation type, which used to be here: the room
+// number already tells you whether it is standard or inter-leading, so the
+// column is better spent on what the room has to be set up as, and whether
+// the party's activities are included.
+//
+// Both come out of free prose, so both carry the sentence they came from —
+// hover to check without leaving the sheet.
+function cellType(b){
+  if (!b) return '<td class="ro dim c-type"></td>';
+  var x = b.extraction || {};
+  var bits = [];
+  if (b.bed_type) bits.push('<span class="tag'+(x.bed && x.bed.confident === false ? " unsure" : "")
+    + '" title="'+esc((x.bed && x.bed.source) || "from the booking")+'">'+esc(b.bed_type)+"</span>");
+  if (b.booking_basis) bits.push('<span class="tag basis'+(x.basis && x.basis.confident === false ? " unsure" : "")
+    + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">'+esc(b.booking_basis)+"</span>");
+  return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
+}
+
 function cellPax(b){
   if (!b) return '<td class="ro dim c-pax"></td>';
   var p = [];
@@ -442,7 +510,7 @@ var COLS = [
   130, 130, 130, 190,           // Housekeeper, Guide, Vehicle, Notes
   130, 130, 165, 90,            // Arrivals
   150, 130, 130, 165, 90,       // Departures
-  150, 80,                      // Activities
+  150, 74, 150, 74,             // Activities (two a day: morning and afternoon)
   210                           // Maintenance
 ];
 var COLGROUP = "<colgroup>" + COLS.map(function (w) {
@@ -462,7 +530,7 @@ var HEAD =
 +   '<th class="g-stay" colspan="4"></th>'
 +   '<th class="g-arr" colspan="4">Arrivals</th>'
 +   '<th class="g-dep" colspan="5">Departures</th>'
-+   '<th class="g-act" colspan="2">Activities</th>'
++   '<th class="g-act" colspan="4">Activities</th>'
 +   '<th class="g-mnt" rowspan="2">Maintenance</th>'
 + "</tr>"
 + '<tr class="cols">'
@@ -470,7 +538,7 @@ var HEAD =
 +   "<th>Housekeeper</th><th>Guide</th><th>Vehicle</th><th>Notes</th>"
 +   "<th>Driver/Guide</th><th>Vehicle</th><th>Arrival details</th><th>ETA</th>"
 +   "<th>Names</th><th>Driver/Guide</th><th>Vehicle</th><th>Departure details</th><th>ETD</th>"
-+   "<th>Activity</th><th>Time</th>"
++   "<th>Activity 1</th><th>Time</th><th>Activity 2</th><th>Time</th>"
 + "</tr></thead>";
 
 var STATUS_LABEL = { arriving:"Arriving", departing:"Departing", turnover:"Turnover", staying:"Staying", empty:"Empty" };
@@ -489,7 +557,7 @@ function rowHtml(row){
 
   // ---- Sector 1: the stay ----
   h += cellPax(b);
-  h += '<td class="ro c-type'+(b?"":" dim")+'">'+esc(b && b.room_type_needed || "")+"</td>";
+  h += cellType(b);
   h += cellNames(row);
   h += cellSelect(row,"housekeeper_id",people,"stay");
   h += cellSelect(row,"guide_id",people,"stay");
@@ -523,9 +591,15 @@ function rowHtml(row){
 
   // ---- Sector 4: activities ----
   if (row.stay || row.departing){
-    h += cellText(row,"activity") + cellText(row,"activity_time");
+    // Two a day — Mark, 2026-09-27: "for the Activities Section - we need to
+    // be able to insert 2 activities a day." Morning and afternoon, which is
+    // how a safari day runs. Typed by the camp, never imported: the export
+    // carries almost no activity data (13 Extras lines across all five real
+    // exports, only 4 of them activities).
+    h += cellText(row,"activity") + cellText(row,"activity_time")
+      +  cellText(row,"activity_2") + cellText(row,"activity_2_time");
   } else {
-    h += '<td class="dim"></td><td class="dim"></td>';
+    h += '<td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
   }
 
   // ---- Sector 5: maintenance, always available ----
@@ -879,6 +953,137 @@ function loadXlsx(){
   return xlsxLib;
 }
 
+/* What the camp needs off the Operations Chart, pulled out of free prose.
+
+   Mark, 2026-09-27: Room Type (Twin/Double/Triple), Booking Type (FI/SD),
+   Dietaries, Medical, Special Occasions. None of these has a column in the
+   export — they are sentences inside the Guest information and Notes blocks,
+   written differently by every agent. Measured across 172 real Chobe
+   bookings, the labels alone appear as: "Dietary requirements:",
+   "Dietaries:", "Dietary:", "Diet:", "Dietaries/allergies:", "Medical
+   requirements:", "Medical & dietary Requirement:", "Dietary & medical
+   requirements:", "Dietaries & Medical Requirements:", "Special occasions:",
+   "Special Occ:", "Spec Occ:", "Special events:", "Special request:".
+
+   So the matching is deliberately loose, and every value carries the phrase
+   it came from so a manager can check it. Nothing here is ever the only
+   record: the original block is stored whole (bookings.guest_details).  */
+
+// "None", "N/A", "TBA" and friends are an ANSWER — the agent was asked and
+// said no. Treated as nothing to show, never as a failure to read.
+var NOTHING = /^\s*(n\/?a|none|nil|no|-|–|not applicable|tba|tbc|none\s+known|nothing)\s*\.?\s*$/i;
+
+// Labels are classified by the WORDS THEY CONTAIN, not by the order those
+// words appear in. That matters: "Medical & dietary Requirement" and
+// "Dietary & medical requirements" are both real, both common, and both
+// answer two fields at once — so a combined label fills dietary AND medical.
+// Matching on the leading word missed half of them.
+var FIELD_WORDS = {
+  dietary:  /dietar|(^|[^a-z])diet([^a-z]|$)|allerg|intoleran/i,
+  medical:  /medical|allerg|condition|mobilit|wheelchair/i,
+  occasion: /special|occasion|\bocc\b|event|celebrat|anniversar|birthday|honeymoon/i,
+  bed:      /room\s*type|bed/i,
+  basis:    /basis|board|package/i
+};
+
+// Any "Something: value" line, however it is worded.
+var LABEL_LINE = /^([A-Za-z][A-Za-z &\/'\-\.]{1,44}?)\s*[:\-]\s*(.*)$/;
+
+function lines(text){
+  return String(text || "").split(/\n+/).map(function(l){ return l.trim(); }).filter(Boolean);
+}
+
+// Returns {value, source, confident} for the first line whose LABEL mentions
+// this field. A label with nothing after it, or "None", is an answer — the
+// agent was asked and said no — not a failure to read.
+function labelled(text, key){
+  var all = lines(text);
+  for (var i = 0; i < all.length; i++){
+    var m = all[i].match(LABEL_LINE);
+    if (!m) continue;
+    if (!FIELD_WORDS[key].test(m[1])) continue;
+    var v = (m[2] || "").trim().replace(/[.;,\s]+$/, "");
+    if (!v && all[i+1] && !LABEL_LINE.test(all[i+1])) v = all[i+1].trim();
+    if (!v || NOTHING.test(v)) return { value: null, source: all[i], confident: true };
+    return { value: v, source: all[i], confident: true };
+  }
+  return null;
+}
+
+var BEDWORDS = /\b(double|twin|triple|single|family|king|queen)\b/i;
+var BED_SHORT = { double:"DBL", twin:"TWIN", triple:"TRIP", single:"SGL",
+                  family:"FAM", king:"KING", queen:"QUEEN" };
+
+// Mark: "I would abreviate these to TWIN DBL TRIP".
+function shortBed(v){
+  if (!v) return null;
+  var found = [];
+  String(v).replace(new RegExp(BEDWORDS.source, "gi"), function(w){
+    var s = BED_SHORT[w.toLowerCase()];
+    if (s && found.indexOf(s) < 0) found.push(s);
+    return w;
+  });
+  return found.length ? found.join("/") : null;
+}
+
+function bed(text){
+  var lab = labelled(text, "bed");
+  if (lab && lab.value){
+    var s = shortBed(lab.value);
+    if (s) return { value: s, source: lab.source, confident: true };
+  }
+  // Very commonly a bare line of its own: "Double", "Twin beds", "Double x 1".
+  var all = lines(text);
+  for (var i = 0; i < all.length; i++){
+    if (all[i].length > 30) continue;                 // a sentence, not a label
+    var m = all[i].match(/^(double|twin|triple|single|family|king|queen)\b[\s\w]{0,14}$/i);
+    if (m) return { value: BED_SHORT[m[1].toLowerCase()], source: all[i], confident: true };
+  }
+  // Inside a longer sentence — real, but worth a manager's eye.
+  for (var j = 0; j < all.length; j++){
+    var m2 = all[j].match(BEDWORDS);
+    if (m2) return { value: BED_SHORT[m2[1].toLowerCase()], source: all[j], confident: false };
+  }
+  return null;
+}
+
+// Mark: "Fully Inclusive or Self Drive... FI and SD". Both can be true —
+// a self-driving party can still be fully inclusive once they arrive.
+var BASES = [
+  { code:"FI",  re:/fully\s*inclusive|\bF\.?I\.?\b/i },
+  { code:"SD",  re:/self[\s-]*driv\w*/i },
+  { code:"DBB", re:/\bDBB\b|dinner,?\s*bed\s*(?:&|and)\s*breakfast/i },
+  { code:"B&B", re:/\bB\s*&\s*B\b|bed\s*(?:&|and)\s*breakfast/i }
+];
+function basis(text){
+  var all = lines(text), found = [], src = null, sure = false;
+  for (var i = 0; i < all.length; i++){
+    for (var j = 0; j < BASES.length; j++){
+      if (!BASES[j].re.test(all[i])) continue;
+      if (found.indexOf(BASES[j].code) < 0){
+        found.push(BASES[j].code);
+        if (!src) src = all[i];
+      }
+      // A short line saying only this is a statement of the basis; the same
+      // words inside a long movement note are a passing mention.
+      if (all[i].length <= 40) sure = true;
+    }
+  }
+  return found.length ? { value: found.join("/"), source: src, confident: sure } : null;
+}
+
+function extract(guestInfo, notes){
+  var both = [guestInfo || "", notes || ""].join("\n");
+  var out = {};
+  ["dietary","medical","occasion"].forEach(function(k){
+    var r = labelled(both, k);
+    if (r) out[k] = r;
+  });
+  var bd = bed(both);      if (bd) out.bed = bd;
+  var bs = basis(both);    if (bs) out.basis = bs;
+  return out;
+}
+
 function parseOpsChart(rows, campName){
   var MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
                 jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
@@ -892,21 +1097,6 @@ function parseOpsChart(rows, campName){
   }
   function cell(r,i){ var v = r && r[i]; return v == null ? "" : String(v).trim(); }
   function num(v){ var n = parseInt(String(v).replace(/[^0-9-]/g,""),10); return isNaN(n) ? null : n; }
-
-  // The Guest information block mixes names, nationality, board basis and
-  // arrival details together with the dietary line. Only the dietary
-  // paragraphs are lifted out, matching how these bookings were first stored
-  // (D-009), so a re-import cannot rewrite `dietary` into a wall of text.
-  function dietaryFrom(block){
-    if (!block) return null;
-    var keep = String(block).split(/\n\s*\n/).map(function(p){ return p.trim(); })
-      .filter(function(p){ return /dietar/i.test(p); })
-      .filter(function(p){
-        var after = p.replace(/^[^:]*:?/, "").trim();
-        return after && !/^(n\/?a|none|nil|no)\.?$/i.test(after);
-      });
-    return keep.length ? keep.join("\n\n") : null;
-  }
 
   var out = [], camps = {}, cur = null, section = "";
   function flush(){
@@ -933,14 +1123,28 @@ function parseOpsChart(rows, campName){
         if (r) g.rooms.push({ number: r, accomm: l.accomm || "" });
       });
     });
+    var got = extract(cur.guests, cur.notes);
     Object.keys(groups).forEach(function(k){
       var g = groups[k];
       out.push({ booking_ref:cur.ref, guest_name:cur.name, agent:cur.agent||null,
                  arrive_date:g.arrive, depart_date:g.depart,
                  adults:g.adults||null, children:g.children||null,
                  rooms_needed:g.rooms_needed||1, room_type_needed:g.accomm||null,
-                 dietary:dietaryFrom(cur.guests), special_requests:cur.notes||null,
-                 rooms:g.rooms, guest_details:cur.guests||null });
+                 special_requests:cur.notes||null, rooms:g.rooms,
+                 // Mark, 2026-09-27: the Type column carries the bed
+                 // configuration and the board basis; Notes carries the
+                 // summary of dietaries, medical and special occasions.
+                 // All five are read out of free prose — see extract().
+                 bed_type: got.bed && got.bed.value || null,
+                 booking_basis: got.basis && got.basis.value || null,
+                 dietary: got.dietary && got.dietary.value || null,
+                 medical: got.medical && got.medical.value || null,
+                 special_occasion: got.occasion && got.occasion.value || null,
+                 // The block itself, kept whole. A missed allergy is a real
+                 // risk to a guest, so an extracted value is never the only
+                 // record and a manager can always see what it came from.
+                 guest_details: cur.guests || null,
+                 extraction: got });
     });
     cur = null;
   }
@@ -1053,14 +1257,10 @@ document.addEventListener("change", function(e){
   });
 });
 
-// guest_details is parsed for the preview but there is nowhere to put it yet,
-// so it is not sent. If a column is ever added for ResRequest's own guest
-// names (the top layer of D-006's two-layer Names), send it from here.
-function stripForApi(b){
-  var c = {};
-  Object.keys(b).forEach(function(k){ if (k !== "guest_details") c[k] = b[k]; });
-  return c;
-}
+// Everything parsed is sent now, guest_details included: it is the original
+// block the extracted dietary and medical values came from, and keeping it is
+// the safeguard against a mis-read (see the migration's own note).
+function stripForApi(b){ return b; }
 
 document.addEventListener("click", function(e){
   if (e.target.id !== "opsimport") return;
