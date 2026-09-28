@@ -164,6 +164,42 @@
   .tag.unsure,.diet.unsure{border-style:dashed;opacity:.85}
   .diet.unsure{text-decoration:underline dotted #C9A227}
   [title]{cursor:help}
+  /* The Notes cell now always carries all three labels, filled or not — an
+     empty Medical line says "nobody told us", which is different from the
+     question never having been asked. Empty ones are greyed so the filled
+     ones still carry the eye. */
+  .diet.empty{color:#A9A395;font-weight:400}
+  .diet i{color:#8C8571;font-style:normal}
+  td.c-notes .diet{line-height:1.35}
+
+  /* The way back to the Operations Chart's own words. A small marker in the
+     frozen Names column, so it is reachable however far right you scroll. */
+  .srcbtn{width:15px;height:15px;padding:0;line-height:13px;font-size:10px;font-weight:700;
+          font-family:Georgia,serif;font-style:italic;border-radius:50%;vertical-align:1px;
+          border:1px solid #B8B0A0;background:#F4F1E8;color:#5B5344;cursor:pointer}
+  .srcbtn:hover{background:#122d31;color:#fff;border-color:#122d31}
+  .srcback{position:fixed;inset:0;background:rgba(18,45,49,.45);z-index:200;
+           display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+  .srcbox{background:#fff;max-width:760px;width:100%;border-radius:8px;padding:16px 18px 14px;
+          box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .srchead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+           border-bottom:1px solid #E6E1D4;padding-bottom:8px;margin-bottom:10px}
+  .srchead .meta{font-size:11.5px;color:#6B6353;margin-top:2px}
+  .srcbox h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#6B6353;
+             margin:14px 0 4px}
+  .srcvals{width:100%;border-collapse:collapse;margin-bottom:4px}
+  .srcvals th{text-align:left;width:120px;font-size:11.5px;color:#6B6353;font-weight:600;
+              padding:3px 8px 3px 0;vertical-align:top}
+  .srcvals td{font-size:12.5px;padding:3px 0;vertical-align:top}
+  /* The original text, as the export had it — monospaced so the agent's own
+     line breaks and spacing read the way they were typed. */
+  .srctext{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#3A352B;
+           background:#FBFAF6;border:1px solid #EBE6D9;border-radius:5px;padding:8px 10px;
+           max-height:230px;overflow:auto;white-space:normal}
+  .srctext mark{background:#FFF3B0;padding:1px 0}
+  .srctext mark.ai{background:#FFE0B2;outline:1px dotted #C9A227}
+  .pill.amber{background:#FDF0D5;color:#8A6A12;border:1px solid #E8D39A}
+  @media print{ .srcback,.srcbtn{display:none!important} }
   .src{display:block;font-size:11px;color:#8C8571}
   .sub-name{display:block;font-size:11px;color:#5B5344;margin-top:1px}
   td.two{padding:4px 5px}
@@ -420,6 +456,12 @@ function cellNames(row){
   if (!b) return '<td class="ro dim c-names"></td>';
   var h = '<span class="name">'+esc(b.guest_name)+"</span>";
   if (b.booking_ref) h += ' <span class="ref">'+esc(b.booking_ref)+"</span>";
+  // Mark, 2026-09-28: "There was mention of being able to review the original
+  // text as per the Ops Chart from the Day Sheet - how would we do this?"
+  // This is how. It sits in the Names column because that column is frozen,
+  // so it stays reachable however far right the grid is scrolled.
+  if (b.guest_details || b.special_requests)
+    h += ' <button class="srcbtn" data-src="'+row.room_id+'" title="Show what the Operations Chart actually said">i</button>';
   h += '<input type="text" class="sub" placeholder="guest names…" data-room="'+row.room_id
     +  '" data-key="guest_names" data-scope="stay" value="'+esc(row.stay.guest_names || "")+'">';
   return '<td class="ro two c-names">'+h+"</td>";
@@ -429,49 +471,118 @@ function cellNames(row){
 // booking and are read-only here; anything the camp needs to add sits
 // underneath - Mark: "we may need to add extra notes on dietaries etc
 // that were not captured at booking".
+// Showing the Operations Chart's own words for one booking.
+//
+// The summary in the Notes column is an extraction, and an extraction can be
+// wrong — these are allergies and medical conditions, so there has to be a way
+// back to the source. This is it: the whole Guest information and Notes blocks
+// exactly as the export had them, with the sentence behind each extracted
+// value highlighted, so checking is a glance rather than a read.
+//
+// Deliberately not on the sheet itself. Mark wanted it accessible, not
+// visible: the grid's job is the whole picture at once, and a paragraph per
+// room would destroy that.
+function openSource(roomId){
+  var row = (sheet.rows || []).filter(function(r){ return r.room_id === roomId; })[0];
+  var b = row && row.stay && row.stay.booking;
+  if (!b) return;
+  var x = b.extraction || {};
+
+  // Highlight each extracted value's source sentence inside the original.
+  // Escape first, then mark, or the markup would be escaped along with it.
+  function withMarks(text){
+    var out = esc(String(text || ""));
+    Object.keys(x).forEach(function(k){
+      var src = x[k] && x[k].source;
+      if (!src) return;
+      var needle = esc(String(src).trim());
+      if (needle.length < 4) return;
+      var at = out.indexOf(needle);
+      if (at < 0) return;
+      out = out.slice(0, at) + '<mark class="'+(x[k].confident === false ? "ai" : "")+'">'
+          + needle + "</mark>" + out.slice(at + needle.length);
+    });
+    return out.replace(/\n/g, "<br>");
+  }
+
+  var LABEL = { dietary:"Dietaries", medical:"Medical", occasion:"Special Event",
+                bed:"Bed type", basis:"Basis" };
+  var rows = "";
+  ["bed","basis","dietary","medical","occasion"].forEach(function(k){
+    var f = x[k];
+    if (!f || !f.value) return;
+    rows += '<tr><th>'+LABEL[k]+"</th><td>"+esc(f.value)
+         +  (f.confident === false ? ' <span class="pill amber">read from a sentence — worth a look</span>' : "")
+         +  "</td></tr>";
+  });
+
+  var h = '<div class="srcbox" role="dialog" aria-label="What the Operations Chart said">'
+    +  '<div class="srchead"><div><b>'+esc(b.guest_name)+"</b>"
+    +  (b.booking_ref ? ' <span class="ref">'+esc(b.booking_ref)+"</span>" : "")
+    +  '<div class="meta">'+esc(row.label)+" · "+esc(b.arrive_date)+" → "+esc(b.depart_date)+"</div></div>"
+    +  '<button class="ghost" id="srcclose">Close</button></div>';
+  h += rows ? '<table class="srcvals">'+rows+"</table>"
+            : '<p class="meta">Nothing was read out of this booking automatically.</p>';
+  if (b.guest_details)
+    h += "<h3>Guest information</h3><div class=\"srctext\">"+withMarks(b.guest_details)+"</div>";
+  if (b.special_requests)
+    h += "<h3>Notes</h3><div class=\"srctext\">"+withMarks(b.special_requests)+"</div>";
+  h += '<p class="meta">Exactly as the Operations Chart export had it. Highlighted text is what '
+    +  'the sheet read each value from; amber means it came from a sentence rather than a '
+    +  'labelled line, so it is worth your eye.</p></div>';
+
+  var back = document.createElement("div");
+  back.className = "srcback";
+  back.innerHTML = h;
+  document.body.appendChild(back);
+  var close = function(){ back.remove(); document.removeEventListener("keydown", onKey); };
+  var onKey = function(e){ if (e.key === "Escape") close(); };
+  back.addEventListener("click", function(e){ if (e.target === back || e.target.id === "srcclose") close(); });
+  document.addEventListener("keydown", onKey);
+}
+
 function cellNotes(row){
   if (!row.stay) return '<td class="dim"></td>';
   var b = row.stay.booking || {};
   var x = b.extraction || {};
-  var h = "";
 
-  // Mark, 2026-09-27: "Notes can show the summary of Dietaries, Medical and
-  // Speecial Occossions." Three short lines, each hoverable back to the
-  // sentence it was read from.
+  // Mark, 2026-09-28: "I would prefer it to have a standard structure:
+  // Dietaries - / Medical - / Special Event -".
   //
-  // A combined label — "Medical & dietary Requirement: no shellfish" — is one
-  // answer to two questions, so it legitimately fills both fields. Shown once
-  // as D/M rather than twice, or the cell repeats itself.
-  function line(tag, value, ev){
-    if (!value) return "";
+  // So all three labels are ALWAYS present, filled or not. The point is that
+  // the cell reads the same on every row: a manager scanning down the column
+  // knows where to look, and an empty Medical line says "nobody told us"
+  // rather than leaving them to wonder whether it was checked.
+  //
+  // The booking's own Notes block is deliberately NOT printed here any more.
+  // Mark: "We also do not need the FI and Bed type (Double etc) repeated here
+  // - it is recorded in Type column" — that block is where the repetition was
+  // coming from ("SELF DRIVE@CEC · Double room · ..."). It is still kept and
+  // still readable in full: click the row's ⓘ, see openSource().
+  function line(label, value, ev){
+    if (!value){
+      return '<span class="diet empty"><b>'+label+"</b> —</span>";
+    }
     var unsure = ev && ev.confident === false ? " unsure" : "";
     return '<span class="diet'+unsure+'" title="'+esc((ev && ev.source) || "from the booking")
-      +  '"><b>'+tag+"</b> "+esc(value)+"</span>";
+      +  '"><b>'+label+"</b> "+esc(value)+"</span>";
   }
-  if (b.dietary && b.medical && b.dietary === b.medical){
-    h += line("D/M", b.dietary, x.dietary);
-  } else {
-    h += line("D", b.dietary, x.dietary) + line("M", b.medical, x.medical);
-  }
-  h += line("★", b.special_occasion, x.occasion);
 
-  // The booking's own Notes block, still available but no longer the first
-  // thing in the cell — it is long prose and the summary above is what gets
-  // read at a glance.
-  // The booking's own Notes block. Kept, because it carries things nothing
-  // else does — "SELF DRIVE@CEC", "Boat cruise on the 21st" — but trimmed to
-  // one line, because it runs to paragraphs and would swamp the summary
-  // above it, which is the part that gets read at a glance. Hover for all of
-  // it; it is one line of prose, not a wall.
-  if (b.special_requests){
-    var full = String(b.special_requests).replace(/\s*\n+\s*/g, " · ").trim();
-    var shown = full.length > 64 ? full.slice(0, 63) + "…" : full;
-    h += '<span class="diet req" title="'+esc(full)+'">'+esc(shown)+"</span>";
-  }
+  // A combined heading — "Medical & dietary Requirement: no shellfish" — is
+  // one answer to two questions and legitimately fills both fields. Showing
+  // it on both lines would just repeat the sentence, so the Medical line
+  // points at the Dietaries line instead of restating it.
+  var same = b.dietary && b.medical && b.dietary === b.medical;
+  var h = line("Dietaries", b.dietary, x.dietary)
+        + (same ? '<span class="diet"><b>Medical</b> <i>as above</i></span>'
+                : line("Medical", b.medical, x.medical))
+        + line("Special Event", b.special_occasion, x.occasion);
+
   h += '<input type="text" class="sub" placeholder="camp notes…" data-room="'+row.room_id
     +  '" data-key="notes" data-scope="stay" value="'+esc(row.stay.notes || "")+'">';
-  return '<td class="ro two">'+h+"</td>";
+  return '<td class="ro two c-notes">'+h+"</td>";
 }
+
 // The Type column. Mark, 2026-09-27: "In the Type Column - we can put in
 // the info for 'Twin' 'Double' or Triple and Fully Inclusive or Self Drive.
 // I would abreviate these to TWIN DBL TRIP and then FI and SD."
@@ -507,7 +618,7 @@ function cellPax(b){
 var COLS = [
   58, 96,                       // Room, Status            (frozen)
   46, 92, 172,                  // Pax, Type, Names        (frozen)
-  130, 130, 130, 190,           // Housekeeper, Guide, Vehicle, Notes
+  130, 130, 130, 215,           // Housekeeper, Guide, Vehicle, Notes
   130, 130, 165, 90,            // Arrivals
   150, 130, 130, 165, 90,       // Departures
   150, 74, 150, 74,             // Activities (two a day: morning and afternoon)
@@ -998,23 +1109,68 @@ var FIELD_WORDS = {
 // Any "Something: value" line, however it is worded.
 var LABEL_LINE = /^([A-Za-z][A-Za-z &\/'\-\.]{1,44}?)\s*[:\-]\s*(.*)$/;
 
+// Section headings inside a Guest information block. A continuation run ends
+// when one of these turns up; anything else is more of the same section.
+var STOP_LABEL = /movement|arriv|arr\b|depart|dep\b|transfer|nationalit|agent|contact|clients?\s*name|repeat|extras?|basis|board|room\s*type|special|medical|dietar|diet\b|allerg|occasion|event|flight|pick\s*up|drop\s*off/i;
+
 function lines(text){
   return String(text || "").split(/\n+/).map(function(l){ return l.trim(); }).filter(Boolean);
+}
+
+// The same, but keeping blank lines, because a blank line is what ends a
+// paragraph and that matters for continuation below.
+function rawLines(text){
+  return String(text || "").split(/\n/).map(function(l){ return l.trim(); });
 }
 
 // Returns {value, source, confident} for the first line whose LABEL mentions
 // this field. A label with nothing after it, or "None", is an answer — the
 // agent was asked and said no — not a failure to read.
+//
+// CONTINUATION, and this one is a safety fix rather than a nicety. Agents
+// write the heading, a summary sentence ending in a colon, and then the
+// actual detail underneath:
+//
+//     Dietary requirements: No dietary restrictions aside from a dislike of certain foods:
+//     Robert: Seafood, Cauliflower, Mushrooms, Eggplant, Brussels sprouts
+//     Lorraine: Strawberries and Coconut
+//
+// Reading only the heading line puts "No dietary restrictions" on the day
+// sheet and throws the allergies away. So when the value is empty or ends in
+// a colon, the following lines are taken too, up to a blank line or the next
+// real heading.
 function labelled(text, key){
-  var all = lines(text);
+  var all = rawLines(text);
   for (var i = 0; i < all.length; i++){
+    if (!all[i]) continue;
     var m = all[i].match(LABEL_LINE);
     if (!m) continue;
     if (!FIELD_WORDS[key].test(m[1])) continue;
-    var v = (m[2] || "").trim().replace(/[.;,\s]+$/, "");
-    if (!v && all[i+1] && !LABEL_LINE.test(all[i+1])) v = all[i+1].trim();
+
+    var v = (m[2] || "").trim();
+    var src = all[i];
+    if (!v || /:$/.test(v)){
+      // NOT "stop at the next blank line": in this export every paragraph is
+      // blank-separated, so that ends the run immediately and throws the
+      // detail away. Stop at the next recognised SECTION heading instead —
+      // "Movement details:", "Nationality:", "Special events:" — and treat
+      // anything else as continuation, including "Robert: Seafood…", which is
+      // label-shaped but is a guest's name and is exactly what we are after.
+      var extra = [], blanks = 0;
+      for (var j = i + 1; j < all.length && extra.length < 4; j++){
+        if (!all[j]){ if (++blanks > 2) break; continue; }    // tolerate the gaps
+        var next = all[j].match(LABEL_LINE);
+        if (next && STOP_LABEL.test(next[1])) break;
+        extra.push(all[j]);
+      }
+      if (extra.length){
+        v = (v ? v.replace(/:$/, "") + " — " : "") + extra.join("; ");
+        src = all.slice(i, i + 1 + extra.length).join(" ");
+      }
+    }
+    v = v.replace(/[.;,\s]+$/, "");
     if (!v || NOTHING.test(v)) return { value: null, source: all[i], confident: true };
-    return { value: v, source: all[i], confident: true };
+    return { value: v, source: src, confident: true };
   }
   return null;
 }
@@ -1337,6 +1493,11 @@ document.addEventListener("change", function(e){
 // block the extracted dietary and medical values came from, and keeping it is
 // the safeguard against a mis-read (see the migration's own note).
 function stripForApi(b){ return b; }
+
+document.addEventListener("click", function(e){
+  var src = e.target.getAttribute && e.target.getAttribute("data-src");
+  if (src) return openSource(src);
+});
 
 document.addEventListener("click", function(e){
   if (e.target.id !== "opsimport") return;
