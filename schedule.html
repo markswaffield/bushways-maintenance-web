@@ -276,6 +276,17 @@
   // needs doing now sorts to the top — the original 2026-09-11 default
   // (newest first, upcoming work on top) is what this replaces.
   var direction = "oldest";
+
+  // What a due item is actually about — "Room Inspection — Room 5" gives
+  // "Room 5". The API builds these names rather than carrying a target
+  // field (see docs/modules/schedule.md on kindOf), so this reads the same
+  // string; if that naming changes, this changes with it.
+  function targetOf(s) {
+    var n = String((s && s.name) || "");
+    var i = n.lastIndexOf("—");
+    return (i < 0 ? n : n.slice(i + 1)).trim();
+  }
+
   var from = "", to = "";
   var kind = "";   // "" all · room · vehicle · recurring
   var filterStatus = "";   // "" all · overdue · active · upcoming · on_hold — Mark, 2026-09-19, extended 2026-09-21
@@ -434,7 +445,17 @@
       return true;
     }).sort(function (a, b) {
       var da = new Date(a.due_date).getTime(), db = new Date(b.due_date).getTime();
-      return direction === "oldest" ? da - db : db - da;
+      if (da !== db) return direction === "oldest" ? da - db : db - da;
+      // Same day, so fall back to the thing being checked. Without this the
+      // order is whatever the database happened to return — Mark, 2026-09-28:
+      // "the inspection list seems random - goes Campsite 7, Campsite 2,
+      // Room 1, Campsite 6 - surely this should be by target numerically and
+      // alphabettically."
+      //
+      // Numeric-aware, so Room 10 follows Room 9 rather than Room 1. Sorting
+      // on the TARGET rather than the whole name keeps every kind of check on
+      // one unit together, instead of splitting them by the words in front.
+      return targetOf(a).localeCompare(targetOf(b), undefined, { numeric: true, sensitivity: "base" });
     });
 
     var overdue = shown.filter(function (s) { return s.status === "overdue"; }).length;
