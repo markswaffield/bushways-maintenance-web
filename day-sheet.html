@@ -1263,7 +1263,13 @@ function extract(guestInfo, notes){
   return out;
 }
 
-function parseOpsChart(rows, campName){
+function parseOpsChart(rows, campNames){
+  // A lodge can be more than one property in ResRequest. Boteti is two —
+  // "Boteti River Camp" (Rooms, Family Room) and "Boteti River Camp -
+  // Campsites" (the eight campsites AND the Meru Tents) — and Mark's real
+  // export carries all 78 legs in one file. So this matches against a LIST.
+  var wanted = (Array.isArray(campNames) ? campNames : [campNames])
+    .filter(Boolean).map(function(n){ return String(n).toLowerCase(); });
   var MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
                 jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
   function iso(v){
@@ -1280,7 +1286,7 @@ function parseOpsChart(rows, campName){
   var out = [], camps = {}, cur = null, section = "";
   function flush(){
     if (!cur) return;
-    var mine = cur.legs.filter(function(l){ return l.property.toLowerCase() === campName.toLowerCase(); });
+    var mine = cur.legs.filter(function(l){ return wanted.indexOf(l.property.toLowerCase()) >= 0; });
     // One real party is one booking even when the sheet splits it over several
     // lines: group by the dates, sum the rooms, collect the room numbers.
     var groups = {};
@@ -1297,10 +1303,12 @@ function parseOpsChart(rows, campName){
       // Standard Room 1 — a real overlap this caught, where Arkle in room 1
       // and a tour leader in pilot room 1 looked like a double-booking.
       // Resolving the label is the server's job; the type travels with it.
-      String(l.room).split(/[,\/]/).forEach(function(r){
-        r = r.trim();
-        if (r) g.rooms.push({ number: r, accomm: l.accomm || "" });
-      });
+      var nums = String(l.room).split(/[,\/]/).map(function(r){ return r.trim(); }).filter(Boolean);
+      // A campsite IS its accommodation — "Campsite 3 (1 to 6)" names the
+      // site, and in Boteti's real export every campsite leg has the Room
+      // column blank. So it still claims a unit; the server resolves which.
+      if (!nums.length && /campsite/i.test(l.accomm || "")) nums = [""];
+      nums.forEach(function(r){ g.rooms.push({ number: r, accomm: l.accomm || "" }); });
     });
     var got = extract(cur.guests, cur.notes);
     Object.keys(groups).forEach(function(k){
@@ -1403,8 +1411,10 @@ function opsMsg(text, kind){
 
 function showOpsReport(parsed, res){
   var withRoom = parsed.bookings.filter(function(b){ return b.rooms.length; }).length;
+  var mine = ((shownCamp && shownCamp.resrequest_names) || [shownCamp && shownCamp.name])
+    .filter(Boolean).map(function(n){ return String(n).toLowerCase(); });
   var other = Object.keys(parsed.camps).filter(function(c){
-    return shownCamp && c.toLowerCase() !== shownCamp.name.toLowerCase();
+    return mine.indexOf(c.toLowerCase()) < 0;
   });
   var h = '<p class="meta" style="margin-top:8px">Found <b>'+parsed.bookings.length+'</b> booking'
         + (parsed.bookings.length===1?"":"s") + ' for '+esc(shownCamp ? shownCamp.name : "this camp")
@@ -1465,7 +1475,8 @@ document.addEventListener("change", function(e){
       // raw:false so dates arrive as the text the sheet shows, which is what
       // the parser expects; defval keeps the columns aligned.
       var rows = XLSX.utils.sheet_to_json(wb.Sheets["notes"], { header: 1, raw: false, defval: "" });
-      var parsed = parseOpsChart(rows, shownCamp.name);
+      var parsed = parseOpsChart(rows, (shownCamp.resrequest_names && shownCamp.resrequest_names.length)
+                                              ? shownCamp.resrequest_names : [shownCamp.name]);
       if (!parsed.bookings.length){ showOpsReport(parsed, null); opsMsg(""); return; }
       var ask = parsed.bookings.filter(needsAi);
       var step = Promise.resolve();
