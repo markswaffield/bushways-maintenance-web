@@ -1192,9 +1192,17 @@ function labelled(text, key){
       // "Movement details:", "Nationality:", "Special events:" — and treat
       // anything else as continuation, including "Robert: Seafood…", which is
       // label-shaped but is a guest's name and is exactly what we are after.
+      // blanks must count CONSECUTIVE empty lines, not how many have been
+      // seen in total. Counting cumulatively silently truncated every
+      // double-spaced block at two lines — and the same export saved as .xlsx
+      // is double-spaced where the .csv is single-spaced, so one format
+      // dropped two guests' dietary requirements and the other did not.
+      // Found by comparing the two versions of one real export; a party's
+      // "does not eat fish or seafood" was among what went missing.
       var extra = [], blanks = 0;
-      for (var j = i + 1; j < all.length && extra.length < 4; j++){
-        if (!all[j]){ if (++blanks > 2) break; continue; }    // tolerate the gaps
+      for (var j = i + 1; j < all.length && extra.length < 8; j++){
+        if (!all[j]){ if (++blanks >= 2) break; continue; }   // a real gap ends it
+        blanks = 0;
         var next = all[j].match(LABEL_LINE);
         if (next && STOP_LABEL.test(next[1])) break;
         extra.push(all[j]);
