@@ -324,6 +324,7 @@
   <div><button id="save" disabled>Save changes</button></div>
   <div class="full-only"><button class="ghost" id="reload">Refresh</button></div>
   <div class="full-only lean-hide"><button class="ghost" id="print">Print</button></div>
+  <div><button id="importBtn" title="Choose a ResRequest Operations Chart export">Import Ops Chart</button></div>
   <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
   <div><button class="ghost" id="leanBtn" title="Give the grid the whole screen">⤢ More grid</button></div>
   <div style="align-self:center"><span class="status" id="status"></span></div>
@@ -800,6 +801,19 @@ function render(){
   h += '<p class="warn" id="clashnote"></p><p class="warn amber" id="guidenote"></p>';
 
   h += '<div class="drawer"' + (drawerOpen ? "" : " hidden") + '><div class="below">';
+  // Importing the ResRequest Operations Chart. ResRequest's API cannot give
+  // us the room allocation and they have no scheduled-email facility, so a
+  // manager exports the chart and drops it here — tool-local D-014. Reads the
+  // export's `notes` sheet, never `chart` (D-013).
+  h += '<div class="panel opsimport"><h2>Import the ResRequest Operations Chart</h2>'
+    +  '<p class="meta">Export the Operations Chart from ResRequest for this camp, then choose the file here. '
+    +  'It reads the bookings <b>and</b> the rooms you allocated, and shows you what it will do before it does it. '
+    +  'Nothing is changed until you press Import.</p>'
+    +  '<div class="row"><input type="file" id="opsfile" accept=".xlsx,.xls"></div>'
+    +  '<div id="opsreport"></div>'
+    +  '<div class="row" style="margin-top:8px"><button id="opsimport" hidden>Import</button> '
+    +  '<span class="status" id="msg-ops"></span></div></div>';
+
   h += '<div class="panel"><h2>Notes not tied to one room</h2>'
      + '<textarea id="general" rows="4" placeholder="Dietary notes, a pickup arrangement…">'
      + esc(sheet.sheet && sheet.sheet.general_notes || "") + "</textarea></div>";
@@ -831,19 +845,6 @@ function render(){
       +  '<button data-placebtn="'+b.id+'">Place</button></div></div>';
   });
   h += "</div>";
-
-  // Importing the ResRequest Operations Chart. ResRequest's API cannot give
-  // us the room allocation and they have no scheduled-email facility, so a
-  // manager exports the chart and drops it here — tool-local D-014. Reads the
-  // export's `notes` sheet, never `chart` (D-013).
-  h += '<div class="panel"><h2>Import the ResRequest Operations Chart</h2>'
-    +  '<p class="meta">Export the Operations Chart from ResRequest for this camp, then choose the file here. '
-    +  'It reads the bookings <b>and</b> the rooms you allocated, and shows you what it will do before it does it. '
-    +  'Nothing is changed until you press Import.</p>'
-    +  '<div class="row"><input type="file" id="opsfile" accept=".xlsx,.xls"></div>'
-    +  '<div id="opsreport"></div>'
-    +  '<div class="row" style="margin-top:8px"><button id="opsimport" hidden>Import</button> '
-    +  '<span class="status" id="msg-ops"></span></div></div>';
 
   h += '<div class="panel addbooking"><h2>Add a booking by hand</h2>'
     +  '<p class="meta">For anything ResRequest does not know about — the Pilot/Guide Room, a walk-in, an owner, staff in a guest room.</p>'
@@ -1015,6 +1016,19 @@ el("leanBtn").addEventListener("click", function(){
   var on = document.body.classList.toggle("lean");
   this.textContent = on ? "⤡ Less grid" : "⤢ More grid";
   try { localStorage.setItem("bw_daysheet_lean", on ? "1" : "0"); } catch (e) {}
+});
+
+el("importBtn").addEventListener("click", function(){
+  // Open the drawer first, so the report this produces is actually on screen
+  // when it arrives, then hand straight over to the file chooser.
+  if (!drawerOpen){
+    drawerOpen = true;
+    el("drawerBtn").textContent = "Hide bookings & notes";
+    var d = document.querySelector(".drawer");
+    if (d) d.hidden = false;
+  }
+  var f = el("opsfile");
+  if (f){ f.value = ""; f.click(); }
 });
 
 el("drawerBtn").addEventListener("click", function(){
@@ -1433,6 +1447,14 @@ document.addEventListener("change", function(e){
   if (!file) return;
   if (!shownCamp){ opsMsg("Pick a camp first", "err"); return; }
 
+  if (!drawerOpen){
+    drawerOpen = true;
+    el("drawerBtn").textContent = "Hide bookings & notes";
+    var dr = document.querySelector(".drawer");
+    if (dr) dr.hidden = false;
+  }
+  var panel = document.querySelector(".panel.opsimport");
+  if (panel) panel.scrollIntoView({ block: "nearest" });
   opsMsg("Reading…");
   loadXlsx().then(function(XLSX){
     return file.arrayBuffer().then(function(buf){
