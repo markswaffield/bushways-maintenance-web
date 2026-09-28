@@ -442,6 +442,23 @@ function cellTime(row, key, fromResRequest){
     +  '" data-key="'+key+'" data-scope="day" value="'+esc(v)+'">';
   return '<td class="ro two">'+h+"</td>";
 }
+// The same two layers as cellTime, for the movement details. The top line is
+// what the Operations Chart said about reaching or leaving THIS camp; the box
+// below is the camp's own and a re-import never touches it (D-006).
+// Hover the top line to see the sentence it was read from.
+function cellMovement(row, key, fromExport, ev){
+  var v = (row.saved && row.saved[key]) || "";
+  var h = "";
+  if (fromExport){
+    var unsure = ev && ev.confident === false ? " unsure" : "";
+    h += '<span class="src'+unsure+'" title="'+esc((ev && ev.source) || "from the booking")+'">'
+      +  esc(fromExport)+"</span>";
+  }
+  h += '<input type="text" class="sub" placeholder="—" data-room="'+row.room_id
+    +  '" data-key="'+key+'" data-scope="day" value="'+esc(v)+'">';
+  return '<td class="ro two">'+h+"</td>";
+}
+
 function cellText(row,key,scope){
   if (scope === "stay" && !row.stay) return '<td class="dim"></td>';
   return '<td><input type="text" data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'" value="'
@@ -684,7 +701,8 @@ function rowHtml(row){
   // with nobody arriving invites data that means nothing.
   if (row.status === "arriving" || row.status === "turnover"){
     h += cellSelect(row,"arrival_driver_id",people) + cellSelect(row,"arrival_vehicle_id",vehicles)
-      +  cellText(row,"arrival_details") + cellTime(row,"eta", b && b.eta);
+      +  cellMovement(row,"arrival_details", b && b.arrival_details, b && b.extraction && b.extraction.arrival)
+      +  cellTime(row,"eta", b && b.eta);
   } else {
     h += '<td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
   }
@@ -695,8 +713,12 @@ function rowHtml(row){
       +  (row.departing.booking_ref ? ' <span class="ref">'+esc(row.departing.booking_ref)+"</span>" : "")
       +  (row.departing.guest_names ? '<span class="sub-name">'+esc(row.departing.guest_names)+"</span>" : "")
       +  "</td>";
+    // The departing party is often not the one in sector 1, so its movement
+    // detail comes off the DEPARTING booking, never the staying one.
     h += cellSelect(row,"departure_driver_id",people) + cellSelect(row,"departure_vehicle_id",vehicles)
-      +  cellText(row,"departure_details") + cellTime(row,"etd", row.departing.booking_etd);
+      +  cellMovement(row,"departure_details", row.departing.booking_departure_details,
+                      row.departing.booking_extraction && row.departing.booking_extraction.departure)
+      +  cellTime(row,"etd", row.departing.booking_etd);
   } else {
     h += '<td class="ro dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td><td class="dim"></td>';
   }
@@ -809,7 +831,7 @@ function render(){
     +  '<p class="meta">Export the Operations Chart from ResRequest for this camp, then choose the file here. '
     +  'It reads the bookings <b>and</b> the rooms you allocated, and shows you what it will do before it does it. '
     +  'Nothing is changed until you press Import.</p>'
-    +  '<div class="row"><input type="file" id="opsfile" accept=".xlsx,.xls"></div>'
+    +  '<div class="row"><input type="file" id="opsfile" accept=".xlsx,.xls,.csv,.xml"></div>'
     +  '<div id="opsreport"></div>'
     +  '<div class="row" style="margin-top:8px"><button id="opsimport" hidden>Import</button> '
     +  '<span class="status" id="msg-ops"></span></div></div>';
@@ -1263,6 +1285,149 @@ function extract(guestInfo, notes){
   return out;
 }
 
+/* Which line of a booking's movement notes belongs to THIS camp on THIS date.
+
+   The hard part is not finding movement text — nearly every booking has some.
+   It is that the text covers the whole itinerary. A party doing Mababe then
+   Chobe has both camps' transfers in one block, and putting Mababe's flight in
+   front of a Chobe driver is worse than showing nothing.
+
+   Two signals, in order of trust:
+     1. A DATE on the line that matches this leg's own arrive or depart date.
+        "17 Sept: Please collect from Kasane Airport" against a leg arriving
+        17 September is as certain as this gets.
+     2. A labelled line — "Arrival Details:", "Depart:" — used only when the
+        booking touches ONE camp, because with several there is no way to tell
+        which camp's arrival it describes.
+
+   Anything else is left alone for the AI layer, which can weigh the camp names
+   in the prose. */
+
+var MONTH = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+// "17 Sept:", "15 Sep 2026 :", "19 Sept -", "03 Oct 2026"
+function dateOn(line){
+  var m = String(line).match(/(^|[^0-9])(\d{1,2})\s*(?:st|nd|rd|th)?\s+([A-Za-z]{3})[a-z]*\.?\s*(\d{4})?/);
+  if (!m) return null;
+  var mon = MONTH[m[3].toLowerCase()];
+  return mon ? { day: +m[2], month: mon, year: m[4] ? +m[4] : null } : null;
+}
+
+function sameDay(d, iso){
+  if (!d || !iso) return false;
+  var p = String(iso).split("-");
+  return d.day === +p[2] && d.month === +p[1] && (!d.year || d.year === +p[0]);
+}
+
+var ARRIVE_WORD  = /\barriv|\barr\b|collect|pick\s*up|transfer\s+(?:in|from)|ex\b/i;
+var DEPART_WORD  = /\bdepart|\bdep\b|\bleav|drop\s*off|transfer\s+(?:out|to)\b/i;
+var MOVEMENT_LABEL = /movement|arriv|arr\b|depart|dep\b|transfer|flight|pick\s*up|drop\s*off/i;
+var LABEL_LINE = /^([A-Za-z][A-Za-z &\/'\-\.]{1,44}?)\s*[:\-]\s*(.*)$/;
+
+// Every Bush Ways property, by full name and by the code the agents use.
+// A movement line that names a DIFFERENT camp is that camp's movement, not
+// ours, however well its date matches — a party leaving Boteti and reaching
+// Khwai the same day has both on one date, and "ex Khwai Guest House" on a
+// Boteti sheet would send a Boteti driver to the wrong lodge.
+//
+// Matched on full names and on codes as whole words, so "Khwai Hippo Pool
+// Campsite" (a public site, not ours) is not mistaken for Khwai Guest House.
+var CAMPS = [
+  { name: "Boteti River Camp",     re: /boteti/i,                          code: /\bBRCC?\b/ },
+  { name: "Chobe Elephant Camp",   re: /chobe\s+elephant/i,                code: /\bCEC\b/ },
+  { name: "Khwai Guest House",     re: /khwai\s+guest\s+house/i,           code: /\bKGH\b/ },
+  { name: "Sango Safari Camp",     re: /sango/i,                           code: /\bSSC\b/ },
+  { name: "Mababe Tented Camp",    re: /mababe/i,                          code: /\bMTC\b/ },
+  { name: "The Dune Camp",         re: /dune\s+camp/i,                     code: /\bDC\b/ },
+  { name: "Deception Valley Lodge", re: /deception\s+valley/i,             code: /\bDVL\b/ }
+];
+
+// Does this movement line describe leaving OUR camp, or arriving at it?
+//
+// Direction is what separates a good line from a wrong one, and a plain
+// "does it mention another lodge" test gets it backwards. Naming another
+// lodge is normal and useful — "self-driving from Deception Valley Campsite"
+// is exactly right for an arrival. What is wrong is the DIRECTION:
+//
+//   arrival   "...to Boteti from Khwai"      the FROM may be any lodge
+//   departure "...ex Boteti to Khwai"        the EX must be ours
+//   departure "...ex Khwai Guest House"      <- another camp's departure,
+//                                               and the AI put this on
+//                                               Boteti's sheet because the
+//                                               dates line up: a party can
+//                                               leave one lodge and reach the
+//                                               next on the same day.
+//
+// So: whichever lodge sits behind "ex"/"from" owns the departure, and
+// whichever sits behind "to"/"at" owns the arrival. If that lodge is not
+// ours, the line is not ours.
+function movementFits(text, kind, campNames){
+  if (!text) return true;
+  var mine = (campNames || []).join(" ").toLowerCase();
+  var after = kind === "departure"
+    ? String(text).match(/\b(?:ex|from|departing|leaving)\s+([A-Za-z][A-Za-z '\-]{2,40})/i)
+    : String(text).match(/\b(?:to|at|into|arriving\s+at)\s+([A-Za-z][A-Za-z '\-]{2,40})/i);
+  if (!after) return true;                       // no direction word, leave it alone
+  var who = after[1];
+  var named = null, isMine = false;
+  CAMPS.forEach(function(c){
+    if (!c.re.test(who) && !c.code.test(who)) return;
+    named = named || c.name;
+    if (c.re.test(mine)) isMine = true;
+  });
+  return named ? isMine : true;                  // names no lodge at all -> fine
+}
+
+// -1 this line belongs to another camp, +1 it names ours, 0 it names none.
+function campFit(line, campNames){
+  var mine = (campNames || []).join(" ").toLowerCase();
+  var named = null, isMine = false;
+  CAMPS.forEach(function(c){
+    if (!c.re.test(line) && !c.code.test(line)) return;
+    named = named || c.name;
+    if (c.re.test(mine)) isMine = true;
+  });
+  if (!named) return 0;
+  return isMine ? 1 : -1;
+}
+
+function movement(guestInfo, notes, arriveISO, departISO, campCount, campNames){
+  var all = [guestInfo || "", notes || ""].join("\n").split(/\n/)
+    .map(function(l){ return l.trim(); }).filter(Boolean);
+
+  var out = {};
+
+  // 1. Date-matched lines. The strongest signal there is.
+  all.forEach(function(line){
+    var d = dateOn(line);
+    if (!d) return;
+    var text = line.replace(/^[^:]{0,24}:\s*/, "").trim();   // drop a leading "17 Sept:"
+    if (!text || text.length < 6) return;
+    if (campFit(line, campNames) < 0) return;        // another camp's movement
+    if (sameDay(d, arriveISO) && !out.arrival && movementFits(text, "arrival", campNames))
+      out.arrival = { value: text, source: line, confident: true };
+    if (sameDay(d, departISO) && !out.departure && movementFits(text, "departure", campNames))
+      out.departure = { value: text, source: line, confident: true };
+  });
+
+  // 2. Labelled lines, but ONLY for a single-camp booking. With two camps
+  //    "Arrival Details:" appears twice and nothing says which is which.
+  if (campCount === 1){
+    all.forEach(function(line){
+      var m = line.match(LABEL_LINE);
+      if (!m || !MOVEMENT_LABEL.test(m[1])) return;
+      var v = (m[2] || "").trim();
+      if (!v || v.length < 6) return;
+      if (campFit(line, campNames) < 0) return;
+      var isDep = DEPART_WORD.test(m[1]);
+      var isArr = ARRIVE_WORD.test(m[1]) || /movement/i.test(m[1]);
+      if (isDep && !out.departure)      out.departure = { value: v, source: line, confident: true };
+      else if (isArr && !out.arrival)   out.arrival   = { value: v, source: line, confident: true };
+    });
+  }
+  return out;
+}
+
 function parseOpsChart(rows, campNames){
   // A lodge can be more than one property in ResRequest. Boteti is two —
   // "Boteti River Camp" (Rooms, Family Room) and "Boteti River Camp -
@@ -1313,7 +1478,11 @@ function parseOpsChart(rows, campNames){
     var got = extract(cur.guests, cur.notes);
     Object.keys(groups).forEach(function(k){
       var g = groups[k];
+      var mv = movement(cur.guests, cur.notes, g.arrive, g.depart,
+                        Object.keys(cur.camps || {}).length || 1, wanted);
       out.push({ booking_ref:cur.ref, guest_name:cur.name, agent:cur.agent||null,
+                 arrival_details: mv.arrival && mv.arrival.value || null,
+                 departure_details: mv.departure && mv.departure.value || null,
                  arrive_date:g.arrive, depart_date:g.depart,
                  adults:g.adults||null, children:g.children||null,
                  rooms_needed:g.rooms_needed||1, room_type_needed:g.accomm||null,
@@ -1331,7 +1500,9 @@ function parseOpsChart(rows, campNames){
                  // risk to a guest, so an extracted value is never the only
                  // record and a manager can always see what it came from.
                  guest_details: cur.guests || null,
-                 extraction: got });
+                 extraction: Object.assign({}, got,
+                   mv.arrival ? { arrival: mv.arrival } : null,
+                   mv.departure ? { departure: mv.departure } : null) });
     });
     cur = null;
   }
@@ -1357,6 +1528,7 @@ function parseOpsChart(rows, campNames){
     // rather than sniffing the shape.
     if (section === "legs" && iso(cell(r,2)) && c5){
       camps[c5] = (camps[c5]||0) + 1;
+      (cur.camps || (cur.camps = {}))[c5] = true;
       cur.legs.push({ room:c1, arrive:iso(cell(r,2)), depart:iso(cell(r,3)),
                       property:c5, accomm:cell(r,6),
                       rms:num(cell(r,7)), adults:num(cell(r,8)), children:num(cell(r,9)) });
@@ -1378,7 +1550,7 @@ function parseOpsChart(rows, campNames){
 // nothing for that field.
 function needsAi(b){
   var x = b.extraction || {};
-  var open = ["dietary","medical","occasion"].some(function(k){ return !x[k]; })
+  var open = ["dietary","medical","occasion","arrival","departure"].some(function(k){ return !x[k]; })
           || !x.bed || !x.basis;
   if (!open) return false;
   var text = [b.guest_details || "", b.special_requests || ""].join(" ").trim();
@@ -1392,11 +1564,16 @@ function mergeAi(b, got){
   if (!got) return;
   var x = b.extraction || (b.extraction = {});
   var into = { bed:"bed_type", basis:"booking_basis", dietary:"dietary",
-               medical:"medical", occasion:"special_occasion" };
+               medical:"medical", occasion:"special_occasion",
+               arrival:"arrival_details", departure:"departure_details" };
+  var campNames = (shownCamp && shownCamp.resrequest_names) || [shownCamp && shownCamp.name];
   Object.keys(into).forEach(function(k){
     if (x[k]) return;                 // the rules already answered this one
     var f = got[k];
     if (!f || !f.value) return;
+    // The model is good at finding the line and less good at noticing it
+    // belongs to the next lodge. Checked here rather than trusted.
+    if ((k === "arrival" || k === "departure") && !movementFits(f.value, k, campNames)) return;
     x[k] = f;
     b[into[k]] = f.value;
   });
@@ -1485,7 +1662,12 @@ document.addEventListener("change", function(e){
         step = post("ai_extract", {
           items: ask.map(function(b, i){
             b._ai = "b" + i;
-            return { id: b._ai, text: [b.guest_details || "", b.special_requests || ""].join("\n\n") };
+            // The camp and the leg's own dates go with the text: movement notes
+            // cover a whole itinerary, and without them the model cannot tell
+            // which lodge's transfer is which.
+            return { id: b._ai, camp: shownCamp && shownCamp.name,
+                     arrive: b.arrive_date, depart: b.depart_date,
+                     text: [b.guest_details || "", b.special_requests || ""].join("\n\n") };
           })
         }).then(function(res){
           // A failure here is not an error: the rules already did their part,
