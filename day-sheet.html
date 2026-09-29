@@ -164,6 +164,10 @@
   .tag.unsure,.diet.unsure{border-style:dashed;opacity:.85}
   .diet.unsure{text-decoration:underline dotted #C9A227}
   [title]{cursor:help}
+  /* Says when the grid is showing less than the whole day, so a filtered
+     sheet can never be mistaken for a quiet one. */
+  .filtered{color:#8A6A12;font-weight:600}
+  @media print{ .filtered{display:none} }
   /* A room still waiting for somebody to be put against it. Pale green, per
      Mark, 2026-09-29 — it has to read as "not finished yet" without shouting,
      because on an arrival-heavy morning most of the sheet will be wearing it.
@@ -338,6 +342,12 @@
   <div class="full-only lean-hide"><button class="ghost" id="print">Print</button></div>
   <div><button id="importBtn" title="Choose a ResRequest Operations Chart export">Import Ops Chart</button></div>
   <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
+  <div><label for="statusFilter">Show</label><select id="statusFilter">
+    <option value="">Everything</option>
+    <option value="arr">Arrivals</option>
+    <option value="staying">Staying</option>
+    <option value="dep">Departures</option>
+  </select></div>
   <div><button class="ghost" id="leanBtn" title="Give the grid the whole screen">⤢ More grid</button></div>
   <div style="align-self:center"><span class="status" id="status"></span></div>
 </div>
@@ -744,6 +754,8 @@ var HEAD =
 + "</tr></thead>";
 
 var STATUS_LABEL = { arriving:"Arriving", departing:"Departing", turnover:"Turnover", staying:"Staying", empty:"Empty" };
+var FILTER_LABEL = { arr:"arrivals and turnovers", staying:"stay-overs", dep:"departures and turnovers" };
+var statusFilter = "";
 
 function rowHtml(row){
   var people = boot.people, vehicles = boot.vehicles;
@@ -940,9 +952,28 @@ function markClashes(){
 function render(){
   var c = sheet.counts;
   var h = '<p class="summary"><b>'+c.arriving+"</b> arriving · <b>"+c.departing+"</b> departing · <b>"
-        + c.in_house+"</b> rooms in house · <b>"+c.empty+"</b> empty of "+c.rooms+"</p>";
+        + c.in_house+"</b> rooms in house · <b>"+c.empty+"</b> empty of "+c.rooms
+        + (statusFilter ? ' · <span class="filtered">showing '+FILTER_LABEL[statusFilter]+" only</span>" : "")
+        + "</p>";
   h += '<div class="scroll"><table>'+HEAD+"<tbody>";
-  sheet.rows.forEach(function(r){ h += rowHtml(r); });
+  // Mark, 2026-09-29: "a filter option to filter by status - Arr - which must
+  // show Arrivals and Turnovers, Staying and Departures."
+  //
+  // A turnover counts as BOTH an arrival and a departure, because it is both:
+  // one party leaves that room and another takes it the same day. Leaving it
+  // out of either list would hide the busiest rooms of the day from the very
+  // filter a manager opened to work through them.
+  //
+  // Empty rooms show under Everything only — a filter is for working a list,
+  // and a room with nobody in it is not on any of them.
+  var rows = sheet.rows.filter(function(r){
+    if (!statusFilter) return true;
+    if (statusFilter === "arr")     return r.status === "arriving" || r.status === "turnover";
+    if (statusFilter === "dep")     return r.status === "departing" || r.status === "turnover";
+    if (statusFilter === "staying") return r.status === "staying";
+    return true;
+  });
+  rows.forEach(function(r){ h += rowHtml(r); });
   h += "</tbody></table></div>";
   h += '<p class="warn" id="clashnote"></p><p class="warn amber" id="guidenote"></p>';
 
@@ -1193,6 +1224,11 @@ el("importBtn").addEventListener("click", function(){
   }
   var f = el("opsfile");
   if (f){ f.value = ""; f.click(); }
+});
+
+el("statusFilter").addEventListener("change", function(){
+  statusFilter = this.value;
+  render();
 });
 
 el("drawerBtn").addEventListener("click", function(){
