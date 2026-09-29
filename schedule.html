@@ -215,7 +215,7 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>Schedule — <span id="campTitle">Chobe Elephant Camp</span></h1>
+<h1>Schedule<span id="campTitle"></span></h1>
 <p class="sub">Everything due: room inspections from the day sheet, vehicle checks, and the camp's recurring maintenance.</p>
 <!-- Sign-in itself now happens once, on the landing page (index.html) —
      Mark, 2026-09-18: "when i click on the app - I want to go to a blank
@@ -225,7 +225,7 @@
      tab) sends you back to the landing page instead of showing a picker. -->
 <div id="whoRow">
   <div class="whobar" id="whoSignedIn">
-    <span>👤 <b id="whoName"></b><span id="campLine" hidden> · <b id="campName"></b></span></span>
+    <span>👤 <b id="whoName"></b></span>
     <span class="whobar-btns">
       <button id="changeCampBtn" hidden class="ghost" onclick="location.href='./base-dashboard.html'">Change camp</button>
       <button class="ghost" onclick="signOut()">Sign out</button>
@@ -375,7 +375,7 @@
     location.href = "./";
   };
   function showSignedIn() {
-    document.getElementById("whoName").textContent = me.name;
+    document.getElementById("whoName").textContent = bwWho(me);
     // The title always names the real camp this page is showing — not
     // just for a multi-camp person who's switched. 2026-09-18, fixed
     // alongside the person_id bug above: a single-camp person's own
@@ -384,12 +384,10 @@
     // hardcoded HTML default "Chobe Elephant Camp" showing regardless
     // of where they actually work.
     var shownCamp = camp || (me.locations && me.locations[0]);
-    if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
+    if (shownCamp) setCampTitle(bwCamp(shownCamp));
     // "Camp: X · Change camp" itself stays multi-camp-only — nowhere to
     // switch to if you only ever work at one lodge.
     if (camp && me.locations && me.locations.length > 1) {
-      document.getElementById("campName").textContent = camp.name;
-      document.getElementById("campLine").hidden = false;
       document.getElementById("changeCampBtn").hidden = false;
     }
     // No render() here — its only caller (below) calls reload() right

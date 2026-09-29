@@ -743,7 +743,7 @@
   if (!me) {
     location.href = "./";
   } else {
-    document.getElementById("whoName").textContent = me.name;
+    document.getElementById("whoName").textContent = bwWho(me);
     renderTabs();
     ensureLoaded();
   }

@@ -1,3 +1,33 @@
+/* Two small things every page that carries this row also needs.
+
+   bwWho(me) — the name to show in the signed-in bar. Mark, 2026-09-29: "can
+   you use the staff nickname - eg, Mark and not the full name." `people.name`
+   already begins with the nickname rather than the legal first name (the staff
+   sheet's own Nickname column, migration 20260917000001), so the first word IS
+   the nickname and no new column is needed. The surname is what made this bar
+   too wide on a phone.
+
+   bwCamp(camp) — the short code for a page title: "Schedule — CEC". Falls back
+   to the full name where a lodge has no abbreviation, because a long title
+   reads better than a blank one.
+*/
+function bwWho(me) {
+  var n = (me && me.name) || "";
+  return n.split(/\s+/)[0] || n;
+}
+/* Writes "— CEC" into a page's own <span id="campTitle">, or nothing when
+   there is no camp to name. The separator lives here rather than in the markup
+   so a page with no camp reads "Completed" and not "Completed — ". */
+function setCampTitle(code) {
+  var el = document.getElementById("campTitle");
+  if (el) el.textContent = code ? " — " + code : "";
+}
+
+function bwCamp(camp) {
+  if (!camp) return "";
+  return camp.abbreviation || camp.abbrev || camp.name || "";
+}
+
 /* The row of links at the top of every page — one shared place to
    build it now, not nine copies that can drift. Tool-local D-075,
    2026-09-18. Mark: "as the login ID defines your access to certain
@@ -165,6 +195,13 @@ document.addEventListener("click", function (e) {
        this menu puts an h1 top-left, and on a narrow screen a long camp name
        would otherwise run underneath it. */
     "h1{padding-right:52px}" +
-    "@media print{.navm{display:none!important}h1{padding-right:0}}";
+    /* The page title stays put — Mark, 2026-09-29: "would it be possible to
+       pin this to the top of the page at all times?" On a long to-do list or a
+       roll-up it is easy to forget which camp you are reading, and the whole
+       point of putting the camp code in the title is that it answers that. Sits
+       under the ☰ button (z-index 200) and above the page's own sticky bars. */
+    "h1{position:sticky;top:0;z-index:150;margin:0;padding:10px 52px 10px 0;" +
+      "background:inherit;background-color:#F7F5F0}" +
+    "@media print{.navm{display:none!important}h1{padding-right:0;position:static}}";
   document.head.appendChild(css);
 })();

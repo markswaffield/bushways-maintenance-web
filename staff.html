@@ -134,11 +134,11 @@
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1>Staff — <span id="campTitle">Chobe Elephant Camp</span></h1>
+<h1>Staff<span id="campTitle"></span></h1>
 <p class="sub">Everyone based at this camp. Nothing here is ever deleted — retiring keeps the history.</p>
 <div id="whoRow">
   <div class="whobar" id="whoSignedIn">
-    <span>👤 <b id="whoName"></b><span id="campLine" hidden> · <b id="campName"></b></span></span>
+    <span>👤 <b id="whoName"></b></span>
     <span class="whobar-btns">
       <button id="changeCampBtn" hidden onclick="location.href='./base-dashboard.html'">Change camp</button>
       <button onclick="signOut()">Sign out</button>
@@ -350,11 +350,9 @@ window.signOut = function(){
   sessionStorage.removeItem("bw_camp");
   location.href = "./";
 };
-if (shownCamp) document.getElementById("campTitle").textContent = shownCamp.name;
-document.getElementById("whoName").textContent = me.name;
+if (shownCamp) setCampTitle(bwCamp(shownCamp));
+document.getElementById("whoName").textContent = bwWho(me);
 if (camp && me.locations && me.locations.length > 1) {
-  document.getElementById("campName").textContent = camp.name;
-  document.getElementById("campLine").hidden = false;
   document.getElementById("changeCampBtn").hidden = false;
 }
 el("showRetired").parentElement.hidden = !me.is_manager;

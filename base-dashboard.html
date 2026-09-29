@@ -174,7 +174,7 @@
   if (!me) {
     location.href = "./";
   } else {
-    document.getElementById("whoName").textContent = me.name;
+    document.getElementById("whoName").textContent = (me.name || "").split(/\s+/)[0] || me.name;
     render();
   }
 
@@ -201,7 +201,7 @@
           '<h2><span class="letter">B</span>Lodge Management</h2>' +
           '<p>Go straight to one camp\'s own Schedule, Inspection, To-do list, Fix a Fault and Completed — stays that camp until you come back here to change it.</p>' +
           '<label for="lodgeSelect">Lodge</label><select id="lodgeSelect">' +
-            me.locations.map(function (l) { return '<option value="' + esc(l.id) + '" data-name="' + esc(l.name) + '">' + esc(l.name) + '</option>'; }).join("") +
+            me.locations.map(function (l) { return '<option value="' + esc(l.id) + '" data-name="' + esc(l.name) + '" data-abbrev="' + esc(l.abbreviation || "") + '">' + esc(l.name) + '</option>'; }).join("") +
           '</select>' +
           '<div class="act" style="margin-top:12px"><button class="primary" onclick="goToLodge()">Go →</button></div>' +
         '</div>' +
@@ -211,7 +211,10 @@
   window.goToLodge = function () {
     var sel = document.getElementById("lodgeSelect");
     var opt = sel.selectedOptions[0];
-    sessionStorage.setItem("bw_camp", JSON.stringify({ id: opt.value, name: opt.dataset.name }));
+    // The abbreviation rides along, so every page can title itself
+    // "Schedule — CEC" without another round trip to find out what CEC is.
+    sessionStorage.setItem("bw_camp", JSON.stringify({
+      id: opt.value, name: opt.dataset.name, abbreviation: opt.dataset.abbrev || "" }));
     location.href = "./schedule.html";
   };
 </script>

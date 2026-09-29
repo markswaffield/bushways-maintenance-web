@@ -228,12 +228,13 @@
     return c ? c.name : "";
   }
   function signedInBoxHtml() {
-    var campBit = (camp && me.locations && me.locations.length > 1)
-      ? ' · <b>' + esc(camp.name) + '</b>' : "";
+    // Nickname only, and no camp behind it — Mark, 2026-09-29. The page title
+    // already says which camp, and the surname plus camp name is what made
+    // this bar too wide to sit beside its buttons on a phone.
     var changeCampBtn = (camp && me.locations && me.locations.length > 1)
       ? '<button class="secondary" onclick="location.href=\'./base-dashboard.html\'">Change camp</button>' : "";
     return '<div class="whobar">' +
-      '<span>👤 <b>' + esc(me.name) + '</b>' + (me.is_manager ? " (management)" : "") + campBit + '</span>' +
+      '<span>👤 <b>' + esc(bwWho(me)) + '</b>' + (me.is_manager ? " (management)" : "") + '</span>' +
       '<span class="whobar-btns">' + changeCampBtn + '<button class="secondary" onclick="signOut()">Sign out</button></span>' +
       '</div>';
   }
