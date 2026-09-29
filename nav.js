@@ -49,17 +49,15 @@ function navHtml(me, active, hide) {
     // Staff already use, not a new flag to keep in step with those.
     links.push({ href: "./reports.html", label: "Reports" });
   }
-  if (me && me.locations && me.locations.length > 1) {
-    // The page this reaches calls itself the Maintenance Dashboard, so the
-    // button that reaches it says the same — Mark, 2026-09-29: "if that padded
-    // button takes us to the Maintenance Dashboard - then it must say
-    // Maintenance Dashboard." A control named differently from the place it
-    // goes is a control people hesitate over.
-    //
-    // The file is still base-dashboard.html. Renaming that would break every
-    // bookmark and every link in the tool for no gain the user can see.
-    links.push({ href: "./base-dashboard.html", label: "Maintenance Dashboard" });
-  }
+  // No Maintenance Dashboard link here any more — Mark, 2026-09-29: "this is
+  // actually redundant and can be removed as the Change Camp takes us back to
+  // the Maintenance Dashboard." Both appeared on exactly the same condition
+  // (access to more than one lodge) and both went to the same page, so the row
+  // was carrying two buttons for one destination. Change camp is the one that
+  // says why you would press it.
+  //
+  // Change camp lives in the ☰ menu (navMenuHtml below) and, on the pages that
+  // have one, in their own sign-in bar.
   if (me && me.is_administrator) {
     links.push({ href: "./admin-checklists.html", label: "Edit Checklists" });
   }

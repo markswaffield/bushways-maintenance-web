@@ -42,7 +42,14 @@
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;color:#F7F5F0;
     background:linear-gradient(rgba(18,45,49,.72),rgba(18,45,49,.72)),url('./images/hero.jpg') top center/cover no-repeat;
     background-color:#122d31;min-height:100vh}
-  h1{font-size:19px;margin:0 0 4px;color:#fff}
+  /* MAINTENANCE DASHBOARD — Mark, 2026-09-29: "I want this all written in CAPS
+     and centered." Uppercased in CSS rather than typed in capitals, so the
+     word is still ordinary text to a screen reader and to anything that ever
+     reads this page's title back. */
+  h1{font-size:26px;margin:0 0 6px;color:#fff;text-align:center;
+     text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+  .sub{text-align:center}
+  @media (max-width:700px){ h1{font-size:21px;letter-spacing:.04em} }
   h2{font-size:14px;margin:0 0 6px;color:#43594A}
   .sub{color:#D8D2C4;font-size:13px;margin:0 0 4px}
   select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}

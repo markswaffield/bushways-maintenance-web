@@ -167,11 +167,10 @@
     // with the same name going to different places is the confusion
     // to avoid (D-092).
     document.getElementById("navRow").innerHTML = navHtml(m, "",
-      ["Inspection", "Fix a fault", "Schedule", "To-do list", "Completed", "Assets", "Staff",
-       // The way back is the "← Maintenance Dashboard" button in the sign-in
-       // bar below (D-103) — one clear button, not two with the same name.
-       // Matched by LABEL, so it moves whenever nav.js renames it.
-       "Maintenance Dashboard"]);
+      // The Maintenance Dashboard link is no longer in the row at all, so it
+      // is not listed here — the way back is the "← Maintenance Dashboard"
+      // button in the sign-in bar below (D-103), which is now the only one.
+      ["Inspection", "Fix a fault", "Schedule", "To-do list", "Completed", "Assets", "Staff"]);
   })();
 </script>
 
