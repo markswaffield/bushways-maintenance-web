@@ -164,6 +164,18 @@
   .tag.unsure,.diet.unsure{border-style:dashed;opacity:.85}
   .diet.unsure{text-decoration:underline dotted #C9A227}
   [title]{cursor:help}
+  /* A room still waiting for somebody to be put against it. Pale green, per
+     Mark, 2026-09-29 — it has to read as "not finished yet" without shouting,
+     because on an arrival-heavy morning most of the sheet will be wearing it.
+     It clears itself as each picker is filled, so an unhighlighted row is a
+     finished one.
+
+     Deliberately NOT the red the clash warning uses: a gap is work still to do,
+     a clash is a mistake already made, and they must not look alike. */
+  td.gap{background:#E6F2E4!important}
+  tbody tr:nth-child(even) td.gap{background:#DFEEDD!important}
+  td.gap.room{box-shadow:inset 3px 0 0 #6FA96B}
+  @media print{ td.gap{background:transparent!important;box-shadow:none} }
   /* The Notes cell now always carries all three labels, filled or not — an
      empty Medical line says "nobody told us", which is different from the
      question never having been asked. Empty ones are greyed so the filled
@@ -423,11 +435,32 @@ function peopleFor(key){
   return matching.length ? matching : boot.people;
 }
 
+// Which self-drive flag, if any, stands in for this picker. One flag per
+// movement, not per field: a self-driving party has no guide and no camp
+// vehicle as one fact, not two (see migration 20260929000001).
+var SELF_DRIVE_FOR = {
+  guide_id: ["self_drive", "stay"], vehicle_id: ["self_drive", "stay"],
+  arrival_driver_id: ["arrival_self_drive", "day"], arrival_vehicle_id: ["arrival_self_drive", "day"],
+  departure_driver_id: ["departure_self_drive", "day"], departure_vehicle_id: ["departure_self_drive", "day"],
+};
+
+function selfDriveOn(row, key){
+  var f = SELF_DRIVE_FOR[key];
+  if (!f) return false;
+  return !!val(row, f[0], f[1]);
+}
+
 function cellSelect(row,key,list,scope){
   if (scope === "stay" && !row.stay) return '<td class="dim"></td>';
   var choices = (list === boot.people) ? peopleFor(key) : list;
+  var sd = SELF_DRIVE_FOR[key];
+  var on = sd && selfDriveOn(row, key);
+  // Mark, 2026-09-29: "we could have Self Drive as the first option above the
+  // guides names and vehicle registrations." First, because for a self-drive
+  // party it is the answer, not an exception to hunt for.
+  var head = sd ? '<option value="__self_drive__"'+(on?" selected":"")+">Self drive</option>" : "";
   return '<td><select data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'">'
-       + opts(choices, val(row,key,scope)) + "</select></td>";
+       + head + opts(choices, on ? "" : val(row,key,scope)) + "</select></td>";
 }
 // ETA and ETD change constantly, so the camp always overrides - Mark,
 // 2026-09-11: "these can change at any time - so camp needs to be able
@@ -618,8 +651,17 @@ function cellType(b){
   var bits = [];
   if (b.bed_type) bits.push('<span class="tag'+(x.bed && x.bed.confident === false ? " unsure" : "")
     + '" title="'+esc((x.bed && x.bed.source) || "from the booking")+'">'+esc(b.bed_type)+"</span>");
-  if (b.booking_basis) bits.push('<span class="tag basis'+(x.basis && x.basis.confident === false ? " unsure" : "")
-    + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">'+esc(b.booking_basis)+"</span>");
+  // Mark, 2026-09-29: "I only want to record the bed type (Double, Twin,
+  // Triple) and if they are Fully Inclusive (FI). If you pick up that they are
+  // Self Drive - this must be noted in the Arrival/Departure Notes."
+  //
+  // So FI is the only basis shown here. Self drive is a movement fact, not a
+  // property of the room, and belongs beside the pickup it replaces — where a
+  // driver will actually look for it. The importer writes it there.
+  if (/\bFI\b/.test(b.booking_basis || "")) {
+    bits.push('<span class="tag basis'+(x.basis && x.basis.confident === false ? " unsure" : "")
+      + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">FI</span>');
+  }
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 
@@ -709,7 +751,7 @@ function rowHtml(row){
 
   // ---- Sector 3: departures ----
   if (row.departing){
-    h += '<td class="ro"><span class="name">'+esc(row.departing.guest_name)+"</span>"
+    h += '<td class="ro c-depname"><span class="name">'+esc(row.departing.guest_name)+"</span>"
       +  (row.departing.booking_ref ? ' <span class="ref">'+esc(row.departing.booking_ref)+"</span>" : "")
       +  (row.departing.guest_names ? '<span class="sub-name">'+esc(row.departing.guest_names)+"</span>" : "")
       +  "</td>";
@@ -794,6 +836,57 @@ function markGuideLoad(){
   if (el2) el2.textContent = over.length
     ? "Over this lodge's limit of " + limit + " pax per guide: " + over.join(" · ") + ". Outlined in amber."
     : "";
+}
+
+// Rooms still waiting for somebody to be put against them.
+//
+// Mark, 2026-09-29: "I would like for all guests / rooms that are arriving to
+// be highlighted in blocks - Room, Status, The Stay... This highlight must
+// remain in place until such time as a housekeeper, Guide, Vehicle, pickup
+// driver and vehicle have been allocated... This is done so managers can
+// easily see if they have missed allocating someone."
+//
+// So the highlight is not decoration: it is the outstanding-work list, and it
+// clears itself as the row is filled. Read live off the pickers rather than
+// off the saved data, so it goes out the moment the last one is chosen rather
+// than after a save — the manager is working down the row, and feedback that
+// waits for a save is feedback that arrives too late to be useful.
+//
+// "Self drive" counts as allocated. That is the whole reason it is an option:
+// a party driving themselves has no guide and no vehicle, and a row that can
+// never be completed is a row people learn to ignore.
+function markGaps(){
+  if (!sheet || !sheet.rows) return;
+  var pick = function (roomId, key) {
+    var elx = document.querySelector('[data-room="' + roomId + '"][data-key="' + key + '"]');
+    return elx ? elx.value : "";
+  };
+  var filled = function (roomId, key) {
+    var v = pick(roomId, key);
+    return !!v;                       // "__self_drive__" is a value, so it counts
+  };
+
+  sheet.rows.forEach(function (row) {
+    var tr = document.querySelector('tr[data-rowfor="' + row.room_id + '"]');
+    if (!tr) return;
+
+    // Arriving and turnover rows: the stay's own three, plus the pickup.
+    var arriving = row.status === "arriving" || row.status === "turnover";
+    var needArr = arriving && !(
+      filled(row.room_id, "housekeeper_id") && filled(row.room_id, "guide_id") &&
+      filled(row.room_id, "vehicle_id") &&
+      filled(row.room_id, "arrival_driver_id") && filled(row.room_id, "arrival_vehicle_id"));
+    tr.querySelectorAll("td.room, td.status-cell, td.c-pax, td.c-type, td.c-names")
+      .forEach(function (td) { td.classList.toggle("gap", !!needArr); });
+
+    // Departing and turnover rows: the drop-off. Highlighted on the departing
+    // party's own Names cell, which is where a manager is reading who leaves.
+    var leaving = row.status === "departing" || row.status === "turnover";
+    var needDep = leaving && !(
+      filled(row.room_id, "departure_driver_id") && filled(row.room_id, "departure_vehicle_id"));
+    var depName = tr.querySelector("td.c-depname");
+    if (depName) depName.classList.toggle("gap", !!needDep);
+  });
 }
 
 function markClashes(){
@@ -887,6 +980,7 @@ function render(){
   el("app").innerHTML = h;
   markClashes();
   markGuideLoad();
+  markGaps();
 }
 
 function markDirty(roomId){
@@ -901,7 +995,19 @@ function collect(roomId){
   var body = { date: sheet.date, room_id: roomId, person_id: personId() };
   if (row.stay) body.stay_id = row.stay.stay_id;
   document.querySelectorAll('[data-room="'+roomId+'"]').forEach(function(inp){
-    body[inp.getAttribute("data-key")] = inp.value;
+    var key = inp.getAttribute("data-key");
+    var sd = SELF_DRIVE_FOR[key];
+    // "Self drive" is a choice in the picker but a flag in the database — the
+    // id columns are foreign keys and have nowhere to put it. Translated here
+    // so the two can never disagree: choosing it sets the movement's flag and
+    // empties the id; choosing a real person or vehicle clears the flag.
+    if (sd){
+      var chose = inp.value === "__self_drive__";
+      body[sd[0]] = chose;
+      body[key] = chose ? "" : inp.value;
+      return;
+    }
+    body[key] = inp.value;
   });
   if (row.stay && row.stay.booking) body.arriving_booking_id = row.stay.booking.id;
   if (row.departing && row.departing.booking_id) body.departing_booking_id = row.departing.booking_id;
@@ -976,7 +1082,12 @@ document.addEventListener("input", function(e){
 });
 document.addEventListener("change", function(e){
   var room = e.target.getAttribute && e.target.getAttribute("data-room");
-  if (room){ markDirty(room); markClashes(); markGuideLoad(); }
+  if (room){
+    // Picking "Self drive" is a statement that nobody is driving them, so it
+    // sets the movement's flag and empties the id. Picking a real person or
+    // vehicle clears the flag. They can never both be true.
+    markDirty(room); markClashes(); markGuideLoad(); markGaps();
+  }
 });
 document.addEventListener("click", function(e){
   var t = e.target;
@@ -1488,6 +1599,19 @@ function parseOpsChart(rows, campNames){
       var g = groups[k];
       var mv = movement(cur.guests, cur.notes, g.arrive, g.depart,
                         Object.keys(cur.camps || {}).length || 1, wanted);
+      // Self drive belongs with the movement, not in the Type column (Mark,
+      // 2026-09-29). Only added where the line does not already say so — most
+      // self-drive bookings spell it out ("self-driving ex Nata Lodge"), and
+      // repeating it would just make the cell longer.
+      if (/self[\s-]*driv/i.test(got.basis && got.basis.value ? (cur.guests || "") + " " + (cur.notes || "") : "")) {
+        ["arrival", "departure"].forEach(function (k) {
+          var cur_v = mv[k] && mv[k].value;
+          if (cur_v && /self[\s-]*driv/i.test(cur_v)) return;       // already says it
+          mv[k] = { value: cur_v ? "Self drive — " + cur_v : "Self drive",
+                    source: (mv[k] && mv[k].source) || "booking basis",
+                    confident: mv[k] ? mv[k].confident : false };
+        });
+      }
       out.push({ booking_ref:cur.ref, guest_name:cur.name, agent:cur.agent||null,
                  arrival_details: mv.arrival && mv.arrival.value || null,
                  departure_details: mv.departure && mv.departure.value || null,
