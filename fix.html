@@ -223,9 +223,11 @@
   // own home camp (me.locations[0], now correctly theirs) used to be
   // silently left off the title entirely, same underlying bug as the
   // other pages' hardcoded "Chobe Elephant Camp" default.
+  // The short code, like every other page's title — this one builds its
+  // heading in JS rather than from markup, so it was missed when the rest
+  // changed over. Falls back to the full name for a location with no code.
   function shownCampName() {
-    var c = camp || (me.locations && me.locations[0]);
-    return c ? c.name : "";
+    return bwCamp(camp || (me.locations && me.locations[0]));
   }
   function signedInBoxHtml() {
     // Nickname only, and no camp behind it — Mark, 2026-09-29. The page title

@@ -116,10 +116,20 @@
        gate is its own separate Administrator PIN (D-037) — nothing to
        do with the ordinary bw_signin every other page now shares — so
        there's nowhere on this page itself to send someone back to.
-       "./" (the landing page) is always the right answer regardless:
-       already signed in there, it re-routes straight back to Base
-       Dashboard or their own lodge; not signed in at all, it's the
-       correct place to be anyway.
+
+       Sending them to "./" was wrong for the commonest case, though —
+       Mark, 2026-09-29: "when you use the Return to Menu Button - it
+       takes you to the Maintenance Dashboard - it should just take you
+       to the Lodge Maintenance Page that you were working on." A
+       multi-camp admin re-routes from the landing page to the
+       Maintenance Dashboard, so they land a step further back than they
+       started and have to pick their camp again.
+
+       Almost everyone gets here from a lodge page's own menu, so the
+       ordinary bw_signin and bw_camp are still in sessionStorage: going
+       to Schedule puts them back in the camp they left. Only someone
+       who opened this page cold has nothing to go back to, and for them
+       "./" really is the right answer. goBack() picks between the two.
        A real button, not a plain link — Mark, the same day, catching
        it straight after: "please flesh this out to a padded button as
        all the others. Please note this needs to be the default style
@@ -130,7 +140,7 @@
        action anywhere in this tool, not a styled-to-look-like-text
        link. See tool-local D-057. -->
   <div class="acts" style="justify-content:center;margin-top:24px">
-    <button class="ghost" onclick="location.href='./'">← Return to Menu</button>
+    <button class="ghost" onclick="goBack()">← Return to Menu</button>
   </div>
 </div>
 
@@ -143,6 +153,16 @@
 <script src="./nav.js"></script>
 <div id="navRow"></div>
 <script>
+  /* Back to where they actually came from. See the comment on the button
+     above: "./" re-routes a multi-camp admin to the Maintenance Dashboard,
+     which is a step further back than they started. If the ordinary sign-in
+     is still in this tab — which it is whenever they reached this page from
+     a lodge page's own menu — Schedule returns them to that camp. */
+  window.goBack = function () {
+    var signedIn = null;
+    try { signedIn = sessionStorage.getItem("bw_signin"); } catch (e) {}
+    location.href = signedIn ? "./schedule.html" : "./";
+  };
   (function () {
     var m = null;
     try { var s = sessionStorage.getItem("bw_admin"); if (s) { var a = JSON.parse(s); m = { is_manager: true, is_administrator: true, locations: [] }; } } catch (e) {}
