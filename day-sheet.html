@@ -1620,21 +1620,46 @@ function movement(guestInfo, notes, arriveISO, departISO, campCount, campNames){
       out.departure = { value: text, source: line, confident: true };
   });
 
-  // 2. Labelled lines, but ONLY for a single-camp booking. With two camps
-  //    "Arrival Details:" appears twice and nothing says which is which.
-  if (campCount === 1){
-    all.forEach(function(line){
+  // 2. Labelled lines — "Arrival Details:", "Arr:", "Departure details:".
+  //
+  //    The first version only looked at these for a SINGLE-camp booking, on
+  //    the reasoning that a two-camp itinerary carries two "Arrival Details:"
+  //    lines and nothing says which is which. That was too blunt and it lost
+  //    real detail. Mark, 2026-09-29, on two bookings at Chobe: "the
+  //    information describing this has not been captured into the Arrival or
+  //    Departure notes."  Both read plainly:
+  //
+  //        Arr:Self drive Ex Nkasa Linyanti to CEC
+  //        Arrival Details: ex Kasane Airport... to Chobe Elephant Camp
+  //
+  //    They name the camp, so there was never any ambiguity to protect
+  //    against. The rule now uses the evidence instead of the camp count:
+  //
+  //      a line naming OUR camp, in the right direction   -> take it
+  //      exactly one candidate naming no camp at all      -> take it
+  //      several candidates, none naming ours             -> leave it blank
+  //
+  //    Only the last case is genuinely ambiguous, and only that one is lost.
+  ["arrival", "departure"].forEach(function (kind) {
+    if (out[kind]) return;                                  // a dated line already won
+    var candidates = [];
+    all.forEach(function (line) {
       var m = line.match(LABEL_LINE);
       if (!m || !MOVEMENT_LABEL.test(m[1])) return;
       var v = (m[2] || "").trim();
       if (!v || v.length < 6) return;
-      if (campFit(line, campNames) < 0) return;
       var isDep = DEPART_WORD.test(m[1]);
       var isArr = ARRIVE_WORD.test(m[1]) || /movement/i.test(m[1]);
-      if (isDep && !out.departure)      out.departure = { value: v, source: line, confident: true };
-      else if (isArr && !out.arrival)   out.arrival   = { value: v, source: line, confident: true };
+      if (kind === "departure" ? !isDep : !(isArr && !isDep)) return;
+      if (campFit(line, campNames) < 0) return;             // another camp's, outright
+      if (!movementFits(v, kind, campNames)) return;        // right words, wrong direction
+      candidates.push({ line: line, value: v, mine: campFit(line, campNames) > 0 });
     });
-  }
+    var mine = candidates.filter(function (c) { return c.mine; });
+    var pick = mine.length ? mine[0]
+             : (candidates.length === 1 ? candidates[0] : null);
+    if (pick) out[kind] = { value: pick.value, source: pick.line, confident: true };
+  });
   return out;
 }
 
