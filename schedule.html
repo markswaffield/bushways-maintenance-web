@@ -25,6 +25,14 @@
      Assets, and the "You are" sign-in above it — real tap targets now,
      not plain inline text. Per Mark, 2026-09-16: "Schedule Inspection
      etc are very small for fingers to hit on a phone." */
+  /* The two create actions, pinned above the day's list. Sticky rather than
+     merely first: on a long schedule the reason to add one often turns up
+     halfway down it. Sits below the toolbar's own sticky elements and below
+     the nav menu (z-index 200), so nothing overlaps. */
+  .topacts{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:8px;
+           margin:12px 0 0;padding:10px 0;background:#F7F5F0}
+  .topacts button{padding:10px 15px;font-size:14.5px}
+  @media print{ .topacts{display:none} }
   .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}
   .nav a,.nav b{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff}
   .nav b{color:#43594A;border-color:#43594A;background:#EAF1EC}
@@ -459,7 +467,29 @@
     });
 
     var overdue = shown.filter(function (s) { return s.status === "overdue"; }).length;
-    var html = '<p class="order-note">Only what is coming up. Anything further off lives in Schedules below. ' +
+
+    // The two things a manager comes to this page to CREATE, pinned above
+    // everything else — Mark, 2026-09-29: "for the option to add a schedule
+    // and or create a handover - I would like these buttons to be pinned at
+    // the top of the page."
+    //
+    // "+ Add a schedule" had been sitting inside the Schedules section, which
+    // is collapsed by default, so it was invisible until somebody thought to
+    // open a section they had no reason to open. "+ Raise a handover" was
+    // below the whole due list. Both still live in their own sections too —
+    // that is where they belong when you are already reading one — but
+    // neither should need finding.
+    //
+    // Management only, the same check the originals carry: the buttons the
+    // Edge Function would refuse are not worth offering.
+    var html = "";
+    if (me && me.is_manager) {
+      html += '<div class="topacts">' +
+        '<button onclick="startAdd()">+ Add a schedule</button>' +
+        '<button onclick="startRaiseHandover()">+ Raise a handover</button>' +
+      "</div>";
+    }
+    html += '<p class="order-note">Only what is coming up. Anything further off lives in Schedules below. ' +
       all.length + " showing" +
       (overdue ? " · " + overdue + " of those shown " + (overdue === 1 ? "is" : "are") + " overdue" : "") + '.</p>';
 
@@ -585,10 +615,22 @@
   window.toggleRemoved = function () { showRemoved = !showRemoved; render(); };
   window.startEdit = function (id) { editingId = id; historyFor = null; render(); };
   window.cancelEdit = function () { editingId = null; render(); };
-  window.startAdd = function () { editingId = "__new__"; addForVehicle = null; render(); };
+  // The add form is drawn INSIDE the Schedules section, and that section is
+  // collapsed by default — so opening the form without opening the section
+  // puts it somewhere nobody can see. That was harmless while the only way in
+  // was a button inside the open section; the moment "+ Add a schedule" was
+  // pinned to the top of the page it became a button that appears to do
+  // nothing. Open the section, then go to the form.
+  function openAddForm() {
+    showRules = true;
+    render();
+    var form = document.getElementById("scheduleForm");
+    if (form && form.scrollIntoView) form.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  window.startAdd = function () { editingId = "__new__"; addForVehicle = null; openAddForm(); };
   // Straight from a vehicle that has none — the form opens already
   // pointed at it, on a km interval, which is what it is always for.
-  window.startAddFor = function (vehicleId) { editingId = "__new__"; addForVehicle = vehicleId; render(); };
+  window.startAddFor = function (vehicleId) { editingId = "__new__"; addForVehicle = vehicleId; openAddForm(); };
 
   window.showHistory = function (id) {
     if (historyFor === id) { historyFor = null; render(); return; }
@@ -745,7 +787,10 @@
       ? rule.recurrence_interval + "|" + rule.recurrence_unit : "1|months";
     var known = PRESETS.some(function (p) { return p[0] === presetKey; });
 
-    var h = '<div class="form">' +
+    // A stable handle, so whatever opens this form can go to it — the pinned
+    // "+ Add a schedule" is well above it and the Schedules section may have
+    // been closed a moment ago.
+    var h = '<div class="form" id="scheduleForm">' +
       '<label>Name</label><input type="text" id="f_name" value="' + esc(isNew ? "" : rule.name) + '" placeholder="e.g. Generator service">' +
       '<label>Interval</label><select id="f_kind" onchange="onKindPick()">' +
       '<option value="date"' + (kind === "date" ? " selected" : "") + '>By date</option>' +
@@ -980,6 +1025,10 @@
   window.startRaiseHandover = function () {
     ho = { to_lodge: HERE || "", on: new Date().toISOString().slice(0, 10), end: "" };
     raisingHandover = true; editingHandoverId = null; render();
+    // Pinned at the top now, so the form it opens is well below the fold —
+    // go to it rather than leaving the button looking inert.
+    var f = document.getElementById("ho_vehicle");
+    if (f && f.scrollIntoView) f.scrollIntoView({ block: "center", behavior: "smooth" });
   };
   window.cancelHandover = function () { raisingHandover = false; editingHandoverId = null; render(); };
 
