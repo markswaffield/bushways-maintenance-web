@@ -139,8 +139,15 @@ function navMenuHtml(links, active, me) {
           '" onclick="navMenuClose(); if (window.signOut) window.signOut();">Sign out</button>';
 
   return '<div class="navm" id="navm">' +
+    // The app's own icon, not a hamburger — Mark, 2026-09-29: "can we change
+    // the three dash icon to the BW Logo icon - the same we used for the
+    // actual App Icon?" It is the mark people already tap to open the tool, so
+    // it is the one they will recognise as "this is Bush Ways' own control".
+    // The icon carries its own dark ground, so the button is just a rounded
+    // frame around it. aria-label keeps it announced as a menu to a screen
+    // reader, which the glyph used to do on its own.
     '<button class="navm-btn" id="navmBtn" aria-expanded="false" aria-label="Menu" ' +
-      'onclick="navMenuToggle()">☰</button>' +
+      'onclick="navMenuToggle()"><img src="./icons/icon-192.png" alt=""></button>' +
     '<div class="navm-panel" id="navmPanel" hidden>' + items + tail + "</div>" +
   "</div>";
 }
@@ -174,11 +181,13 @@ document.addEventListener("click", function (e) {
   var css = document.createElement("style");
   css.textContent =
     ".navm{position:fixed;top:10px;right:10px;z-index:200}" +
-    ".navm-btn{width:42px;height:42px;padding:0;font-size:19px;line-height:1;border-radius:9px;" +
-      "border:1px solid #43594A;background:#43594A;color:#fff;cursor:pointer;" +
-      "box-shadow:0 2px 8px rgba(0,0,0,.22)}" +
-    ".navm-btn:hover{background:#35473B}" +
-    ".navm-panel{position:absolute;top:48px;right:0;min-width:208px;background:#fff;" +
+    ".navm-btn{width:46px;height:46px;padding:0;border-radius:11px;overflow:hidden;" +
+      "border:1.5px solid rgba(255,255,255,.55);background:#122d31;cursor:pointer;" +
+      "box-shadow:0 2px 10px rgba(0,0,0,.3);display:block}" +
+    ".navm-btn img{display:block;width:100%;height:100%;object-fit:cover}" +
+    ".navm-btn:hover{border-color:#fff}" +
+    ".navm-btn[aria-expanded=true]{border-color:#fff;box-shadow:0 0 0 3px rgba(67,89,74,.35)}" +
+    ".navm-panel{position:absolute;top:53px;right:0;min-width:208px;background:#fff;" +
       "border:1px solid #C9C2AC;border-radius:9px;padding:6px;display:flex;flex-direction:column;gap:4px;" +
       "box-shadow:0 8px 28px rgba(0,0,0,.22)}" +
     ".navm-item{display:block;width:100%;text-align:left;padding:9px 12px;font-size:14px;" +
@@ -200,7 +209,7 @@ document.addEventListener("click", function (e) {
        roll-up it is easy to forget which camp you are reading, and the whole
        point of putting the camp code in the title is that it answers that. Sits
        under the ☰ button (z-index 200) and above the page's own sticky bars. */
-    "h1{position:sticky;top:0;z-index:150;margin:0;padding:10px 52px 10px 0;" +
+    "h1{position:sticky;top:0;z-index:150;margin:0;padding:10px 58px 10px 0;" +
       "background:inherit;background-color:#F7F5F0}" +
     "@media print{.navm{display:none!important}h1{padding-right:0;position:static}}";
   document.head.appendChild(css);
