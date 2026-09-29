@@ -36,12 +36,6 @@
      other change needed, this page and base-dashboard.html both just
      reference that one filename. Same file, same treatment, on
      base-dashboard.html — keep both in sync if it's ever swapped. */
-  /* The brand face, self-hosted rather than pulled from Google Fonts.
-     13KB for the one weight we use, same origin so the service worker caches
-     it, and it still renders when a camp is offline — which a webfont on a CDN
-     would not. `swap` means the fallback shows first rather than nothing. */
-  @font-face{font-family:'Noto Sans';font-style:normal;font-weight:900;font-display:swap;
-    src:url('./fonts/noto-sans-900-latin.woff2') format('woff2')}
 
   /* The photograph was being flattened under a single flat teal wash at 72%,
      which is where Mark's "strange green tinge" came from — #122d31 is a teal,
@@ -66,22 +60,37 @@
        phone it is width-constrained and it is the difference between the
        hyena and a patch of grass. */
     background:url('./images/hero.jpg') 55% 42%/cover no-repeat;
-    filter:saturate(1.28) contrast(1.06) brightness(1.04) sepia(.10)}
+    filter:saturate(1.3) contrast(1.05) brightness(1.16) sepia(.08)}
+  /* A phone is so much taller than it is wide that `cover` on a landscape
+     photograph shows a narrow vertical slice of it — which is why the old one
+     showed a leg and some grass. This is a portrait crop with the hyena high
+     in the frame, so it reads ABOVE the sign-in card rather than behind it.
+     Only phones pay for it; wider screens never load it. */
+  @media (max-width:560px){
+    body::before{background-image:url('./images/hero-phone.jpg');background-position:50% 30%}
+  }
+  /* Lightened again, 2026-09-29 — Mark: "better but still too dark". The veil
+     now only has to hold the two lines of type above the card; the card itself
+     is white and needs no help. So it is concentrated behind the words at the
+     top and falls away quickly, leaving most of the photograph nearly clear. */
   body::after{content:"";position:fixed;inset:0;z-index:-1;
-    background:radial-gradient(130% 100% at 50% 44%,
-                 rgba(6,16,18,.74) 0%, rgba(6,16,18,.58) 40%,
-                 rgba(6,16,18,.34) 72%, rgba(6,16,18,.16) 100%)}
+    background:radial-gradient(95% 62% at 50% 30%,
+                 rgba(6,16,18,.52) 0%, rgba(6,16,18,.34) 45%,
+                 rgba(6,16,18,.16) 75%, rgba(6,16,18,.05) 100%)}
   .wrap{width:100%;max-width:360px}
-  /* Mark, 2026-09-29: "match the title Bush Ways to the same font as we use in
-     our main logo. I also want it significantly larger." The brand's own
-     heading treatment — Noto Sans Black, uppercase, letter-spaced
-     (bushways/brand/design-system.md). The shadow is what keeps it readable
-     where the photograph happens to be pale behind it. */
-  h1{font-family:'Noto Sans',-apple-system,system-ui,sans-serif;font-weight:900;
-     font-size:44px;line-height:1.02;letter-spacing:.055em;text-transform:uppercase;
-     margin:0 0 10px;text-align:center;color:#fff;
-     text-shadow:0 2px 18px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.4)}
-  @media (max-width:380px){ h1{font-size:36px;letter-spacing:.04em} }
+  /* The wordmark is the real artwork, not type.
+     Mark asked for the title to match the logo's font; the logo PDF turned out
+     to carry no font at all — the lettering is outlined vector art, so there
+     is no typeface to match and setting Noto Sans Black was only ever a guess
+     that looked close and was not. This is the wordmark itself, cut from
+     bushways/brand/images/BushWays_Lodges_HighRes(Inverse).pdf (BUSH and WAYS
+     only — no LODGES, no hyena) and recoloured white on transparent.
+     The <h1> keeps the words so screen readers, search and the browser tab
+     still read "Bush Ways"; the image replaces them visually. */
+  h1{margin:0 0 14px;text-align:center;line-height:0}
+  h1 img{width:min(74vw,290px);height:auto;display:inline-block;
+         filter:drop-shadow(0 2px 14px rgba(0,0,0,.45))}
+  h1 span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .sub{color:#E6DFD1;font-size:14px;margin:0 0 22px;text-align:center;
        letter-spacing:.02em;text-shadow:0 1px 8px rgba(0,0,0,.5)}
   /* color:#232019 here, not left to inherit — body's own text colour is
@@ -108,7 +117,7 @@
 </style></head><body>
 
 <div class="wrap">
-  <h1>Bush Ways</h1>
+  <h1><img src="./images/bushways-wordmark-white.png" alt="Bush Ways"><span>Bush Ways</span></h1>
   <p class="sub">Sign in to continue</p>
   <div id="signinBox" class="signin-box" hidden>
     <div class="title">Sign in</div>
