@@ -53,11 +53,20 @@
      the animal still read as the warm photograph they are. */
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px;color:#F7F5F0;
     min-height:100vh;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(125% 95% at 50% 44%,
-                 rgba(6,16,18,.80) 0%, rgba(6,16,18,.66) 42%,
-                 rgba(6,16,18,.44) 72%, rgba(6,16,18,.26) 100%),
-               url('./images/hero.jpg') center/cover no-repeat;
-    background-color:#122d31}
+    position:relative;background-color:#122d31}
+  /* The photograph and the veil are two layers rather than one stacked
+     background, so the picture itself can be colour-corrected. Flattening a
+     warm golden-hour photograph under a single teal wash is what produced the
+     green cast; a veil alone could only ever make it darker or lighter, never
+     warmer. Here the image gets its saturation and warmth back, and the veil
+     sits above it doing nothing but holding contrast behind the words. */
+  body::before{content:"";position:fixed;inset:0;z-index:-2;
+    background:url('./images/hero.jpg') center/cover no-repeat;
+    filter:saturate(1.28) contrast(1.06) brightness(1.04) sepia(.10)}
+  body::after{content:"";position:fixed;inset:0;z-index:-1;
+    background:radial-gradient(130% 100% at 50% 44%,
+                 rgba(6,16,18,.74) 0%, rgba(6,16,18,.58) 40%,
+                 rgba(6,16,18,.34) 72%, rgba(6,16,18,.16) 100%)}
   .wrap{width:100%;max-width:360px}
   /* Mark, 2026-09-29: "match the title Bush Ways to the same font as we use in
      our main logo. I also want it significantly larger." The brand's own
