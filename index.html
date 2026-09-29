@@ -60,7 +60,7 @@
        phone it is width-constrained and it is the difference between the
        hyena and a patch of grass. */
     background:url('./images/hero.jpg') 55% 42%/cover no-repeat;
-    filter:saturate(1.3) contrast(1.05) brightness(1.16) sepia(.08)}
+    filter:saturate(1.32) contrast(1.09) brightness(1.05) sepia(.08)}
   /* A phone is so much taller than it is wide that `cover` on a landscape
      photograph shows a narrow vertical slice of it — which is why the old one
      showed a leg and some grass. This is a portrait crop with the hyena high
@@ -73,10 +73,15 @@
      now only has to hold the two lines of type above the card; the card itself
      is white and needs no help. So it is concentrated behind the words at the
      top and falls away quickly, leaving most of the photograph nearly clear. */
+  /* Balanced against the two lines of white type at the top, which are the
+     only things on this page that need the photograph held back. Lightened
+     once for "still too dark", then brought back up when the type stopped
+     being readable against pale grass — this is the point where the picture
+     is clearly a picture and the words are clearly words. */
   body::after{content:"";position:fixed;inset:0;z-index:-1;
-    background:radial-gradient(95% 62% at 50% 30%,
-                 rgba(6,16,18,.52) 0%, rgba(6,16,18,.34) 45%,
-                 rgba(6,16,18,.16) 75%, rgba(6,16,18,.05) 100%)}
+    background:radial-gradient(105% 70% at 50% 26%,
+                 rgba(6,16,18,.62) 0%, rgba(6,16,18,.46) 42%,
+                 rgba(6,16,18,.26) 74%, rgba(6,16,18,.10) 100%)}
   .wrap{width:100%;max-width:360px}
   /* The wordmark is the real artwork, not type.
      Mark asked for the title to match the logo's font; the logo PDF turned out
@@ -88,11 +93,11 @@
      The <h1> keeps the words so screen readers, search and the browser tab
      still read "Bush Ways"; the image replaces them visually. */
   h1{margin:0 0 14px;text-align:center;line-height:0}
-  h1 img{width:min(74vw,290px);height:auto;display:inline-block;
-         filter:drop-shadow(0 2px 14px rgba(0,0,0,.45))}
+  h1 img{width:min(72vw,280px);height:auto;display:inline-block;
+         filter:drop-shadow(0 2px 16px rgba(0,0,0,.6)) drop-shadow(0 1px 3px rgba(0,0,0,.35))}
   h1 span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .sub{color:#E6DFD1;font-size:14px;margin:0 0 22px;text-align:center;
-       letter-spacing:.02em;text-shadow:0 1px 8px rgba(0,0,0,.5)}
+  .sub{color:#F2ECE0;font-size:14px;margin:0 0 22px;text-align:center;
+       letter-spacing:.02em;text-shadow:0 1px 3px rgba(0,0,0,.75),0 0 14px rgba(0,0,0,.55)}
   /* color:#232019 here, not left to inherit — body's own text colour is
      now light (it sits on the dark photo, above); any plain text ever
      added inside this white card would otherwise be just as light, and
