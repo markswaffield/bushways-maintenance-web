@@ -454,13 +454,33 @@ var SELF_DRIVE_FOR = {
   departure_driver_id: ["departure_self_drive", "day"], departure_vehicle_id: ["departure_self_drive", "day"],
 };
 
+function basisFor(row, key){
+  return (/^departure/.test(key)
+    ? (row.departing && row.departing.booking_basis)
+    : (row.stay && row.stay.booking && row.stay.booking.booking_basis)) || "";
+}
+
+// Fully inclusive means the camp provides the activities, so the stay's guide
+// and vehicle are always real people and Self drive must never stand in for
+// them. Mark, 2026-09-29: "when a guest is FI in status - then the guide and
+// guide vehicle option must remain blank and must not be filled in as Self
+// Drive - this will only apply for the Arrivals and Departures."
+//
+// The two are not in conflict, which is why bookings really do read "FI/SD":
+// a party can drive themselves between camps and still be fully inclusive once
+// they arrive. So the transfer pickers keep the option; the stay's do not.
+function selfDriveAllowed(row, key){
+  var f = SELF_DRIVE_FOR[key];
+  if (!f) return false;
+  if (f[1] !== "stay") return true;                       // arrival and departure, always
+  return !/\bFI\b/.test(basisFor(row, key));
+}
+
 // Does the booking itself say this party drives themselves? The basis comes
 // off the Operations Chart, where "SD" is read out of the booking's own prose.
 function bookingSelfDrive(row, key){
-  var b = /^departure/.test(key)
-    ? (row.departing && row.departing.booking_basis)
-    : (row.stay && row.stay.booking && row.stay.booking.booking_basis);
-  return /\bSD\b/.test(b || "");
+  if (!selfDriveAllowed(row, key)) return false;
+  return /\bSD\b/.test(basisFor(row, key));
 }
 
 // Whether the Self drive option is the one showing.
@@ -477,6 +497,7 @@ function bookingSelfDrive(row, key){
 function selfDriveOn(row, key){
   var f = SELF_DRIVE_FOR[key];
   if (!f) return false;
+  if (!selfDriveAllowed(row, key)) return false;
   if (f[1] === "stay") return !!(row.stay && row.stay.self_drive);
   if (row.saved && f[0] in row.saved) return !!row.saved[f[0]];
   return bookingSelfDrive(row, key);
@@ -485,7 +506,10 @@ function selfDriveOn(row, key){
 function cellSelect(row,key,list,scope){
   if (scope === "stay" && !row.stay) return '<td class="dim"></td>';
   var choices = (list === boot.people) ? peopleFor(key) : list;
-  var sd = SELF_DRIVE_FOR[key];
+  // Not offered at all where it is not allowed, rather than merely not
+  // defaulted: a rule that can be clicked past is not a rule, and the point of
+  // the highlight is that an FI row cannot be cleared without naming a guide.
+  var sd = SELF_DRIVE_FOR[key] && selfDriveAllowed(row, key);
   var on = sd && selfDriveOn(row, key);
   // Mark, 2026-09-29: "Self Drive as the first option above the guides names
   // and vehicle registrations" — so it sits above the names, but BELOW the
