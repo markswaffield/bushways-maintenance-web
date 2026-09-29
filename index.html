@@ -36,13 +36,41 @@
      other change needed, this page and base-dashboard.html both just
      reference that one filename. Same file, same treatment, on
      base-dashboard.html — keep both in sync if it's ever swapped. */
+  /* The brand face, self-hosted rather than pulled from Google Fonts.
+     13KB for the one weight we use, same origin so the service worker caches
+     it, and it still renders when a camp is offline — which a webfont on a CDN
+     would not. `swap` means the fallback shows first rather than nothing. */
+  @font-face{font-family:'Noto Sans';font-style:normal;font-weight:900;font-display:swap;
+    src:url('./fonts/noto-sans-900-latin.woff2') format('woff2')}
+
+  /* The photograph was being flattened under a single flat teal wash at 72%,
+     which is where Mark's "strange green tinge" came from — #122d31 is a teal,
+     and laid evenly over a warm golden-hour picture it drains the light out of
+     it and leaves everything a uniform green-grey.
+     Two changes: the veil is a near-neutral dark rather than teal, so it
+     darkens without colouring; and it is a radial gradient, heaviest behind
+     the words in the middle and lifting towards the edges, so the grass and
+     the animal still read as the warm photograph they are. */
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px;color:#F7F5F0;
     min-height:100vh;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(rgba(18,45,49,.72),rgba(18,45,49,.72)),url('./images/hero.jpg') center/cover no-repeat;
+    background:radial-gradient(125% 95% at 50% 44%,
+                 rgba(6,16,18,.80) 0%, rgba(6,16,18,.66) 42%,
+                 rgba(6,16,18,.44) 72%, rgba(6,16,18,.26) 100%),
+               url('./images/hero.jpg') center/cover no-repeat;
     background-color:#122d31}
   .wrap{width:100%;max-width:360px}
-  h1{font-size:20px;margin:0 0 2px;text-align:center;color:#fff}
-  .sub{color:#D8D2C4;font-size:13px;margin:0 0 20px;text-align:center}
+  /* Mark, 2026-09-29: "match the title Bush Ways to the same font as we use in
+     our main logo. I also want it significantly larger." The brand's own
+     heading treatment — Noto Sans Black, uppercase, letter-spaced
+     (bushways/brand/design-system.md). The shadow is what keeps it readable
+     where the photograph happens to be pale behind it. */
+  h1{font-family:'Noto Sans',-apple-system,system-ui,sans-serif;font-weight:900;
+     font-size:44px;line-height:1.02;letter-spacing:.055em;text-transform:uppercase;
+     margin:0 0 10px;text-align:center;color:#fff;
+     text-shadow:0 2px 18px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.4)}
+  @media (max-width:380px){ h1{font-size:36px;letter-spacing:.04em} }
+  .sub{color:#E6DFD1;font-size:14px;margin:0 0 22px;text-align:center;
+       letter-spacing:.02em;text-shadow:0 1px 8px rgba(0,0,0,.5)}
   /* color:#232019 here, not left to inherit — body's own text colour is
      now light (it sits on the dark photo, above); any plain text ever
      added inside this white card would otherwise be just as light, and

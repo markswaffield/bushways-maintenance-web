@@ -4,7 +4,7 @@
    (a different origin) — the local copy of checklist content and the
    upload queue are separate pieces, not built yet.
    Bump VERSION on every change, or phones keep the old worker. */
-var VERSION = "2026-09-29n";
+var VERSION = "2026-09-29o";
 var CACHE = "bw-shell-" + VERSION;
 
 var SHELL = [
@@ -27,6 +27,9 @@ var SHELL = [
   "./nav.js",
   "./manifest.webmanifest",
   "./images/hero.jpg",
+  // The sign-in page's brand face. Precached so the title renders as Noto Sans
+  // Black on the first offline open, not just after it has been fetched once.
+  "./fonts/noto-sans-900-latin.woff2",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
