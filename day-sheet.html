@@ -388,8 +388,8 @@ function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()
 function personId(){ return me && me.id; }
 function setStatus(t,cls){var s=el("status");s.textContent=t;s.className="status"+(cls?" "+cls:"");}
 
-function opts(list, sel){
-  var out = '<option value="">—</option>';
+function opts(list, sel, noBlank){
+  var out = noBlank ? "" : '<option value="">—</option>';
   list.forEach(function(o){
     var label = o.label || o.name || o.registration;
     out += '<option value="'+esc(o.id)+'"'+(sel===o.id?" selected":"")+">"+esc(label)+"</option>";
@@ -444,10 +444,32 @@ var SELF_DRIVE_FOR = {
   departure_driver_id: ["departure_self_drive", "day"], departure_vehicle_id: ["departure_self_drive", "day"],
 };
 
+// Does the booking itself say this party drives themselves? The basis comes
+// off the Operations Chart, where "SD" is read out of the booking's own prose.
+function bookingSelfDrive(row, key){
+  var b = /^departure/.test(key)
+    ? (row.departing && row.departing.booking_basis)
+    : (row.stay && row.stay.booking && row.stay.booking.booking_basis);
+  return /\bSD\b/.test(b || "");
+}
+
+// Whether the Self drive option is the one showing.
+//
+// Mark, 2026-09-29, after the first version pre-selected it everywhere: "what
+// I would like instead is for Self Drive to be inserted into those blocks -
+// only if there is booking information that stipulates they are self drive.
+// If not it must remain blank to be filled in."
+//
+// Stay level reads the stored flag, which the importer sets from the booking.
+// Day level has no row until something on it is saved, so before that it falls
+// back to the booking; once a row exists its stored value rules, and saving
+// captures whatever the picker was showing.
 function selfDriveOn(row, key){
   var f = SELF_DRIVE_FOR[key];
   if (!f) return false;
-  return !!val(row, f[0], f[1]);
+  if (f[1] === "stay") return !!(row.stay && row.stay.self_drive);
+  if (row.saved && f[0] in row.saved) return !!row.saved[f[0]];
+  return bookingSelfDrive(row, key);
 }
 
 function cellSelect(row,key,list,scope){
@@ -455,12 +477,21 @@ function cellSelect(row,key,list,scope){
   var choices = (list === boot.people) ? peopleFor(key) : list;
   var sd = SELF_DRIVE_FOR[key];
   var on = sd && selfDriveOn(row, key);
-  // Mark, 2026-09-29: "we could have Self Drive as the first option above the
-  // guides names and vehicle registrations." First, because for a self-drive
-  // party it is the answer, not an exception to hunt for.
-  var head = sd ? '<option value="__self_drive__"'+(on?" selected":"")+">Self drive</option>" : "";
+  // Mark, 2026-09-29: "Self Drive as the first option above the guides names
+  // and vehicle registrations" — so it sits above the names, but BELOW the
+  // blank. The first version put it above the blank too, which made the
+  // browser select it on every untouched picker: the shading then cleared as
+  // soon as a housekeeper was chosen, exactly the gap it exists to show.
+  // An empty picker must read empty.
+  // The blank is selected only when nothing else is — marking it selected
+  // whenever Self drive is not would hide a real driver the camp had chosen.
+  var chosen = val(row, key, scope);
+  var head = sd
+    ? '<option value=""'+(!on && !chosen ? " selected" : "")+'>—</option>'
+      + '<option value="__self_drive__"'+(on?" selected":"")+">Self drive</option>"
+    : "";
   return '<td><select data-room="'+row.room_id+'" data-key="'+key+'" data-scope="'+(scope||"day")+'">'
-       + head + opts(choices, on ? "" : val(row,key,scope)) + "</select></td>";
+       + head + opts(choices, on ? "" : val(row,key,scope), !!sd) + "</select></td>";
 }
 // ETA and ETD change constantly, so the camp always overrides - Mark,
 // 2026-09-11: "these can change at any time - so camp needs to be able
