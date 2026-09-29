@@ -50,7 +50,15 @@ function navHtml(me, active, hide) {
     links.push({ href: "./reports.html", label: "Reports" });
   }
   if (me && me.locations && me.locations.length > 1) {
-    links.push({ href: "./base-dashboard.html", label: "Base Dashboard" });
+    // The page this reaches calls itself the Maintenance Dashboard, so the
+    // button that reaches it says the same — Mark, 2026-09-29: "if that padded
+    // button takes us to the Maintenance Dashboard - then it must say
+    // Maintenance Dashboard." A control named differently from the place it
+    // goes is a control people hesitate over.
+    //
+    // The file is still base-dashboard.html. Renaming that would break every
+    // bookmark and every link in the tool for no gain the user can see.
+    links.push({ href: "./base-dashboard.html", label: "Maintenance Dashboard" });
   }
   if (me && me.is_administrator) {
     links.push({ href: "./admin-checklists.html", label: "Edit Checklists" });
@@ -86,7 +94,7 @@ function navHtml(me, active, hide) {
    `window.signOut()` and the same base-dashboard link `#changeCampBtn` uses —
    rather than reimplemented here, so there is still one definition of each per
    page and this cannot drift from it. Change camp shows on the same signal the
-   Base Dashboard link does: real access to more than one lodge. */
+   Maintenance Dashboard link does: real access to more than one lodge. */
 function navMenuHtml(links, active, me) {
   var multiCamp = !!(me && me.locations && me.locations.length > 1);
   var items = links.map(function (l) {
