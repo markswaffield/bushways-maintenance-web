@@ -29,8 +29,12 @@
      merely first: on a long schedule the reason to add one often turns up
      halfway down it. Sits below the toolbar's own sticky elements and below
      the nav menu (z-index 200), so nothing overlaps. */
-  .topacts{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:8px;
-           margin:12px 0 0;padding:10px 0;background:#F7F5F0}
+  /* Sticks BELOW the pinned title, not behind it. --bw-header is the title's
+     real measured height, published by nav.js — a fixed number would be right
+     on one page at one width and wrong everywhere else. The fallback covers
+     the moment before the first measurement lands. */
+  .topacts{position:sticky;top:var(--bw-header,46px);z-index:20;display:flex;flex-wrap:wrap;gap:8px;
+           margin:0;padding:10px 0;background:#F7F5F0}
   .topacts button{padding:10px 15px;font-size:14.5px}
   @media print{ .topacts{display:none} }
   .nav{font-size:14px;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px}

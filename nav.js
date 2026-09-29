@@ -152,6 +152,37 @@ function navMenuHtml(links, active, me) {
   "</div>";
 }
 
+/* How tall the pinned title actually is, published as --bw-header.
+
+   Two things now stick to the top of the same page — the title, and the
+   Schedule page's own create buttons — and the second has to sit below the
+   first. Mark, 2026-09-29: "now that we have fixed the header, the buttons for
+   Add a Schedule and Create a Handover hide behind the header when you scroll
+   down."
+
+   Measured rather than guessed, because the height is not the same everywhere:
+   the title's font size drops on a narrow screen, and a long camp name can
+   wrap. A hardcoded offset would be right on one page at one width.
+
+   Re-measured on resize and on orientation change. Anything else that wants to
+   pin itself under the title should use var(--bw-header) too rather than
+   inventing its own number. */
+function bwSyncHeader() {
+  var h1 = document.querySelector("h1");
+  var px = h1 ? Math.ceil(h1.getBoundingClientRect().height) : 0;
+  // Only publish a real measurement. Setting it to 0 on a page with no title,
+  // or before the page has laid out, would override the CSS fallback with a
+  // number that puts anything pinned below it back under the header.
+  if (px > 0) document.documentElement.style.setProperty("--bw-header", px + "px");
+}
+window.addEventListener("resize", bwSyncHeader);
+window.addEventListener("orientationchange", bwSyncHeader);
+document.addEventListener("DOMContentLoaded", bwSyncHeader);
+// Pages fill their own title from JS after load, and some re-render several
+// times; a couple of later passes cost nothing and catch the final height.
+setTimeout(bwSyncHeader, 300);
+setTimeout(bwSyncHeader, 1500);
+
 function navMenuToggle() {
   var panel = document.getElementById("navmPanel"), btn = document.getElementById("navmBtn");
   if (!panel) return;
