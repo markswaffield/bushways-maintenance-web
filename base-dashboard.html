@@ -39,17 +39,37 @@
      TO CHANGE IT LATER: replace supabase/web/images/hero.jpg (both
      this page and landing.html reference that one filename — keep
      them in sync if it's ever swapped). */
+  /* The brand face, self-hosted — the same 13KB file the sign-in page uses, so
+     it is already in the offline shell and costs nothing extra here. */
+  @font-face{font-family:'Noto Sans';font-style:normal;font-weight:900;font-display:swap;
+    src:url('./fonts/noto-sans-900-latin.woff2') format('woff2')}
+
+  /* Same treatment as the sign-in page — Mark, 2026-09-29, asked for the two
+     to match. The flat teal wash that used to sit here is what gave the
+     photograph its green cast: #122d31 is a teal, and laid evenly over a warm
+     golden-hour picture it drains the light out of it.
+     The image and the veil are separate layers so the picture can be
+     corrected rather than only dimmed — a veil alone can make a photograph
+     darker or lighter, never warmer. */
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;color:#F7F5F0;
-    background:linear-gradient(rgba(18,45,49,.72),rgba(18,45,49,.72)),url('./images/hero.jpg') top center/cover no-repeat;
-    background-color:#122d31;min-height:100vh}
+    position:relative;background-color:#122d31;min-height:100vh}
+  body::before{content:"";position:fixed;inset:0;z-index:-2;
+    background:url('./images/hero.jpg') 55% 42%/cover no-repeat;
+    filter:saturate(1.28) contrast(1.06) brightness(1.04) sepia(.10)}
+  body::after{content:"";position:fixed;inset:0;z-index:-1;
+    background:radial-gradient(130% 100% at 50% 30%,
+                 rgba(6,16,18,.76) 0%, rgba(6,16,18,.62) 40%,
+                 rgba(6,16,18,.38) 72%, rgba(6,16,18,.18) 100%)}
   /* MAINTENANCE DASHBOARD — Mark, 2026-09-29: "I want this all written in CAPS
      and centered." Uppercased in CSS rather than typed in capitals, so the
      word is still ordinary text to a screen reader and to anything that ever
      reads this page's title back. */
-  h1{font-size:26px;margin:0 0 6px;color:#fff;text-align:center;
-     text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+  h1{font-family:'Noto Sans',-apple-system,system-ui,sans-serif;font-weight:900;
+     font-size:30px;margin:0 0 6px;color:#fff;text-align:center;
+     text-transform:uppercase;letter-spacing:.06em;
+     text-shadow:0 2px 16px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35)}
   .sub{text-align:center}
-  @media (max-width:700px){ h1{font-size:21px;letter-spacing:.04em} }
+  @media (max-width:700px){ h1{font-size:23px;letter-spacing:.04em} }
   h2{font-size:14px;margin:0 0 6px;color:#43594A}
   .sub{color:#D8D2C4;font-size:13px;margin:0 0 4px}
   select,input,textarea{padding:8px;font-size:14px;border:1px solid #C9C2AC;border-radius:6px;background:#fff;font-family:inherit;box-sizing:border-box;width:100%}
