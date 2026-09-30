@@ -39,10 +39,15 @@
      TO CHANGE IT LATER: replace supabase/web/images/hero.jpg (both
      this page and landing.html reference that one filename — keep
      them in sync if it's ever swapped). */
-  /* The brand face, self-hosted — the same 13KB file the sign-in page uses, so
-     it is already in the offline shell and costs nothing extra here. */
-  @font-face{font-family:'Noto Sans';font-style:normal;font-weight:900;font-display:swap;
-    src:url('./fonts/noto-sans-900-latin.woff2') format('woff2')}
+  /* As close to the logo's lettering as a real font gets.
+     Mark, 2026-09-30: "can we match the Bush Ways Font". The logo has no font
+     — its lettering is outlined vector art (see landing.md) — so there is
+     nothing to match exactly, only something to match closely. Rendered
+     against the actual artwork, Source Sans and Cabin are too narrow and Lato
+     a shade too geometric; Open Sans has the logo's width, its open counters
+     and much the same S and W. Self-hosted, 13KB, in the offline shell. */
+  @font-face{font-family:'Open Sans';font-style:normal;font-weight:700;font-display:swap;
+    src:url('./fonts/open-sans-700-latin.woff2') format('woff2')}
 
   /* Same treatment as the sign-in page — Mark, 2026-09-29, asked for the two
      to match. The flat teal wash that used to sit here is what gave the
@@ -55,19 +60,22 @@
     position:relative;background-color:#122d31;min-height:100vh}
   body::before{content:"";position:fixed;inset:0;z-index:-2;
     background:url('./images/hero.jpg') 55% 42%/cover no-repeat;
-    filter:saturate(1.28) contrast(1.06) brightness(1.04) sepia(.10)}
+    filter:saturate(1.32) contrast(1.09) brightness(1.05) sepia(.08)}
+  /* Lightened to match the sign-in page — Mark, 2026-09-30. Held a little
+     wider and higher than that page's, because this one's white cards sit
+     lower and its type runs right across the top. */
   body::after{content:"";position:fixed;inset:0;z-index:-1;
-    background:radial-gradient(130% 100% at 50% 30%,
-                 rgba(6,16,18,.76) 0%, rgba(6,16,18,.62) 40%,
-                 rgba(6,16,18,.38) 72%, rgba(6,16,18,.18) 100%)}
+    background:radial-gradient(115% 72% at 50% 20%,
+                 rgba(6,16,18,.62) 0%, rgba(6,16,18,.46) 42%,
+                 rgba(6,16,18,.26) 74%, rgba(6,16,18,.10) 100%)}
   /* MAINTENANCE DASHBOARD — Mark, 2026-09-29: "I want this all written in CAPS
      and centered." Uppercased in CSS rather than typed in capitals, so the
      word is still ordinary text to a screen reader and to anything that ever
      reads this page's title back. */
-  h1{font-family:'Noto Sans',-apple-system,system-ui,sans-serif;font-weight:900;
-     font-size:30px;margin:0 0 6px;color:#fff;text-align:center;
-     text-transform:uppercase;letter-spacing:.06em;
-     text-shadow:0 2px 16px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35)}
+  h1{font-family:'Open Sans',-apple-system,system-ui,sans-serif;font-weight:700;
+     font-size:32px;margin:0 0 6px;color:#fff;text-align:center;
+     text-transform:uppercase;letter-spacing:.075em;
+     text-shadow:0 2px 16px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.4)}
   .sub{text-align:center}
   @media (max-width:700px){ h1{font-size:23px;letter-spacing:.04em} }
   h2{font-size:14px;margin:0 0 6px;color:#43594A}
