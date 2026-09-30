@@ -52,6 +52,25 @@
   h1{font-size:18px;margin:0 0 3px}
   .sub{color:#6B6455;font-size:12.5px;margin:0 0 4px}
   .nav{font-size:12.5px;margin:8px 0 0}
+  /* The same signed-in bar the maintenance pages use — Mark, 2026-09-30: "the
+     change tool and sign out buttons are left. And the name of who is signed
+     in is below in next block. Can we not have the same style as on the
+     maintenance pages?" Name on the left, actions on the right, Sign out
+     shaded. It was two separate things here: loose buttons above, and the
+     name buried in the toolbar beside the date. */
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
+    border:1px solid #C9C2AC;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;
+    margin:10px 0 0;box-sizing:border-box;color:#232019}
+  .whobar b{color:#122D31}
+  /* margin-left:auto, not justify-content alone: once the name and the
+     buttons cannot share a line, flex-wrap drops the group onto its own line
+     where space-between has nothing to space against and it falls left.
+     Same fix, same reason, as the maintenance pages. */
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .whobar-btns button{width:auto;padding:6px 11px;font-size:12.5px;margin:0;
+    border:1px solid #C9C2AC;background:#fff;color:#232019}
+  /* Sign out is the one with consequences, so it is the one that is shaded. */
+  .whobar-btns button:last-child{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620;font-weight:600}
   .toolbar{position:sticky;top:0;z-index:30;display:flex;gap:10px;flex-wrap:wrap;align-items:end;
            margin:12px 0 0;padding:10px 12px;border:1px solid #C9C2AC;border-radius:8px;background:#fff;
            box-shadow:0 1px 4px rgba(0,0,0,.05)}
@@ -344,13 +363,15 @@
      tool-local D-008, 2026-09-18. A plain way back to that picker
      instead of Maintenance's own five links, which never belonged
      here in the first place. -->
-<p class="nav">
-  <button class="ghost" style="width:auto;display:inline-block" onclick="location.href='./'">← Change camp / tool</button>
-  <button class="ghost" id="signOut" style="width:auto;display:inline-block;margin-left:10px">Sign out</button>
-</p>
+<div class="whobar nav">
+  <span>👤 <b id="whoami"></b></span>
+  <span class="whobar-btns">
+    <button onclick="location.href='./'">← Change camp / tool</button>
+    <button id="signOut">Sign out</button>
+  </span>
+</div>
 
 <div class="toolbar">
-  <div class="lean-hide"><label>Signed in as</label><span class="whoami" id="whoami"></span></div>
   <div><label for="date">Date</label><input type="date" id="date"></div>
   <div><button id="save" disabled>Save changes</button></div>
   <div class="full-only"><button class="ghost" id="reload">Refresh</button></div>
@@ -1998,7 +2019,9 @@ document.addEventListener("click", function(e){
 
 fetch(FN + (shownCamp ? "?location_id=" + encodeURIComponent(shownCamp.id) : "")).then(function(r){return r.json();}).then(function(b){
   boot = b;
-  el("whoami").textContent = me.name + (me.department ? " · " + me.department : "");
+  // First name only, as on every maintenance page — the surname is what made
+  // this block too wide on a phone.
+  el("whoami").textContent = (me.name || "").split(/\s+/)[0] || me.name;
   el("date").value = today();
   el("date").addEventListener("change", load);
   load();

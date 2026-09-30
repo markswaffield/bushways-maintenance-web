@@ -102,6 +102,10 @@
   h1 img{width:min(72vw,280px);height:auto;display:inline-block;
          filter:drop-shadow(0 2px 16px rgba(0,0,0,.6)) drop-shadow(0 1px 3px rgba(0,0,0,.35))}
   h1 span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  /* Nothing uses this now — Mark, 2026-09-30: "please remove the sign in to
+     continue". The panel titles itself (SIGN IN / CHOOSE A TOOL), so the line
+     repeated what was already on screen, and once signed in it contradicted
+     it. Kept as a rule in case a real strapline is ever wanted here. */
   .sub{color:#F2ECE0;font-size:14px;margin:0 0 22px;text-align:center;
        letter-spacing:.02em;text-shadow:0 1px 3px rgba(0,0,0,.75),0 0 14px rgba(0,0,0,.55)}
   /* color:#232019 here, not left to inherit — body's own text colour is
@@ -129,7 +133,7 @@
 
 <div class="wrap">
   <h1><img src="./images/bushways-wordmark-white.png" alt="Bush Ways"><span>Bush Ways</span></h1>
-  <p class="sub">Sign in to continue</p>
+
   <div id="signinBox" class="signin-box" hidden>
     <div class="title">Sign in</div>
     <label>Lodge</label><select id="whoLoc" onchange="onWhoLoc()"></select>
