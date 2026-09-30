@@ -99,8 +99,15 @@
      screen." One compact row. Explicit dark text, same reason as
      .filter-section above — this sits on the light card, not the dark
      photo, and must not inherit the body's light colour. */
+  /* Held to the same column as the two cards below it — Mark, 2026-09-30:
+     "reduce the block showing the name and change tool, sign out - to be the
+     same width as the header... this especially applies to the page on a
+     computer." Stretched edge to edge it was the widest thing on the page,
+     which put the most incidental controls in the most prominent shape. The
+     title, this bar and the cards now share one 760px column. */
   .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
-    border:1px solid #C9C2AC;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;margin-top:10px;color:#232019}
+    border:1px solid #C9C2AC;border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;
+    margin:10px auto 0;max-width:760px;width:100%;box-sizing:border-box;color:#232019}
   .whobar b{color:#122D31}
   /* margin-left:auto is the real fix, not justify-content alone — once
      the name/camp text and this button group can't both fit one line,
