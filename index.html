@@ -45,8 +45,14 @@
      darkens without colouring; and it is a radial gradient, heaviest behind
      the words in the middle and lifting towards the edges, so the grass and
      the animal still read as the warm photograph they are. */
-  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px;color:#F7F5F0;
-    min-height:100vh;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+  /* Sitting high rather than dead centre — Mark, 2026-09-30: "can we move the
+     blocks up - then we can see the image behind better?" Centred, the card
+     split the photograph in half and left two thin strips of it; up here the
+     picture reads as one whole thing below the panel. Applies to the sign-in
+     card and the tool picker alike, since both live in this same .wrap. */
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;color:#F7F5F0;
+    padding:clamp(18px,6vh,72px) 16px 28px;
+    min-height:100vh;box-sizing:border-box;display:flex;align-items:flex-start;justify-content:center;
     position:relative;background-color:#122d31}
   /* The photograph and the veil are two layers rather than one stacked
      background, so the picture itself can be colour-corrected. Flattening a
