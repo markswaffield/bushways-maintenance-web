@@ -39,6 +39,15 @@
     .nav{font-size:13px;gap:6px}
     .nav a,.nav b{padding:6px 10px}
   }
+  /* Choose again, pinned to the top of a long checklist — Mark,
+     2026-10-01: "the Buttons Choose Again - needs to be pinned to the
+     top so it is always accessible and visible." A 71-item Guest Room
+     checklist puts the one at the bottom several screens of scrolling
+     away; this one sticks to the top of the viewport instead, the
+     whole time you're scrolling through the items. The bottom one
+     stays too — the natural stopping point once every item's done. */
+  .sticky-back{position:sticky;z-index:140;background:#F7F5F0;padding:8px 0;margin:0 0 4px;border-bottom:1px solid #E3DFD3}
+  .sticky-back button{width:auto;margin:0;padding:8px 14px}
   .review-card{background:#fff;border:1px solid #E3DFD3;border-radius:8px;padding:12px 14px;margin-top:10px}
   .review-line{font-size:14px;margin:0 0 6px}
   .review-line .fault{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:10px;background:#F4E3D3;color:#8C6A2F}
@@ -69,27 +78,36 @@
   [hidden]{display:none!important}
 </style></head><body>
 
+<!-- The sign-in bar and the BW menu — moved out of #start and shown here,
+     above every screen show() switches between, 2026-10-01. Mark: "when
+     you enter the Inspection page and then choose an asset - eg Guest
+     room - the BW icon for the menu selection dissapears. This should
+     remain an option at this point." It was only ever inside #start, so
+     show()'s own hiding of that one div hid the menu with it the moment
+     a room/vehicle/area was picked — every other page keeps this row
+     outside its own content divs for the same reason. -->
+<div id="whoRow">
+  <div class="whobar" id="whoSignedIn">
+    <span>👤 <b id="whoAmI"></b></span>
+    <span class="whobar-btns">
+      <button id="changeCampBtn" hidden class="btn-secondary" onclick="location.href='./base-dashboard.html'">Change camp</button>
+      <button class="btn-secondary" id="signOut">Sign out</button>
+    </span>
+  </div>
+</div>
+<script src="./nav.js"></script>
+<div id="navRow"></div>
+<script>
+  (function () {
+    var m = null;
+    try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
+    document.getElementById("navRow").innerHTML = navHtml(m, "Inspection");
+  })();
+</script>
+
 <div id="start">
   <h1>Inspection<span id="campTitle"></span></h1>
   <p class="sub">What would you like to do?</p>
-  <div id="whoRow">
-    <div class="whobar" id="whoSignedIn">
-      <span>👤 <b id="whoAmI"></b></span>
-      <span class="whobar-btns">
-        <button id="changeCampBtn" hidden class="btn-secondary" onclick="location.href='./base-dashboard.html'">Change camp</button>
-        <button class="btn-secondary" id="signOut">Sign out</button>
-      </span>
-    </div>
-  </div>
-  <script src="./nav.js"></script>
-  <div id="navRow"></div>
-  <script>
-    (function () {
-      var m = null;
-      try { var s = sessionStorage.getItem("bw_signin"); if (s) m = JSON.parse(s); } catch (e) {}
-      document.getElementById("navRow").innerHTML = navHtml(m, "Inspection");
-    })();
-  </script>
   <label>What would you like to do?</label>
   <select id="area"><option value="">Loading…</option></select>
   <button id="startBtn">Continue</button>
@@ -808,6 +826,7 @@
         : isArea
         ? esc(data.target_label) + ' Inspection'
         : 'Guest Room Inspection') + '</h1>' +
+      '<div class="sticky-back" id="stickyBack"><button class="secondary" id="backFromChecklistTop">← Choose again</button></div>' +
       '<p class="sub">' + esc(campName()) + (isVeh || isArea ? "" : ", " + esc(data.room_label)) +
       ' — leave an item alone if it\'s fine (tool-local D-023)</p>' +
       // The odometer, on a vehicle check only. Captured through the
@@ -907,7 +926,18 @@
       '<button class="secondary" id="backFromChecklist">← Choose again</button>';
     c.innerHTML = html;
 
+    // The page title itself is already pinned to the top site-wide
+    // (nav.js, D-110, z-index 150 — "would it be possible to pin this
+    // to the top of the page at all times?"). This sticky bar has to
+    // stack right underneath it, not fight it for the same spot — its
+    // own top offset is the title's actual rendered height, measured
+    // live rather than guessed, since a long vehicle registration can
+    // wrap the title onto two lines on a narrow phone.
+    var titleH = c.querySelector("h1").getBoundingClientRect().height;
+    document.getElementById("stickyBack").style.top = titleH + "px";
+
     document.getElementById("backFromChecklist").onclick = function () { show("start"); };
+    document.getElementById("backFromChecklistTop").onclick = function () { show("start"); };
 
     c.querySelectorAll("[data-failed]").forEach(function (cb) {
       cb.addEventListener("change", function () {
