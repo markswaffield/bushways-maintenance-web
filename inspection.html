@@ -17,6 +17,18 @@
   .item{border-bottom:1px solid #E3DFD3;padding:12px 0}
   .item label.main{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#232019;margin:0;cursor:pointer}
   .item input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
+  /* A reading and a condition grade on one line — Mark, 2026-10-01,
+     reviewing the Safari Vehicle tyre section: "Front - RHS - then a
+     block next to if for kPa Reading / (block) - condition (cuts,
+     wear, damage)... is it possible to have its own menu specific for
+     this GOOD, AVERAGE, POOR and then the note section?" The position
+     and its kPa reading share one row; Good/Average/Poor and the note
+     sit underneath, always shown — this is recorded every visit, not
+     only when something's wrong, so it isn't gated behind a checkbox
+     the way every other item on this page is. */
+  .graded-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .graded-row label.main{flex:1;cursor:default}
+  .graded-row input{width:100px;flex:none}
   .details{display:none;margin:10px 0 0 30px;padding:10px;background:#EFECE3;border-radius:6px}
   .item.open .details{display:block}
   /* Still open from a previous visit — 2026-09-18 (D-060), Mark: "the
@@ -865,6 +877,20 @@
         if (item.kind === "reading") {
           html += '<div class="item"><label class="main">' + esc(item.text) + '</label>' +
             '<input type="text" inputmode="numeric" data-value="' + item.id + '" placeholder="Reading"></div>';
+        } else if (item.kind === "graded_reading") {
+          html += '<div class="item graded">' +
+            '<div class="graded-row"><label class="main">' + esc(item.text) + '</label>' +
+            '<input type="text" inputmode="decimal" data-value="' + item.id + '" placeholder="kPa"></div>' +
+            '<label>Condition</label>' +
+            '<select data-grade="' + item.id + '">' +
+            '<option value="">Not graded</option>' +
+            '<option value="Good">Good</option>' +
+            '<option value="Average">Average</option>' +
+            '<option value="Poor">Poor</option>' +
+            '</select>' +
+            '<label>Notes (cuts, wear, damage)</label>' +
+            '<textarea data-gradenote="' + item.id + '" rows="2" placeholder="Anything to note"></textarea>' +
+            '</div>';
         } else {
           // Still open from an earlier visit (2026-09-18, D-060) — shown
           // so it's visible, never hidden away as if nobody had ever
@@ -960,6 +986,22 @@
           if (item.kind === "reading") {
             var v = c.querySelector('[data-value="' + item.id + '"]').value;
             if (v) results.push({ item_id: item.id, value: Number(v), label: shortLabel(item.text) });
+          } else if (item.kind === "graded_reading") {
+            var gv = c.querySelector('[data-value="' + item.id + '"]').value;
+            var gradeEl = c.querySelector('[data-grade="' + item.id + '"]');
+            var grade = gradeEl.value;
+            var gnote = c.querySelector('[data-gradenote="' + item.id + '"]').value.trim();
+            if (gv || grade || gnote) {
+              results.push({
+                item_id: item.id, value: gv ? Number(gv) : null,
+                grade: grade || null, note: gnote || null,
+                // Not shortLabel() — it splits on " - ", which would
+                // turn "Front - LHS" into just "Front", indistinguishable
+                // from "Front - RHS" on the confirm and done screens.
+                // A tyre position's full text is already short.
+                label: item.text,
+              });
+            }
           } else {
             // The read-only existing fault itself (D-060) has no
             // [data-failed] at all — nothing to collect for it. A line
@@ -1011,7 +1053,8 @@
       var r = document.getElementById("review");
       show("review");
       var flagged = results.filter(function (x) { return x.failed; });
-      var readings = results.filter(function (x) { return x.value !== undefined; });
+      var readings = results.filter(function (x) { return x.value !== undefined && x.grade === undefined; });
+      var graded = results.filter(function (x) { return x.grade !== undefined; });
       var html = '<h1>Confirm Inspection</h1>' +
         '<p class="sub">' + esc(data.target_label || data.room_label) + ', ' + esc(campName()) + ' — check this is right before it\'s recorded</p>';
 
@@ -1024,9 +1067,9 @@
           pendingHours.toLocaleString() + '</b></p></div>';
       }
 
-      if (!flagged.length && !readings.length) {
+      if (!flagged.length && !readings.length && !graded.length) {
         html += '<div class="review-card"><p class="review-line">Nothing flagged — every item recorded as fine.</p></div>';
-      } else if (flagged.length || readings.length) {
+      } else if (flagged.length || readings.length || graded.length) {
         html += '<div class="review-card">';
         flagged.forEach(function (x) {
           html += '<p class="review-line">' + esc(x.label) +
@@ -1036,6 +1079,14 @@
         });
         readings.forEach(function (x) {
           html += '<p class="review-line">' + esc(x.label) + ': ' + esc(x.value) + '</p>';
+        });
+        graded.forEach(function (x) {
+          var bits = [];
+          if (x.value != null) bits.push(x.value + " kPa");
+          if (x.grade) bits.push(x.grade);
+          html += '<p class="review-line">' + esc(x.label) +
+            (bits.length ? ': ' + esc(bits.join(", ")) : '') +
+            (x.note ? ' — ' + esc(x.note) : '') + '</p>';
         });
         html += '</div>';
       }
