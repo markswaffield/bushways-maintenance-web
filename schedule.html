@@ -1379,14 +1379,22 @@
         .concat(list.filter(function (x) { return x.id !== justRaisedSafariCheckId; }));
     }
     list.forEach(function (x) {
+      // Same "two stages, each its own status" badge the Handovers
+      // section already uses (D-102) — Mark, seeing the first version's
+      // one-line sentence: "we need on the schedule for it to show that
+      // the Pre-Safari Check has been done, and the Post Safari Check
+      // is Pending." Blue/dashed-vs-solid for Pre, teal/dashed-vs-solid
+      // for Post, the exact same visual language as a handover's giver
+      // and taker, so this reads the same way at a glance.
+      var preDone = !!x.pre_completed_at, postDone = !!x.post_completed_at;
       h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + (x.id === justRaisedSafariCheckId ? " just-raised" : "") + '">' +
         (x.id === justRaisedSafariCheckId ? '<p class="order-note" style="margin:0 0 4px;color:#2F5B8C;font-weight:600">Safari check raised.</p>' : '') +
         '<p class="rname">' + esc(x.vehicle) + (x.tour_code ? ' · ' + esc(x.tour_code) : '') + '</p>' +
         '<p class="rmeta">' + esc(x.guide) + (x.guide_department ? " · " + esc(x.guide_department) : "") + '</p>' +
-        '<p class="rmeta">' +
-        (x.stage === "done" ? "Pre and post-safari checks both done"
-          : x.stage === "awaiting_post" ? "Pre-safari check done — waiting on the post-safari check"
-          : "Waiting on the pre-safari check") +
+        '<p class="ho-parties">' +
+          '<span class="who giver' + (preDone ? " done" : "") + '">Pre-Safari Check' + (preDone ? " ✓ done" : " — pending") + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="who taker' + (postDone ? " done" : "") + '">Post-Safari Check' + (postDone ? " ✓ done" : " — pending") + '</span>' +
         '</p>';
       if (x.stage !== "done" && x.vehicle_id) {
         h += '<div class="racts" style="margin-top:8px"><button onclick="location.href=\'./inspection.html?target=' +
