@@ -108,6 +108,7 @@
 <div class="filters" id="filtersRow"></div>
 <div class="actionsRow">
   <button class="primary" onclick="runReport()">Run report</button>
+  <button class="secondary" id="exportBtn" hidden onclick="exportToExcel()">Export to Excel</button>
   <span class="resultCount" id="resultCount"></span>
 </div>
 <div id="results"><p class="loading">Choose a report above.</p></div>
@@ -163,6 +164,10 @@
     { key: "report_fault_history", label: "Fault History" },
   ];
   var currentReport = null;
+  // Kept so Export to Excel can rebuild exactly what's on screen
+  // without a second fetch — the same rows and the same area lookups
+  // renderResults() already has.
+  var lastData = null;
   var people = [];
   var areasList = [];
   var targetsByArea = {};
@@ -179,6 +184,8 @@
     renderFilters();
     document.getElementById("results").innerHTML = '<p class="empty">Set your filters — a date range is optional, everything else defaults to "all" — then Run report.</p>';
     document.getElementById("resultCount").textContent = "";
+    document.getElementById("exportBtn").hidden = true;
+    lastData = null;
   };
 
   // Mark: "Replacing the date range must just be a filter for Newest
@@ -297,7 +304,9 @@
 
   function renderResults(data) {
     var rows = data.rows || [];
+    lastData = data;
     document.getElementById("resultCount").textContent = rows.length + (rows.length === 1 ? " result" : " results");
+    document.getElementById("exportBtn").hidden = !rows.length;
     var note = data.note ? '<p class="note">' + esc(data.note) + "</p>" : "";
     if (!rows.length) {
       document.getElementById("results").innerHTML = note + '<p class="empty">Nothing matches these filters.</p>';
@@ -345,6 +354,166 @@
     html += "</table></div>";
     document.getElementById("results").innerHTML = html;
   }
+
+  // Export to Excel — Mark: "we need to build an export function for
+  // the reports page. are we able to export as excel spreadsheets?"
+  // Yes: SheetJS, already proven elsewhere in this tool (day-sheet.html
+  // reads a real .xlsx with it) — the same library, just writing one
+  // instead. Loaded on demand, not on every page load, same reasoning
+  // as there: it's a real download (~900KB) and Maun's bandwidth is
+  // limited.
+  var xlsxLib = null;
+  function loadXlsx() {
+    if (xlsxLib) return xlsxLib;
+    xlsxLib = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = function () { resolve(window.XLSX); };
+      s.onerror = function () { xlsxLib = null; reject(new Error("could not load the spreadsheet writer — check the connection")); };
+      document.head.appendChild(s);
+    });
+    return xlsxLib;
+  }
+
+  // Real JS Date objects, not text, so they land as real Excel dates
+  // (sortable, filterable, re-formattable) rather than strings that
+  // merely look like one. Two flavours, matching fmtDate()/fmtDateTime()
+  // above exactly: dateOnly zeroes the time out first, both because the
+  // on-screen column never showed one and to dodge the fractional-day
+  // rounding a date-to-serial-and-back trip otherwise leaves behind
+  // (23:59:59 reading as 23:59:41, say) — cosmetic, but needless.
+  function dateOnly(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  function dateTime(iso) {
+    return iso ? new Date(iso) : "";
+  }
+
+  // Matches the on-screen table exactly, report by report — real
+  // columns in Excel, not a dump of the raw API fields. The Schedule
+  // History drill-down (faults/notes inside a session) is deliberately
+  // NOT pulled in here — it's a separate fetch per row, and would mean
+  // dozens of requests for one export; the row itself still carries
+  // the fault count.
+  function buildExportRows() {
+    var rows = (lastData && lastData.rows) || [];
+    var areas = (lastData && lastData.areas) || [];
+    var areaName = function (id) {
+      var a = areas.filter(function (x) { return x.id === id; })[0];
+      return a ? a.name : "";
+    };
+    if (currentReport === "report_schedule_history") {
+      return rows.map(function (r) {
+        var out = {};
+        if (!reportCamp) out["Camp"] = r.location || "";
+        out["Became active"] = dateOnly(r.became_active);
+        out["Schedule"] = r.schedule_name || "";
+        out["Area"] = areaName(r.area_id);
+        out["Completed"] = dateTime(r.completed_at);
+        out["Completed by"] = (r.completed_by || []).join(", ");
+        out["Faults/notes"] = r.fault_count || 0;
+        return out;
+      });
+    }
+    if (currentReport === "report_asset_checks") {
+      return rows.map(function (r) {
+        var out = {};
+        if (!reportCamp) out["Camp"] = r.location || "";
+        out["When"] = dateTime(r.at);
+        out["Asset"] = r.asset_label || "";
+        out["Area"] = areaName(r.area_id);
+        out["Type"] = r.asset_type || "";
+        out["Done by"] = r.by || "";
+        return out;
+      });
+    }
+    // Fault History — "Resolved by"/"Resolved on" split into their own
+    // columns here, unlike the on-screen table, which tucks them under
+    // Status as a small sub-line; a spreadsheet reads better as columns
+    // than as freeform text inside one cell.
+    return rows.map(function (r) {
+      var out = {};
+      if (!reportCamp) out["Camp"] = r.location || "";
+      out["Raised"] = dateOnly(r.at);
+      out["Asset"] = r.asset_label || "";
+      out["Item"] = r.item_label || "";
+      out["Area"] = r.area || "";
+      out["Fault type"] = r.fault_type || "";
+      out["Note"] = r.note || "";
+      out["Raised by"] = r.raised_by || "";
+      out["Status"] = r.status || "";
+      out["Resolved by"] = r.status !== "open" ? (r.resolved_by || "") : "";
+      out["Resolved on"] = r.status !== "open" ? dateOnly(r.resolved_at) : "";
+      out["Days (open so far, or to close)"] = daysBetween(r.at, r.status === "open" ? new Date().toISOString() : r.resolved_at);
+      return out;
+    });
+  }
+
+  function reportLabel() {
+    return (REPORTS.filter(function (r) { return r.key === currentReport; })[0] || {}).label || "Report";
+  }
+  function exportFilename() {
+    var campLabel = reportCamp
+      ? (document.getElementById("campFilter") ? document.getElementById("campFilter").selectedOptions[0].textContent : "")
+      : (multiCamp ? "All camps" : (shownCamp ? shownCamp.name : ""));
+    var bits = ["Bush Ways", reportLabel()];
+    if (campLabel) bits.push(campLabel);
+    var from = document.getElementById("dateFrom").value, to = document.getElementById("dateTo").value;
+    if (from || to) bits.push((from || "start") + " to " + (to || "now"));
+    bits.push(new Date().toISOString().slice(0, 10));
+    return bits.join(" - ").replace(/[\\\/:*?"<>|]/g, "") + ".xlsx";
+  }
+
+  window.exportToExcel = function () {
+    var btn = document.getElementById("exportBtn");
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = "Preparing…";
+    loadXlsx().then(function (XLSX) {
+      var sheetRows = buildExportRows();
+      var ws = XLSX.utils.json_to_sheet(sheetRows);
+      // A readable column width per header, not Excel's own cramped
+      // default — capped at 40 so a long fault note doesn't stretch
+      // the sheet absurdly wide.
+      var headers = sheetRows.length ? Object.keys(sheetRows[0]) : [];
+      ws["!cols"] = headers.map(function (h) {
+        var longest = h.length;
+        sheetRows.forEach(function (r) {
+          var v = r[h];
+          var len = v instanceof Date ? (v.getHours() || v.getMinutes() ? 20 : 10) : String(v == null ? "" : v).length;
+          if (len > longest) longest = len;
+        });
+        return { wch: Math.min(40, longest + 2) };
+      });
+      // SheetJS's own default date format ("mm-dd-yy") reads
+      // month-first — fine for a US reader, not for Botswana, and a
+      // genuine source of misreading (09-10-26 as the 9th of October,
+      // not the 10th of September). dd-mmm-yyyy can't be misread
+      // either way. Datetime columns (hour or minute actually set —
+      // the odd stray second is float noise from the date-to-serial
+      // round trip, not a real reading) get the time alongside.
+      headers.forEach(function (h, col) {
+        var sample = sheetRows.map(function (r) { return r[h]; }).filter(function (v) { return v instanceof Date; })[0];
+        if (!sample) return;
+        var fmt = (sample.getHours() || sample.getMinutes()) ? "dd-mmm-yyyy hh:mm" : "dd-mmm-yyyy";
+        for (var row = 0; row < sheetRows.length; row++) {
+          var ref = XLSX.utils.encode_cell({ r: row + 1, c: col });
+          if (ws[ref] && ws[ref].t === "n") ws[ref].z = fmt;
+        }
+      });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, reportLabel().slice(0, 31));
+      XLSX.writeFile(wb, exportFilename());
+      btn.disabled = false;
+      btn.textContent = original;
+    }).catch(function (e) {
+      alert(e.message || "Could not export — check the connection and try again.");
+      btn.disabled = false;
+      btn.textContent = original;
+    });
+  };
 
   // The drill-down Mark asked for: "possibility to view the actual
   // inspection reports attached to that schedule." Fetched on demand,
