@@ -440,7 +440,17 @@
 
   function render() {
     if (!lastData) return; // nothing to draw yet — reload() calls this again once there is
-    var all = (lastData.schedules || []);
+    // Safari Vehicle Check tasks live only in their own section below
+    // (D-117/D-118), not the Due list too — Mark: "when we create the
+    // schedule it should just move into the Due section under Safari
+    // Vehicle Checks. We should not have the schedule appearing in the
+    // Due Section on its own as well." Unlike a Handover (which
+    // deliberately shows in both, with its own badge), this one
+    // shouldn't duplicate — filtered out here, before any count or
+    // grouping below ever sees it, not just hidden from the list.
+    var all = (lastData.schedules || []).filter(function (s) {
+      return !(s.name && s.name.indexOf("Safari Vehicle Check") === 0);
+    });
     var shown = all.filter(function (s) {
       // On Hold is independent of the date status (a schedule stopped
       // mid-run can be overdue, active or upcoming at the same time),
