@@ -318,6 +318,9 @@
     return v ? (v.registration || v.label) : "";
   }
   var handovers = [], handoverPeople = [], raisingHandover = false, editingHandoverId = null;
+  // Collapsed by default, same as Schedules (D-122) — both sections
+  // below the Due list are raise/edit areas now, not live status lists.
+  var showHandovers = false, showSafariChecksSection = false;
   // Safari Vehicle Checks (tool-local D-117) — single-location on
   // purpose, unlike a handover: a pre/post-safari check never moves a
   // vehicle between lodges, so there's no lodge picker, just a vehicle
@@ -440,17 +443,20 @@
 
   function render() {
     if (!lastData) return; // nothing to draw yet — reload() calls this again once there is
-    // Safari Vehicle Check tasks live only in their own section below
-    // (D-117/D-118), not the Due list too — Mark: "when we create the
-    // schedule it should just move into the Due section under Safari
-    // Vehicle Checks. We should not have the schedule appearing in the
-    // Due Section on its own as well." Unlike a Handover (which
-    // deliberately shows in both, with its own badge), this one
-    // shouldn't duplicate — filtered out here, before any count or
-    // grouping below ever sees it, not just hidden from the list.
-    var all = (lastData.schedules || []).filter(function (s) {
-      return !(s.name && s.name.indexOf("Safari Vehicle Check") === 0);
-    });
+    // Safari Vehicle Check tasks show here, under Vehicles, the same as
+    // a Handover always has (D-122, superseding D-119's own opposite
+    // call) — Mark, settling how all three — Schedules, Handovers,
+    // Safari Vehicle Checks — should work the same way: "When a
+    // Schedule is active it appears under DUE within its target area.
+    // The same must happen with Handovers and Safari Vehicle Checks...
+    // both under vehicles. You must clearly see both parties that must
+    // sign off and it must remain active until such time as they are
+    // completed. If you want to ever edit these - you must click the
+    // drop down tab on Handover or Safari Vehicle Check - and then
+    // edit as per the normal Schedules." Both sections below are the
+    // Schedules section's own shape now — raise/edit only, collapsed by
+    // default — not a second live list sitting beside Due.
+    var all = (lastData.schedules || []);
     var shown = all.filter(function (s) {
       // On Hold is independent of the date status (a schedule stopped
       // mid-run can be overdue, active or upcoming at the same time),
@@ -636,6 +642,8 @@
   ];
 
   window.toggleRules = function () { showRules = !showRules; render(); };
+  window.toggleHandoversOpen = function () { showHandovers = !showHandovers; render(); };
+  window.toggleSafariChecksOpen = function () { showSafariChecksSection = !showSafariChecksSection; render(); };
   // Removed schedules are out of the way by default and reachable on
   // purpose — Mark, 2026-09-12: "if a schedule is deleted or removed -
   // then i want it to fall out of the visible list. we can have an
@@ -1052,7 +1060,12 @@
   // a different, still-useful feature, untouched.
   window.startRaiseHandover = function () {
     ho = { to_lodge: HERE || "", on: new Date().toISOString().slice(0, 10), end: "" };
-    raisingHandover = true; editingHandoverId = null; render();
+    raisingHandover = true; editingHandoverId = null;
+    // The section itself is collapsed by default now (D-122) — opening
+    // it is what makes the form (and the scroll-to below) actually
+    // exist in the page at all.
+    showHandovers = true;
+    render();
     // Pinned at the top now, so the form it opens is well below the fold —
     // go to it rather than leaving the button looking inert.
     var f = document.getElementById("ho_vehicle");
@@ -1240,8 +1253,20 @@
 
   function handoversSection() {
     var open = handovers.filter(function (h) { return h.stage !== "done"; });
-    var h = '<h2>Handovers <span class="count">' + open.length + " open</span></h2>";
-    h += '<p class="order-note">One checklist, two signatures. The check stays open until the person receiving the vehicle has signed for it.</p>';
+    // Collapsed by default, the same shape the Schedules section below
+    // already has (D-122) — Mark: "The same must happen with Handovers
+    // and Safari Vehicle Checks... If you want to ever edit these - you
+    // must click the drop down tab on Handover... and then edit as per
+    // the normal Schedules." An open one's own live status — both
+    // people, who's checked, who hasn't — now lives on its Due card
+    // instead (card(), above), not duplicated here; this is raising and
+    // editing, the rules, not the live list.
+    var h = '<h2 style="cursor:pointer" onclick="toggleHandoversOpen()">' +
+      (showHandovers ? "▾" : "▸") + ' Handovers <span class="count">' + open.length + " open" +
+      (showHandovers ? "" : " — tap to open") + '</span></h2>';
+    if (!showHandovers) return h;
+
+    h += '<p class="order-note">Raising and editing happen here. An open handover shows under Vehicles in Due above, with both people\'s own sign-off status.</p>';
 
     if (me && me.is_manager && !raisingHandover) {
       h += '<div class="racts" style="margin-top:8px"><button onclick="startRaiseHandover()">+ Raise a handover</button></div>';
@@ -1255,21 +1280,15 @@
         .concat(list.filter(function (x) { return x.id !== justRaisedId; }));
     }
     list.forEach(function (x) {
-      // Both parties, each with their own status — not one combined
-      // sentence. Per Mark, 2026-09-16: "show both parties that need
-      // to check, and highlight when one has checked and the other is
-      // still outstanding." handed_over_at/received_at are exactly
-      // that per-person signature, already tracked, just not shown
-      // this plainly before.
+      // Plain text here, not the live badge pair — that visual language
+      // is reserved for the Due card now, so this reads as reference,
+      // not a second status board for the same thing.
       var fromDone = !!x.handed_over_at, toDone = !!x.received_at;
       h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + (x.id === justRaisedId ? " just-raised" : "") + '">' +
         (x.id === justRaisedId ? '<p class="order-note" style="margin:0 0 4px;color:#2F5B8C;font-weight:600">Handover raised.</p>' : '') +
         '<p class="rname">' + esc(x.vehicle) + '</p>' +
-        '<p class="ho-parties">' +
-          '<span class="who giver' + (fromDone ? " done" : "") + '">' + esc(x.from) + (fromDone ? " ✓ checked" : " — outstanding") + '</span>' +
-          '<span class="arrow">→</span>' +
-          '<span class="who taker' + (toDone ? " done" : "") + '">' + esc(x.to) + (toDone ? " ✓ checked" : " — outstanding") + '</span>' +
-        '</p>' +
+        '<p class="rmeta">' + esc(x.from) + (fromDone ? " (checked)" : " (outstanding)") +
+          ' → ' + esc(x.to) + (toDone ? " (checked)" : " (outstanding)") + '</p>' +
         '<p class="rmeta">' + esc(x.on) +
           (x.moves_lodge ? " · " + esc(x.from_lodge) + " → " + esc(x.to_lodge) : "") + '</p>';
       // What the outgoing person actually flagged, shown right here —
@@ -1329,24 +1348,9 @@
            : "";
       }
       if (editingHandoverId === x.id) h += handoverEditForm(x);
-      // No "Sign for it" step any more — per Mark, 2026-09-18 (see the
-      // comment above handoversSection's JS). Completing it is just
-      // doing the vehicle's own check; this line only says whose turn
-      // that is.
-      // Straight to the vehicle's checklist — Mark, 2026-09-25: "after
-      // it has been raised I want a button that takes you straight to
-      // the checklist" (D-102). Whose turn it is decides the label and
-      // colour: the person handing over checks first, then the person
-      // receiving does theirs, which completes the handover.
-      if (x.stage !== "done" && x.vehicle_id) {
-        var giverTurn = x.stage === "awaiting_checklist";
-        h += '<div class="racts" style="margin-top:8px"><button class="ho-open ' + (giverTurn ? "giver" : "taker") +
-          '" onclick="location.href=\'./inspection.html?target=' + esc(x.vehicle_id) + '&target_type=vehicle\'">' +
-          'Open ' + esc(giverTurn ? x.from : x.to) + '\'s checklist →</button></div>' +
-          '<p class="order-note" style="margin:4px 0 0">' +
-          (giverTurn ? esc(x.from) + " checks the vehicle first, then " + esc(x.to) + " checks it to accept it."
-                     : esc(x.to) + "'s check on this vehicle completes the handover.") + '</p>';
-      }
+      // No "Open checklist" button here any more (D-122) — an open
+      // handover's own Due card, under Vehicles above, is where that
+      // lives now; this section is for raising and editing only.
       h += '</div>';
     });
     return h;
@@ -1379,8 +1383,16 @@
 
   function safariChecksSection() {
     var open = safariChecks.filter(function (x) { return x.stage !== "done"; });
-    var h = '<h2>Safari Vehicle Checks <span class="count">' + open.length + ' open</span></h2>';
-    h += '<p class="order-note">The pre-safari check stays open until the same vehicle\'s post-safari check is done — almost always the same guide, but not locked to them.</p>';
+    // Collapsed by default, same as Schedules and Handovers now (D-122)
+    // — an open one's own live Pre/Post status lives on its Due card
+    // instead (card(), above); this is raising and editing, not a
+    // second live list.
+    var h = '<h2 style="cursor:pointer" onclick="toggleSafariChecksOpen()">' +
+      (showSafariChecksSection ? "▾" : "▸") + ' Safari Vehicle Checks <span class="count">' + open.length + ' open' +
+      (showSafariChecksSection ? "" : " — tap to open") + '</span></h2>';
+    if (!showSafariChecksSection) return h;
+
+    h += '<p class="order-note">Raising and editing happen here. An open check shows under Vehicles in Due above, with its own Pre/Post status.</p>';
 
     if (!safariCheckVehicles.length || !safariCheckPeople.length) {
       h += '<p class="order-note">No real vehicles or people at this lodge yet to pick from.</p>';
@@ -1395,34 +1407,30 @@
         .concat(list.filter(function (x) { return x.id !== justRaisedSafariCheckId; }));
     }
     list.forEach(function (x) {
-      // Same "two stages, each its own status" badge the Handovers
-      // section already uses (D-102) — Mark, seeing the first version's
-      // one-line sentence: "we need on the schedule for it to show that
-      // the Pre-Safari Check has been done, and the Post Safari Check
-      // is Pending." Blue/dashed-vs-solid for Pre, teal/dashed-vs-solid
-      // for Post, the exact same visual language as a handover's giver
-      // and taker, so this reads the same way at a glance.
+      // Plain text here, not the live badge pair — that visual language
+      // is reserved for the Due card now (D-122), so this reads as
+      // reference, not a second status board for the same thing.
       var preDone = !!x.pre_completed_at, postDone = !!x.post_completed_at;
       h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + (x.id === justRaisedSafariCheckId ? " just-raised" : "") + '">' +
         (x.id === justRaisedSafariCheckId ? '<p class="order-note" style="margin:0 0 4px;color:#2F5B8C;font-weight:600">Safari check raised.</p>' : '') +
         '<p class="rname">' + esc(x.vehicle) + (x.tour_code ? ' · ' + esc(x.tour_code) : '') + '</p>' +
         '<p class="rmeta">' + esc(x.guide) + (x.guide_department ? " · " + esc(x.guide_department) : "") + '</p>' +
-        '<p class="ho-parties">' +
-          '<span class="who giver' + (preDone ? " done" : "") + '">Pre-Safari Check' + (preDone ? " ✓ done" : " — pending") + '</span>' +
-          '<span class="arrow">→</span>' +
-          '<span class="who taker' + (postDone ? " done" : "") + '">Post-Safari Check' + (postDone ? " ✓ done" : " — pending") + '</span>' +
-        '</p>';
-      if (x.stage !== "done" && x.vehicle_id) {
-        h += '<div class="racts" style="margin-top:8px"><button onclick="location.href=\'./inspection.html?target=' +
-          esc(x.vehicle_id) + '&target_type=vehicle\'">Open ' + esc(x.guide) + '\'s checklist →</button></div>';
-      }
-      h += '</div>';
+        '<p class="rmeta">Pre-Safari Check' + (preDone ? " (done)" : " (pending)") +
+          ' → Post-Safari Check' + (postDone ? " (done)" : " (pending)") + '</p>' +
+        '</div>';
     });
     return h;
   }
 
   window.startRaiseSafariCheck = function () {
-    sc = {}; raisingSafariCheck = true; render();
+    sc = {}; raisingSafariCheck = true;
+    // The section itself is collapsed by default now (D-122).
+    showSafariChecksSection = true;
+    render();
+    // Pinned at the top (D-120), so the form it opens is well below the
+    // fold — go to it, same as the handover button already does.
+    var f = document.getElementById("sc_vehicle");
+    if (f && f.scrollIntoView) f.scrollIntoView({ block: "center", behavior: "smooth" });
   };
   window.cancelSafariCheck = function () { raisingSafariCheck = false; render(); };
   window.doRaiseSafariCheck = function (btn) {
@@ -1620,6 +1628,44 @@
     // already starts "Handover — ..." (built server-side); this just
     // makes it visible without having to read the whole line.
     var isHandover = s.name.indexOf("Handover") === 0;
+    // Safari Vehicle Check, the same idea — a pre/post-safari obligation
+    // needs its own two-stage status shown right here, not a generic
+    // assignee line, same reasoning as a handover's two people (D-122).
+    var isSafariCheck = s.name.indexOf("Safari Vehicle Check") === 0;
+    // The matching live record, found by vehicle rather than carried on
+    // the task itself — handovers/safariChecks are already loaded for
+    // their own (now-collapsed) sections, so this is free, not a second
+    // fetch. "Done" ones are excluded — once both sides are complete the
+    // task itself is gone from Due anyway, so this only ever needs to
+    // find the one currently open.
+    var matchedHandover = isHandover
+      ? handovers.filter(function (h) { return h.vehicle_id === s.target_id && h.stage !== "done"; })[0]
+      : null;
+    var matchedSafari = isSafariCheck
+      ? safariChecks.filter(function (x) { return x.vehicle_id === s.target_id && x.stage !== "done"; })[0]
+      : null;
+    // Both people's own status, or both stages' own status — the exact
+    // same badge shape either way (D-102/D-118), shown here instead of
+    // the plain assignee line once there's a real record to show it
+    // from; falls back to the ordinary "who" line otherwise (data still
+    // loading, or the odd case nothing matched).
+    var parties = matchedHandover
+      ? '<p class="ho-parties">' +
+          '<span class="who giver' + (matchedHandover.handed_over_at ? " done" : "") + '">' +
+            esc(matchedHandover.from) + (matchedHandover.handed_over_at ? " ✓ checked" : " — outstanding") + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="who taker' + (matchedHandover.received_at ? " done" : "") + '">' +
+            esc(matchedHandover.to) + (matchedHandover.received_at ? " ✓ checked" : " — outstanding") + '</span>' +
+        '</p>'
+      : matchedSafari
+      ? '<p class="ho-parties">' +
+          '<span class="who giver' + (matchedSafari.pre_completed_at ? " done" : "") + '">Pre-Safari Check' +
+            (matchedSafari.pre_completed_at ? " ✓ done" : " — pending") + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="who taker' + (matchedSafari.post_completed_at ? " done" : "") + '">Post-Safari Check' +
+            (matchedSafari.post_completed_at ? " ✓ done" : " — pending") + '</span>' +
+        '</p>'
+      : who;
     // Hold and resume, tool-local D-078, 2026-09-18 — Mark: "Due List
     // must clearly show that the check is ON HOLD." Purely computed
     // (checked_count/target_count from the server, not a flag anyone
@@ -1636,9 +1682,10 @@
     var h = '<div class="card' + (s.on_hold ? ' on-hold' : '') + '"><div class="sched-row"><div>' +
       '<p style="font-weight:700;margin:0">' +
       (isHandover ? '<span class="badge handover">Handover</span> ' : "") +
+      (isSafariCheck ? '<span class="badge handover">Safari Check</span> ' : "") +
       esc(s.name) + '</p>' +
       '<p class="meta">' + esc(s.interval) + " — " + dueText(s) + '</p>' +
-      who +
+      parties +
       (s.on_hold ? '<p class="meta">' + s.checked_count + ' of ' + s.target_count + ' done — pick up where you left off</p>' : '') +
       '</div><span style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end">' +
       (s.on_hold ? '<span class="badge onhold">On Hold</span>' : '') +
@@ -1665,8 +1712,21 @@
     // checklist before, per Mark, 2026-09-19. Same deep link
     // checklist.html now understands (?target=&target_type=).
     if (s.is_task && s.target_id) {
-      h += '<div class="assign-row"><button onclick="location.href=\'./inspection.html?target=' +
-        esc(s.target_id) + '&target_type=' + esc(s.target_type) + '\'">Open checklist →</button></div>';
+      // Names whose turn it is, same as the handover/safari-check
+      // sections used to — Mark's "Open <name>'s checklist" button
+      // (D-102), moved here now that this card is where that whole
+      // status lives.
+      var openLabel = "Open checklist →";
+      var openClass = "";
+      if (matchedHandover) {
+        var giverTurn = !matchedHandover.handed_over_at;
+        openLabel = "Open " + esc(giverTurn ? matchedHandover.from : matchedHandover.to) + "'s checklist →";
+        openClass = " ho-open " + (giverTurn ? "giver" : "taker");
+      } else if (matchedSafari) {
+        openLabel = "Open " + esc(matchedSafari.guide) + "'s checklist →";
+      }
+      h += '<div class="assign-row"><button class="' + openClass.trim() + '" onclick="location.href=\'./inspection.html?target=' +
+        esc(s.target_id) + '&target_type=' + esc(s.target_type) + '\'">' + openLabel + '</button></div>';
     }
 
     // Management assigns a department by hand, the same way a fault is
