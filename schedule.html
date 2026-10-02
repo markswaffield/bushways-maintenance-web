@@ -326,7 +326,7 @@
   // vehicle between lodges, so there's no lodge picker, just a vehicle
   // and a guide, both already at this location.
   var safariChecks = [], safariCheckVehicles = [], safariCheckPeople = [], safariChecksHere = false;
-  var raisingSafariCheck = false, justRaisedSafariCheckId = null, sc = {};
+  var raisingSafariCheck = false, justRaisedSafariCheckId = null, sc = {}, editingSafariCheckId = null;
   // The camp this page is showing (from the server, so it's right for a
   // single-camp person with no bw_camp too) and every lodge a vehicle
   // could be handed to — D-100.
@@ -1381,6 +1381,27 @@
       '<button onclick="cancelSafariCheck()">Cancel</button></div></div>';
   }
 
+  // Same shape as the raise form, pre-filled — "Guide / driver" becomes
+  // fixed text once the pre-safari check is already recorded against
+  // them (x.pre_completed_at), since that can't change any more; the
+  // date and Tour Code stay open right up until the check is done.
+  function safariCheckEditForm(x) {
+    var lockedGuideText = x.pre_completed_at
+      ? x.guide + " — the pre-safari check is already recorded against them, so this can't change now." : null;
+    return '<div class="form">' +
+      '<label>Guide / driver</label>' +
+      (lockedGuideText
+        ? '<p class="rmeta" style="margin:2px 0 10px">' + esc(lockedGuideText) + '</p>'
+        : '<select id="sce_guide">' + safariCheckPeople.map(function (p) {
+            return '<option value="' + esc(p.id) + '"' + (sc.guide === p.id ? " selected" : "") + '>' + esc(p.name) +
+              (p.departments && p.departments.name ? " · " + esc(p.departments.name) : "") + '</option>';
+          }).join("") + '</select>') +
+      '<label>Going out on</label><input type="date" id="sce_on" value="' + esc(sc.on || "") + '">' +
+      '<label>Tour Code (if known)</label><input type="text" id="sce_tour" value="' + esc(sc.tour || "") + '" placeholder="e.g. SF2601">' +
+      '<div class="racts"><button onclick="doEditSafariCheck(\'' + x.id + '\', this)">Save changes</button>' +
+      '<button onclick="cancelSafariCheck()">Cancel</button></div></div>';
+  }
+
   function safariChecksSection() {
     var open = safariChecks.filter(function (x) { return x.stage !== "done"; });
     // Collapsed by default, same as Schedules and Handovers now (D-122)
@@ -1416,8 +1437,15 @@
         '<p class="rname">' + esc(x.vehicle) + (x.tour_code ? ' · ' + esc(x.tour_code) : '') + '</p>' +
         '<p class="rmeta">' + esc(x.guide) + (x.guide_department ? " · " + esc(x.guide_department) : "") + '</p>' +
         '<p class="rmeta">Pre-Safari Check' + (preDone ? " (done)" : " (pending)") +
-          ' → Post-Safari Check' + (postDone ? " (done)" : " (pending)") + '</p>' +
-        '</div>';
+          ' → Post-Safari Check' + (postDone ? " (done)" : " (pending)") + '</p>';
+      // Edit — management only, same rule as a Handover's own Edit
+      // button (D-122): open to correction right up until it's done.
+      var showEditBtn = me && me.is_manager && x.stage !== "done" && editingSafariCheckId !== x.id;
+      if (showEditBtn) {
+        h += '<div class="racts" style="margin-top:8px"><button onclick="startEditSafariCheck(\'' + x.id + '\')">Edit</button></div>';
+      }
+      if (editingSafariCheckId === x.id) h += safariCheckEditForm(x);
+      h += '</div>';
     });
     return h;
   }
@@ -1432,7 +1460,34 @@
     var f = document.getElementById("sc_vehicle");
     if (f && f.scrollIntoView) f.scrollIntoView({ block: "center", behavior: "smooth" });
   };
-  window.cancelSafariCheck = function () { raisingSafariCheck = false; render(); };
+  window.cancelSafariCheck = function () { raisingSafariCheck = false; editingSafariCheckId = null; render(); };
+
+  // Correcting one after it's raised — same gap as Handovers had until
+  // D-105, closed the same way for this one too (D-122's own "edit as
+  // per the normal Schedules" instruction). The guide locks once the
+  // pre-safari check is already recorded against them (pre_completed_at
+  // set) — the form below shows that as fixed text once it does.
+  window.startEditSafariCheck = function (id) {
+    var x = safariChecks.filter(function (c) { return c.id === id; })[0] || {};
+    sc = { guide: x.guide_id || "", on: x.due_on || new Date().toISOString().slice(0, 10), tour: x.tour_code || "" };
+    editingSafariCheckId = id; raisingSafariCheck = false; render();
+  };
+  window.doEditSafariCheck = function (id, btn) {
+    if (btn) btn.disabled = true;
+    var guideEl = document.getElementById("sce_guide");
+    fetch(FN.replace("action=dashboard", "action=edit_safari_check"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        by_person_id: me && me.id, safari_check_id: id,
+        guide_id: guideEl ? guideEl.value : undefined,
+        due_on: document.getElementById("sce_on").value,
+        tour_code: document.getElementById("sce_tour").value || null,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      editingSafariCheckId = null; reload();
+    });
+  };
   window.doRaiseSafariCheck = function (btn) {
     if (btn) btn.disabled = true;
     fetch(FN.replace("action=dashboard", "action=raise_safari_check"), {
