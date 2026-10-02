@@ -318,6 +318,12 @@
     return v ? (v.registration || v.label) : "";
   }
   var handovers = [], handoverPeople = [], raisingHandover = false, editingHandoverId = null;
+  // Safari Vehicle Checks (tool-local D-117) — single-location on
+  // purpose, unlike a handover: a pre/post-safari check never moves a
+  // vehicle between lodges, so there's no lodge picker, just a vehicle
+  // and a guide, both already at this location.
+  var safariChecks = [], safariCheckVehicles = [], safariCheckPeople = [], safariChecksHere = false;
+  var raisingSafariCheck = false, justRaisedSafariCheckId = null, sc = {};
   // The camp this page is showing (from the server, so it's right for a
   // single-camp person with no bw_camp too) and every lodge a vehicle
   // could be handed to — D-100.
@@ -359,7 +365,10 @@
     // own badge so the two are never mistaken for each other. Missed
     // before today: a Handover fell through to "recurring maintenance"
     // instead, unnoticed until Mark asked to tell them apart.
-    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0) return "vehicle";
+    // Safari Vehicle Check (D-117) grouped the same way — still a
+    // vehicle's own obligation, just a two-visit one like Handover.
+    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0 ||
+        s.name.indexOf("Safari Vehicle Check") === 0) return "vehicle";
     return "recurring";
   }
   function kindLabel(k) {
@@ -597,6 +606,7 @@
       });
     }
     html += '<div style="margin-top:28px"></div>' + handoversSection();
+    if (safariChecksHere) html += '<div style="margin-top:28px"></div>' + safariChecksSection();
     html += '<div style="margin-top:28px"></div>' + rulesSection();
 
     document.getElementById("app").innerHTML = html;
@@ -1326,6 +1336,88 @@
     return h;
   }
 
+  // Safari Vehicle Checks (tool-local D-117) — Mark: "this is generally
+  // a check which is done before and after a safari by the same guide.
+  // Similar to a vehicle handover. I would like for a schedule to
+  // remain open in the same way." Shown only where this mechanism
+  // actually exists (safariChecksHere, from the server — Bush Ways
+  // Safaris today); a single vehicle+guide picker, no lodge involved,
+  // since a pre/post-safari check never moves a vehicle anywhere.
+  function safariCheckForm() {
+    var today = new Date().toISOString().slice(0, 10);
+    return '<div class="form">' +
+      '<label>Vehicle</label><select id="sc_vehicle">' +
+      safariCheckVehicles.map(function (v) {
+        return '<option value="' + esc(v.id) + '">' + esc(v.label) + '</option>';
+      }).join("") + '</select>' +
+      '<label>Guide / driver</label><select id="sc_guide">' +
+      safariCheckPeople.map(function (p) {
+        return '<option value="' + esc(p.id) + '">' + esc(p.name) +
+          (p.departments && p.departments.name ? " · " + esc(p.departments.name) : "") + '</option>';
+      }).join("") + '</select>' +
+      '<label>Going out on</label><input type="date" id="sc_on" value="' + today + '">' +
+      '<label>Tour Code (if known)</label><input type="text" id="sc_tour" placeholder="e.g. SF2601">' +
+      '<div class="racts"><button onclick="doRaiseSafariCheck(this)">Raise check</button>' +
+      '<button onclick="cancelSafariCheck()">Cancel</button></div></div>';
+  }
+
+  function safariChecksSection() {
+    var open = safariChecks.filter(function (x) { return x.stage !== "done"; });
+    var h = '<h2>Safari Vehicle Checks <span class="count">' + open.length + ' open</span></h2>';
+    h += '<p class="order-note">The pre-safari check stays open until the same vehicle\'s post-safari check is done — almost always the same guide, but not locked to them.</p>';
+
+    if (!safariCheckVehicles.length || !safariCheckPeople.length) {
+      h += '<p class="order-note">No real vehicles or people at this lodge yet to pick from.</p>';
+    } else if (me && me.is_manager && !raisingSafariCheck) {
+      h += '<div class="racts" style="margin-top:8px"><button onclick="startRaiseSafariCheck()">+ Raise a safari vehicle check</button></div>';
+    }
+    if (raisingSafariCheck) h += safariCheckForm();
+
+    var list = safariChecks.slice(0, 20);
+    if (justRaisedSafariCheckId) {
+      list = list.filter(function (x) { return x.id === justRaisedSafariCheckId; })
+        .concat(list.filter(function (x) { return x.id !== justRaisedSafariCheckId; }));
+    }
+    list.forEach(function (x) {
+      h += '<div class="rule' + (x.stage === "done" ? " archived" : "") + (x.id === justRaisedSafariCheckId ? " just-raised" : "") + '">' +
+        (x.id === justRaisedSafariCheckId ? '<p class="order-note" style="margin:0 0 4px;color:#2F5B8C;font-weight:600">Safari check raised.</p>' : '') +
+        '<p class="rname">' + esc(x.vehicle) + (x.tour_code ? ' · ' + esc(x.tour_code) : '') + '</p>' +
+        '<p class="rmeta">' + esc(x.guide) + (x.guide_department ? " · " + esc(x.guide_department) : "") + '</p>' +
+        '<p class="rmeta">' +
+        (x.stage === "done" ? "Pre and post-safari checks both done"
+          : x.stage === "awaiting_post" ? "Pre-safari check done — waiting on the post-safari check"
+          : "Waiting on the pre-safari check") +
+        '</p>';
+      if (x.stage !== "done" && x.vehicle_id) {
+        h += '<div class="racts" style="margin-top:8px"><button onclick="location.href=\'./inspection.html?target=' +
+          esc(x.vehicle_id) + '&target_type=vehicle\'">Open ' + esc(x.guide) + '\'s checklist →</button></div>';
+      }
+      h += '</div>';
+    });
+    return h;
+  }
+
+  window.startRaiseSafariCheck = function () {
+    sc = {}; raisingSafariCheck = true; render();
+  };
+  window.cancelSafariCheck = function () { raisingSafariCheck = false; render(); };
+  window.doRaiseSafariCheck = function (btn) {
+    if (btn) btn.disabled = true;
+    fetch(FN.replace("action=dashboard", "action=raise_safari_check"), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        by_person_id: me && me.id,
+        vehicle_id: document.getElementById("sc_vehicle").value,
+        guide_id: document.getElementById("sc_guide").value,
+        due_on: document.getElementById("sc_on").value,
+        tour_code: document.getElementById("sc_tour").value || null,
+      }),
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
+      raisingSafariCheck = false; justRaisedSafariCheckId = out.safari_check_id || null; reload();
+    });
+  };
+
   function rulesSection() {
     var live = rules.filter(function (r) { return !r.archived; }).length;
     // Collapsed by default — Mark, 2026-09-12: "We can actually collapse
@@ -1574,6 +1666,7 @@
       fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
       fetch(FN.replace("action=dashboard", "action=handovers")).then(function (r) { return r.json(); }),
       fetch(FN.replace("action=dashboard", "action=all_area_targets")).then(function (r) { return r.json(); }),
+      fetch(FN.replace("action=dashboard", "action=safari_checks")).then(function (r) { return r.json(); }),
     ]).then(function (res) {
       handovers = res[2].handovers || [];
       handoverPeople = res[2].people || [];
@@ -1586,6 +1679,10 @@
       VEHICLE_AREA_ID = v ? v.id : null;
       rules = res[1].schedules || [];
       targetsByArea = res[3].targets_by_area || {};
+      safariChecks = res[4].checks || [];
+      safariCheckVehicles = res[4].vehicles || [];
+      safariCheckPeople = res[4].people || [];
+      safariChecksHere = !!res[4].has_schedule;
       render();
     });
   }

@@ -484,7 +484,8 @@
 
   function kindOf(s) {
     if (s.name.indexOf("Room Inspection") === 0) return "room";
-    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0) return "vehicle";
+    if (s.name.indexOf("Vehicle Check") === 0 || s.name.indexOf("Handover") === 0 ||
+        s.name.indexOf("Safari Vehicle Check") === 0) return "vehicle";
     return "recurring";
   }
   function kindLabel(k) {

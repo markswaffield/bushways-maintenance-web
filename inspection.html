@@ -43,6 +43,10 @@
   .graded-row{display:flex;align-items:center;gap:10px}
   .graded-row label.main{flex:none;cursor:default}
   .graded-row input{width:100px;flex:none}
+  /* The pre-safari reading, read-only, on the post-safari screen only
+     (tool-local D-117) — a small fixed badge, not another input, so
+     it reads as "already recorded" rather than something to edit. */
+  .pre-reading{font-size:12.5px;font-weight:700;color:#8C6A2F;background:#F4E3D3;padding:4px 10px;border-radius:10px;white-space:nowrap;flex:none}
   .details{display:none;margin:10px 0 0 30px;padding:10px;background:#EFECE3;border-radius:6px}
   .item.open .details{display:block}
   /* Still open from a previous visit — 2026-09-18 (D-060), Mark: "the
@@ -783,6 +787,7 @@
   // ------------------------------------------------------------------
   var pendingOdometer = null;
   var pendingHours = null;
+  var pendingTourCode = null;
 
   function renderChecklist(data, personId, roomId) {
     var c = document.getElementById("checklist");
@@ -871,6 +876,16 @@
             : " No service interval set, so no service will be raised.") +
           '</p></div>'
         : "") +
+      // The Tour Code, only when this vehicle has an open pre/post-safari
+      // check (tool-local D-117) — Mark: "we will need a place to enter
+      // the Tour Code onto the inspection sheet - maybe next to the
+      // Odometer reading." Editable at either stage, since management
+      // may not always have it to hand when raising the check.
+      (data.safari_check
+        ? '<div class="odo"><label>Tour Code' +
+          (data.safari_check.stage === "post" ? " — post-safari check" : " — pre-safari check") + '</label>' +
+          '<input type="text" id="tourCode" placeholder="e.g. SF2601" value="' + esc(data.safari_check.tour_code || "") + '"></div>'
+        : "") +
       // Same idea, on an area check with a real hour-metered asset
       // behind it — the Backup Generator, the Boat. Per Mark,
       // 2026-09-16: "for the generator and boat inspection pages - we
@@ -892,9 +907,18 @@
           html += '<div class="item"><label class="main">' + esc(item.text) + '</label>' +
             '<input type="text" inputmode="numeric" data-value="' + item.id + '" placeholder="Reading"></div>';
         } else if (item.kind === "graded_reading") {
+          // The pre-safari reading, read-only, shown only on the
+          // post-safari screen (tool-local D-117/D-117's own follow-up)
+          // — Mark's own sketch: "We will need second KPA block for
+          // the tyre pressure." Not a second template item — the same
+          // one, submitted a second time; the first value just travels
+          // along for comparison rather than being retyped or lost.
+          var preR = item.pre_reading;
+          var hasPre = preR && preR.value != null;
           html += '<div class="item graded">' +
             '<div class="graded-row"><label class="main">' + esc(item.text) + '</label>' +
-            '<input type="text" inputmode="decimal" data-value="' + item.id + '" placeholder="kPa"></div>' +
+            (hasPre ? '<span class="pre-reading">Pre: ' + esc(preR.value) + ' kPa</span>' : '') +
+            '<input type="text" inputmode="decimal" data-value="' + item.id + '" placeholder="' + (hasPre ? "Post kPa" : "kPa") + '"></div>' +
             '<label class="main" style="margin-top:10px">' +
             '<input type="checkbox" data-gradeopen="' + item.id + '"> Condition (tread, cuts, dents)</label>' +
             '<div class="details">' +
@@ -1077,6 +1101,8 @@
             ") is lower than the last one recorded (" + Number(data.meter_last_reading).toLocaleString() +
             "). Record it anyway?")) return;
       }
+      var tourCodeInput = document.getElementById("tourCode");
+      pendingTourCode = tourCodeInput ? tourCodeInput.value.trim() : null;
       showReview(results);
     };
 
@@ -1104,6 +1130,10 @@
       if (pendingHours !== null) {
         html += '<div class="review-card"><p class="review-line">Hours: <b>' +
           pendingHours.toLocaleString() + '</b></p></div>';
+      }
+      if (pendingTourCode) {
+        html += '<div class="review-card"><p class="review-line">Tour Code: <b>' +
+          esc(pendingTourCode) + '</b></p></div>';
       }
 
       if (!flagged.length && !readings.length && !graded.length) {
@@ -1167,6 +1197,7 @@
             target_id: roomId, target_type: targetType,
             odometer: pendingOdometer,
             hours: pendingHours,
+            tour_code: pendingTourCode,
             template_id: data.template_id, results: results,
             location_id: camp ? camp.id : null,
             signed_in_id: signedInAs ? signedInAs.id : null,
@@ -1178,9 +1209,17 @@
           var withPhotos = flagged.filter(function (x) { return x.photoFile && out.issue_ids[x.item_id]; });
           var uploaded = 0, failed = 0;
           function finish() {
-            document.getElementById("doneTitle").textContent = "Inspection recorded";
+            document.getElementById("doneTitle").textContent =
+              out.safari_check_stage === "pre" ? "Pre-safari check recorded"
+              : out.safari_check_stage === "post" ? "Post-safari check recorded"
+              : "Inspection recorded";
             document.getElementById("doneBox").innerHTML =
               "<p>" + esc(out.target_label || out.room_label) + ", " + esc(campName()) + ".</p>" +
+              (out.safari_check_stage === "pre"
+                ? "<p>This vehicle's safari check stays open — do the post-safari check on the same vehicle when it's back.</p>"
+                : out.safari_check_stage === "post"
+                ? "<p>Both halves of this safari check are now recorded, and it's off the schedule.</p>"
+                : "") +
               "<p>" + out.flagged + " item" + (out.flagged === 1 ? "" : "s") + " flagged. Everything else recorded as fine.</p>" +
               // Split 2026-09-18 (D-060): a new fault reads differently
               // from one that's simply still broken — telling someone
