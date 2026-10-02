@@ -508,6 +508,12 @@
       html += '<div class="topacts">' +
         '<button onclick="startAdd()">+ Add a schedule</button>' +
         '<button onclick="startRaiseHandover()">+ Raise a handover</button>' +
+        // A third, only where it means anything — Mark, 2026-10-02: "for
+        // BW Safaris - in addition to the Add a Schedule, Raise a
+        // Handover - we also need a button for Raise a Safari Vehicle
+        // check pinned to the top." Same reasoning as the other two:
+        // it still lives in its own section further down too.
+        (safariChecksHere ? '<button onclick="startRaiseSafariCheck()">+ Raise a safari vehicle check</button>' : "") +
       "</div>";
     }
     html += '<p class="order-note">Only what is coming up. Anything further off lives in Schedules below. ' +
