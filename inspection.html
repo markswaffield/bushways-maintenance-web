@@ -17,17 +17,21 @@
   .item{border-bottom:1px solid #E3DFD3;padding:12px 0}
   .item label.main{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:#232019;margin:0;cursor:pointer}
   .item input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:1px}
-  /* A reading and a condition grade on one line — Mark, 2026-10-01,
-     reviewing the Safari Vehicle tyre section: "Front - RHS - then a
-     block next to if for kPa Reading / (block) - condition (cuts,
-     wear, damage)... is it possible to have its own menu specific for
-     this GOOD, AVERAGE, POOR and then the note section?" The position
-     and its kPa reading share one row; Good/Average/Poor and the note
-     sit underneath, always shown — this is recorded every visit, not
-     only when something's wrong, so it isn't gated behind a checkbox
-     the way every other item on this page is. */
-  .graded-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .graded-row label.main{flex:1;cursor:default}
+  /* A reading and a condition grade, one tyre per block — Mark,
+     2026-10-01/02, reviewing the Safari Vehicle tyre section, then a
+     real sketch once the first version shipped: the position and its
+     kPa reading share one row, close together; Condition is its own
+     tickbox underneath ("tread, cuts, dents") — tick it to reveal a
+     Good/Average/Poor dropdown and an action/notes box, the exact
+     same reveal-on-tick shape every other item on this page already
+     uses. Not flex:1 on the label — that stretches to fill whatever
+     room is left, which is barely noticeable on a phone but shoves
+     the kPa box out to the far right edge on a wide desktop screen,
+     caught from Mark's own screenshot. Sized to its own text instead,
+     so the box always sits right next to it regardless of how wide
+     the page is. */
+  .graded-row{display:flex;align-items:center;gap:10px}
+  .graded-row label.main{flex:none;cursor:default}
   .graded-row input{width:100px;flex:none}
   .details{display:none;margin:10px 0 0 30px;padding:10px;background:#EFECE3;border-radius:6px}
   .item.open .details{display:block}
@@ -881,16 +885,19 @@
           html += '<div class="item graded">' +
             '<div class="graded-row"><label class="main">' + esc(item.text) + '</label>' +
             '<input type="text" inputmode="decimal" data-value="' + item.id + '" placeholder="kPa"></div>' +
+            '<label class="main" style="margin-top:10px">' +
+            '<input type="checkbox" data-gradeopen="' + item.id + '"> Condition (tread, cuts, dents)</label>' +
+            '<div class="details">' +
             '<label>Condition</label>' +
             '<select data-grade="' + item.id + '">' +
-            '<option value="">Not graded</option>' +
+            '<option value="">Choose one</option>' +
             '<option value="Good">Good</option>' +
             '<option value="Average">Average</option>' +
             '<option value="Poor">Poor</option>' +
             '</select>' +
-            '<label>Notes (cuts, wear, damage)</label>' +
-            '<textarea data-gradenote="' + item.id + '" rows="2" placeholder="Anything to note"></textarea>' +
-            '</div>';
+            '<label>Action / notes</label>' +
+            '<textarea data-gradenote="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
+            '</div></div>';
         } else {
           // Still open from an earlier visit (2026-09-18, D-060) — shown
           // so it's visible, never hidden away as if nobody had ever
@@ -970,6 +977,11 @@
         cb.closest(".item").classList.toggle("open", cb.checked);
       });
     });
+    c.querySelectorAll("[data-gradeopen]").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        cb.closest(".item").classList.toggle("open", cb.checked);
+      });
+    });
 
     // A short label per item, the same way the dashboard and completed-
     // tasks pages derive one server-side — the review screen below needs
@@ -988,10 +1000,21 @@
             if (v) results.push({ item_id: item.id, value: Number(v), label: shortLabel(item.text) });
           } else if (item.kind === "graded_reading") {
             var gv = c.querySelector('[data-value="' + item.id + '"]').value;
-            var gradeEl = c.querySelector('[data-grade="' + item.id + '"]');
-            var grade = gradeEl.value;
-            var gnote = c.querySelector('[data-gradenote="' + item.id + '"]').value.trim();
+            // Condition only counts once its own tickbox is open — same
+            // "leave alone if it's fine" rule as every other item here;
+            // the kPa reading alone is still always collected regardless.
+            var gOpenEl = c.querySelector('[data-gradeopen="' + item.id + '"]');
+            var gOpen = gOpenEl && gOpenEl.checked;
+            var grade = gOpen ? c.querySelector('[data-grade="' + item.id + '"]').value : "";
+            var gnote = gOpen ? c.querySelector('[data-gradenote="' + item.id + '"]').value.trim() : "";
             if (gv || grade || gnote) {
+              // A Poor grade goes on the to-do list the same way any
+              // other flagged item does — Mark, 2026-10-02: "anything
+              // recorded as Poor must go onto the To-do List." Reuses
+              // the exact same Issue-raising path a ticked checkbox
+              // item already goes through; no fault type to pick from
+              // a catalogue, just the note itself.
+              var isPoor = grade === "Poor";
               results.push({
                 item_id: item.id, value: gv ? Number(gv) : null,
                 grade: grade || null, note: gnote || null,
@@ -1000,6 +1023,9 @@
                 // from "Front - RHS" on the confirm and done screens.
                 // A tyre position's full text is already short.
                 label: item.text,
+                failed: isPoor,
+                action_if_failed: isPoor ? (gnote || "Poor condition") : null,
+                fault_type_id: null,
               });
             }
           } else {
@@ -1054,7 +1080,10 @@
       show("review");
       var flagged = results.filter(function (x) { return x.failed; });
       var readings = results.filter(function (x) { return x.value !== undefined && x.grade === undefined; });
-      var graded = results.filter(function (x) { return x.grade !== undefined; });
+      // Poor-graded tyres are in `flagged` too (they raise a real Issue,
+      // same as any other failed item) — kept out of here so they don't
+      // also show a second time in the plain graded list below.
+      var graded = results.filter(function (x) { return x.grade !== undefined && !x.failed; });
       var html = '<h1>Confirm Inspection</h1>' +
         '<p class="sub">' + esc(data.target_label || data.room_label) + ', ' + esc(campName()) + ' — check this is right before it\'s recorded</p>';
 
@@ -1072,6 +1101,19 @@
       } else if (flagged.length || readings.length || graded.length) {
         html += '<div class="review-card">';
         flagged.forEach(function (x) {
+          if (x.grade !== undefined) {
+            // A Poor-graded tyre — same "going on the to-do list" fact
+            // as any other flagged line, shown with its own reading
+            // alongside rather than the generic fault-type rendering,
+            // which doesn't apply here (there's no fault type picked).
+            var bits = [];
+            if (x.value != null) bits.push(x.value + " kPa");
+            bits.push(x.grade);
+            html += '<p class="review-line">' + esc(x.label) + ': ' + esc(bits.join(", ")) +
+              (x.note ? ' — ' + esc(x.note) : '') +
+              ' — <span class="fault">To-do list</span></p>';
+            return;
+          }
           html += '<p class="review-line">' + esc(x.label) +
             (x.fault_type_label ? ' — <span class="fault">' + esc(x.fault_type_label) + '</span>' : '') +
             (x.action_if_failed ? ' — ' + esc(x.action_if_failed) : '') +

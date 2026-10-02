@@ -235,6 +235,15 @@ document.addEventListener("click", function (e) {
        this menu puts an h1 top-left, and on a narrow screen a long camp name
        would otherwise run underneath it. */
     "h1{padding-right:52px}" +
+    /* Same problem, the sign-in bar — Mark, 2026-10-02: "on the computer
+       screen - the BW icon for the drop down menu sits over the sign out
+       button." On a phone the bar wraps (name on one line, Change camp/Sign
+       out on the next), which happens to clear the button on its own; on a
+       wide screen it fits on one line and runs the full width of the page,
+       putting Sign out directly under the fixed button in the same corner.
+       Reserving the same space h1 already does fixes it regardless of
+       width, not just above a breakpoint. */
+    ".whobar{padding-right:58px}" +
     /* The page title stays put — Mark, 2026-09-29: "would it be possible to
        pin this to the top of the page at all times?" On a long to-do list or a
        roll-up it is easy to forget which camp you are reading, and the whole
