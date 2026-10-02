@@ -852,8 +852,12 @@
 
     var isVeh = data.target_type === "vehicle";
     var isArea = data.target_type === "area";
+    // A trailer attached to this safari check (tool-local D-124) shows
+    // right in the title — the one screen covers both.
+    var trailerSuffix = (data.safari_check && data.safari_check.trailer_label)
+      ? ' + Trailer <b>' + esc(data.safari_check.trailer_label) + '</b>' : '';
     var html = '<h1>' + (isVeh
-        ? 'Vehicle Inspection — <b>' + esc(data.target_label) + '</b>'
+        ? 'Vehicle Inspection — <b>' + esc(data.target_label) + '</b>' + trailerSuffix
         : isArea
         ? esc(data.target_label) + ' Inspection'
         : 'Guest Room Inspection') + '</h1>' +
@@ -1031,7 +1035,7 @@
         s.items.forEach(function (item) {
           if (item.kind === "reading") {
             var v = c.querySelector('[data-value="' + item.id + '"]').value;
-            if (v) results.push({ item_id: item.id, value: Number(v), label: shortLabel(item.text) });
+            if (v) results.push({ item_id: item.id, value: Number(v), label: shortLabel(item.text), target: item.target });
           } else if (item.kind === "graded_reading") {
             var gv = c.querySelector('[data-value="' + item.id + '"]').value;
             // Condition only counts once its own tickbox is open — same
@@ -1060,6 +1064,7 @@
                 failed: isPoor,
                 action_if_failed: isPoor ? (gnote || "Poor condition") : null,
                 fault_type_id: null,
+                target: item.target,
               });
             }
           } else {
@@ -1082,6 +1087,7 @@
                 label: shortLabel(item.text), fault_type_label: faultLabel,
                 photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
                 force_new: !!forceNewItemIds[item.id],
+                target: item.target,
               });
             }
           }
@@ -1185,6 +1191,14 @@
         var btn = document.getElementById("confirmBtn");
         btn.disabled = true;
         btn.textContent = "Submitting…";
+        // A trailer attached to this safari check (tool-local D-124)
+        // answers on the SAME screen, tagged item by item — split back
+        // into two arrays here, since the server records them as two
+        // separate inspections (the trailer's own fault/service history
+        // has to follow the trailer, not whichever vehicle towed it
+        // this time).
+        var vehicleResults = results.filter(function (x) { return x.target !== "trailer"; });
+        var trailerResults = results.filter(function (x) { return x.target === "trailer"; });
         fetch(FN, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1198,7 +1212,8 @@
             odometer: pendingOdometer,
             hours: pendingHours,
             tour_code: pendingTourCode,
-            template_id: data.template_id, results: results,
+            template_id: data.template_id, results: vehicleResults,
+            trailer_results: trailerResults,
             location_id: camp ? camp.id : null,
             signed_in_id: signedInAs ? signedInAs.id : null,
           }),
