@@ -84,6 +84,15 @@
   <div class="whobar" id="whoSignedIn">
     <span>👤 <b id="whoName"></b></span>
     <span class="whobar-btns">
+      <!-- Mark, 2026-10-03: "when in the Group Summary Page - if you
+           enter this and then go into reports, there is no button that
+           takes you back to the All Camps page." Same pattern as
+           base-rollup.html's own "← Maintenance Dashboard" button —
+           shown whenever there's actually more than one camp to roll
+           up, not only when arriving from there specifically, since
+           Reports is reachable from a single lodge's own nav too and
+           either way leads somewhere real. -->
+      <button id="allCampsBtn" hidden class="secondary" onclick="location.href='./base-rollup.html'">← All Camps</button>
       <button id="changeCampBtn" hidden class="secondary" onclick="location.href='./base-dashboard.html'">Change camp</button>
       <button class="secondary" onclick="signOut()">Sign out</button>
     </span>
@@ -132,6 +141,7 @@
   };
   document.getElementById("whoName").textContent = bwWho(me);
   if (camp && me.locations && me.locations.length > 1) {
+    document.getElementById("allCampsBtn").hidden = false;
     document.getElementById("changeCampBtn").hidden = false;
   }
   var CAMP_PARAM = "&person_id=" + encodeURIComponent(me.id) + (shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "");
