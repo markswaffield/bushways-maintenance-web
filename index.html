@@ -154,6 +154,8 @@
     <div class="title">Choose a tool</div>
     <button onclick="pickTool('maintenance')">Maintenance</button>
     <button onclick="pickTool('day-sheet')">Day Sheet</button>
+    <!-- safari-ops (root D-029): safari operations in Maun and administrators only. -->
+    <button id="safariBoardBtn" onclick="pickTool('safari-board')" hidden>Safari Board</button>
     <div id="campPicker" hidden>
       <label id="campPickerLabel">Camp</label>
       <select id="campPickerSel"></select>
@@ -208,12 +210,19 @@
     document.getElementById("loadingMsg").hidden = true;
     document.getElementById("toolBox").hidden = false;
     window._meForPicker = me;
+    document.getElementById("safariBoardBtn").hidden = !(me.is_administrator ||
+      (me.locations || []).some(function (l) { return l.name === "Bush Ways Safaris"; }));
   }
 
   var multiCamp = null; // set when pickTool needs the camp dropdown
   window.pickTool = function (tool) {
     var me = window._meForPicker;
     var multi = me.locations && me.locations.length > 1;
+    if (tool === "safari-board") {
+      // One board for the whole safari operation: no camp to choose.
+      location.href = "./safari-board.html";
+      return;
+    }
     if (tool === "maintenance") {
       // Unchanged — Maintenance's own existing A/B split (root D-053/
       // D-054) still decides Roll Up vs a specific camp from here.

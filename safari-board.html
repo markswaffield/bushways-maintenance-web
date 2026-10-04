@@ -1,0 +1,360 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Safari Board</title>
+<!--
+  The Safari Board — tools/safari-ops/. Replaces the Tour Master workbook.
+
+  Laid out like the Tour Master on purpose (Mark, 2026-10-04): days down
+  the side, the vehicle slots across the top, two columns per slot so one
+  safari can end the day the next one starts. A laptop screen, like the
+  Day Sheet: seeing every vehicle at once is the point.
+
+  Read-only in this first step. Departures come from ResRequest through the
+  safari-board Edge Function and are placed in slots by its first-free rule
+  (tool-local D-002). Moving them, crew, equipment and campsites come next.
+
+  Columns are SLOTS, not vehicles (D-006). Departures with no guests yet sit
+  in the "Open" columns at the right, as they do on the Tour Master (D-007).
+  The pre night is drawn lighter and never blocks a slot.
+
+  Sign-in is the group's own (root D-025/D-026): the same bw_signin the
+  picker writes.
+-->
+<style>
+  :root{
+    --bg:#F7F5F0; --ink:#232019; --muted:#6B6455; --line:#C9C2AC; --card:#fff; --head:#122D31;
+    --adv-bg:#DCEBDD; --adv-bd:#4F7A55;
+    --pre-bg:#F5E6C8; --pre-bd:#A07A2C;
+    --acc-bg:#DCE7F2; --acc-bd:#3F6A93;
+    --tm-bg:#E9E1F1;  --tm-bd:#6D558C;
+    --open-bg:#F1EFE8; --open-bd:#9C9480;
+    --clash:#B3261E; --today:#FFF4CC; --weekend:#EFEBE1;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{font:13px/1.3 -apple-system,system-ui,sans-serif;margin:0;padding:14px 14px 0;background:var(--bg);color:var(--ink);
+       height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  h1{font-size:18px;margin:0 0 3px}
+  .sub{color:var(--muted);font-size:12.5px;margin:0}
+  button{padding:7px 13px;font-size:13px;font-family:inherit;border:1px solid #43594A;background:#43594A;color:#fff;border-radius:6px;cursor:pointer}
+  button.ghost{background:#fff;color:#43594A}
+  button:disabled{opacity:.4;cursor:default}
+  input,select{padding:6px;font-size:13px;border:1px solid var(--line);border-radius:5px;background:#fff;font-family:inherit}
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;
+    border:1px solid var(--line);border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;margin:10px 0 0}
+  .whobar b{color:var(--head)}
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .whobar-btns button{padding:6px 11px;font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .whobar-btns button:last-child{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620;font-weight:600}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:10px 0 0;padding:10px 12px;
+           border:1px solid var(--line);border-radius:8px;background:#fff}
+  .toolbar label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
+  .status{font-size:12.5px;color:var(--muted);margin-left:auto;align-self:center}
+  .status.err{color:var(--clash)}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin:8px 0 0}
+  .legend span{display:inline-flex;align-items:center;gap:4px}
+  .legend i{display:inline-block;width:14px;height:11px;border-radius:2px;border:1.5px solid}
+
+  /* The one scroller on the page; header row and date column stick. */
+  #wrap{flex:1;min-height:0;overflow:auto;margin:10px 0 14px;border:1px solid var(--line);border-radius:8px;background:#fff;position:relative}
+  #grid{display:grid;position:relative}
+  .hd{position:sticky;top:0;z-index:5;background:var(--head);color:#fff;font-weight:600;font-size:12px;
+      padding:6px 4px;text-align:center;border-right:1px solid #2E4B4F;white-space:nowrap;height:30px}
+  .hd.corner{left:0;z-index:7}
+  .hd.open{background:#5B5344}
+  .day{position:sticky;left:0;z-index:4;background:#fff;border-bottom:1px solid #ECE8DE;border-right:1px solid var(--line);
+       padding:0 6px;font-size:11.5px;white-space:nowrap;display:flex;align-items:center;gap:4px}
+  .day.we{background:var(--weekend)}
+  .day.today{background:var(--today);font-weight:700}
+  .day.m1{border-top:2px solid var(--head)}
+  .cell{border-bottom:1px solid #F0ECE3;border-right:1px solid #F0ECE3}
+  .cell.slotend{border-right:1px solid var(--line)}
+  .cell.today{background:#FFFBEA}
+  .cell.m1{border-top:2px solid var(--head)}
+
+  .blk{z-index:2;margin:1px 2px;border:1.5px solid;border-radius:5px;padding:3px 5px;overflow:hidden;cursor:pointer;
+       font-size:11.5px;line-height:1.25;display:flex;flex-direction:column;gap:1px;text-align:left;color:var(--ink);font-family:inherit}
+  .blk:hover{filter:brightness(.97);box-shadow:0 1px 5px rgba(0,0,0,.15)}
+  .blk b{font-size:12px}
+  .blk .t{color:#4A4436}
+  .blk .s{font-weight:700}
+  .blk .s.full{color:#2F6B45}
+  .blk .s.over{color:var(--clash)}
+  .blk .end{margin-top:auto;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .blk.adv{background:var(--adv-bg);border-color:var(--adv-bd)}
+  .blk.pre{background:var(--pre-bg);border-color:var(--pre-bd)}
+  .blk.acc{background:var(--acc-bg);border-color:var(--acc-bd)}
+  .blk.tm{background:var(--tm-bg);border-color:var(--tm-bd)}
+  .blk.open{background:var(--open-bg);border-color:var(--open-bd);border-style:dashed}
+  .blk.prov{border-style:dashed}
+  .blk.cxl{background:#EEE;border-color:#999;color:#777;text-decoration:line-through}
+  .blk.est{border-bottom-style:dotted}
+  .blk.clash{outline:2.5px solid var(--clash);outline-offset:-1px}
+  /* The pre night: the vehicle is being prepared, perhaps a meet and greet or
+     shopping. Lighter, and never a block that holds the slot (Mark, 2026-10-04). */
+  .blk.night{opacity:.45;border-style:dotted;z-index:1;font-size:10.5px;justify-content:center}
+
+  #panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:#fff;border-left:1px solid var(--line);
+         box-shadow:-4px 0 18px rgba(0,0,0,.12);z-index:20;padding:16px;overflow:auto;display:none}
+  #panel.on{display:block}
+  #panel h2{font-size:17px;margin:0 0 2px}
+  #panel .meta{color:var(--muted);margin:0 0 10px}
+  #panel table{border-collapse:collapse;width:100%;font-size:12.5px;margin:6px 0 10px}
+  #panel th,#panel td{text-align:left;padding:4px 6px;border-bottom:1px solid #ECE8DE;vertical-align:top}
+  #panel th{font-size:11px;text-transform:uppercase;color:#5B5344}
+  .bk{border:1px solid #ECE8DE;border-radius:6px;padding:8px 10px;margin:0 0 8px}
+  .bk .h{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+  .bk .n{white-space:pre-wrap;font-size:12px;margin:5px 0 0;color:#3B362B}
+  .bk .n em{display:block;font-style:normal;font-size:10.5px;text-transform:uppercase;color:#8A8270;letter-spacing:.04em}
+  .tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:9px;background:#EEE;color:#555;font-weight:600}
+  .tag.c{background:#DFF0E3;color:#2F6B45}.tag.p{background:#FFF0CC;color:#8C6A2F}.tag.x{background:#F6DADA;color:#8A2A23}
+  .loading{color:var(--muted);padding:20px}
+  @media (max-width:700px){ body{padding:10px 10px 0} .status{margin-left:0;width:100%} }
+</style>
+</head><body>
+
+<h1>Safari Board</h1>
+<p class="sub">Every safari departure, on its vehicle slot, read from ResRequest. Laid out like the Tour Master.</p>
+<div class="whobar">
+  <span>👤 <b id="whoami"></b></span>
+  <span class="whobar-btns">
+    <button onclick="location.href='./'">← Change tool</button>
+    <button id="signOut">Sign out</button>
+  </span>
+</div>
+
+<div class="toolbar">
+  <div><label for="from">From</label><input type="date" id="from"></div>
+  <div><label for="weeks">Show</label>
+    <select id="weeks"><option value="4">4 weeks</option><option value="8" selected>8 weeks</option><option value="13">3 months</option><option value="26">6 months</option></select></div>
+  <button class="ghost" id="earlier">◀ Earlier</button>
+  <button class="ghost" id="today">Today</button>
+  <button class="ghost" id="later">Later ▶</button>
+  <button id="sync">Update from ResRequest</button>
+  <span class="status" id="status"></span>
+</div>
+<div class="legend">
+  <span><i style="background:var(--adv-bg);border-color:var(--adv-bd)"></i>Adventure</span>
+  <span><i style="background:var(--pre-bg);border-color:var(--pre-bd)"></i>Premium</span>
+  <span><i style="background:var(--acc-bg);border-color:var(--acc-bd)"></i>Accommodated</span>
+  <span><i style="background:var(--tm-bg);border-color:var(--tm-bd)"></i>Tailor Made</span>
+  <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>Open, no guests yet</span>
+  <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night</span>
+  <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
+</div>
+
+<div id="wrap"><div id="grid"><p class="loading">Loading…</p></div></div>
+<div id="panel"></div>
+
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-board";
+var ROW = 24, DAYW = 92, LANEW = 96;
+
+var me = null;
+try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+if (!me) { location.href = "./"; }
+// Safari operations are run from Maun: administrators, and anyone at the
+// Bush Ways Safaris location.
+var allowed = me && (me.is_administrator || (me.locations || []).some(function (l) { return l.name === "Bush Ways Safaris"; }));
+document.getElementById("whoami").textContent = me ? me.name : "";
+document.getElementById("signOut").onclick = function () {
+  sessionStorage.removeItem("bw_signin"); sessionStorage.removeItem("bw_camp"); location.href = "./";
+};
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function el(id){return document.getElementById(id);}
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function parse(s){var p=s.split("-");return new Date(+p[0],p[1]-1,+p[2]);}
+function add(s,n){var d=parse(s);d.setDate(d.getDate()+n);return iso(d);}
+function diff(a,b){return Math.round((parse(b)-parse(a))/86400000);}
+var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function nice(s){var d=parse(s);return DOW[d.getDay()]+" "+String(d.getDate()).padStart(2,"0")+" "+MON[d.getMonth()];}
+function setStatus(t,err){var s=el("status");s.textContent=t;s.className="status"+(err?" err":"");}
+
+var startFrom = (function(){ try { return sessionStorage.getItem("sb_from"); } catch (e) { return null; } })() || add(iso(new Date()), -7);
+el("from").value = startFrom;
+function range(){ var f = el("from").value; return { from: f, to: add(f, +el("weeks").value * 7 - 1) }; }
+function shift(n){ el("from").value = add(el("from").value, n); load(); }
+el("from").onchange = load; el("weeks").onchange = load;
+el("earlier").onclick = function(){ shift(-(+el("weeks").value * 7) / 2); };
+el("later").onclick = function(){ shift((+el("weeks").value * 7) / 2); };
+el("today").onclick = function(){ el("from").value = add(iso(new Date()), -7); load(); };
+
+var data = null;
+function load(){
+  if (!allowed) {
+    el("grid").innerHTML = '<p class="loading">The Safari Board is for safari operations and administrators. <button onclick="location.href=\'./\'">← Back to tools</button></p>';
+    return;
+  }
+  try { sessionStorage.setItem("sb_from", el("from").value); } catch (e) {}
+  var r = range();
+  setStatus("Loading…");
+  fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to).then(function(x){return x.json();}).then(function(d){
+    if (d.error) throw new Error(d.error);
+    data = d; draw(r);
+    setStatus(d.last_synced ? "Last read from ResRequest " + new Date(d.last_synced).toLocaleString() : "Not yet read from ResRequest");
+  }).catch(function(e){ setStatus("Could not load: " + e.message, true); });
+}
+
+function family(p){
+  if (/^Adventure/.test(p)) return "adv";
+  if (p === "Premium") return "pre";
+  if (p === "Accommodated") return "acc";
+  return "tm";
+}
+function label(d){
+  if (d.code) return d.code;
+  var b = d.bookings.find(function(b){ return b.rr_status === "30" || b.rr_status === "20"; }) || d.bookings[0];
+  return b ? b.name : d.type;
+}
+
+function draw(r){
+  var nDays = diff(r.from, r.to) + 1;
+  var slots = data.slots;
+  var deps = data.departures;
+
+  // Open columns: departures with no slot, packed into as few lanes as fit.
+  var open = deps.filter(function(d){ return !d.slot_id && d.status !== "cancelled"; })
+                 .sort(function(a,b){ return a.start_date < b.start_date ? -1 : 1; });
+  var openLanes = [];
+  open.forEach(function(d){
+    for (var i = 0; i < openLanes.length; i++) if (openLanes[i] < add(d.start_date, -1)) break;
+    openLanes[i] = d.end_date; d._openLane = i;
+  });
+  var nOpen = Math.max(openLanes.length, 1);
+
+  var cols = DAYW + "px repeat(" + (slots.length * 2 + nOpen) + "," + LANEW + "px)";
+  var g = el("grid");
+  g.style.gridTemplateColumns = cols;
+  g.style.gridTemplateRows = "30px repeat(" + nDays + "," + ROW + "px)";
+  var h = [];
+
+  h.push('<div class="hd corner" style="grid-row:1;grid-column:1">' + MON[parse(r.from).getMonth()] + " " + parse(r.from).getFullYear() + '</div>');
+  slots.forEach(function(s, i){
+    h.push('<div class="hd" style="grid-row:1;grid-column:' + (2 + i * 2) + ' / span 2">' + esc(s.label) + '</div>');
+  });
+  h.push('<div class="hd open" style="grid-row:1;grid-column:' + (2 + slots.length * 2) + ' / span ' + nOpen + '">Open — no guests yet</div>');
+
+  var today = iso(new Date());
+  for (var k = 0; k < nDays; k++) {
+    var day = add(r.from, k), dt = parse(day), row = k + 2;
+    var cls = (dt.getDay() === 0 || dt.getDay() === 6 ? " we" : "") + (day === today ? " today" : "") + (dt.getDate() === 1 ? " m1" : "");
+    h.push('<div class="day' + cls + '" style="grid-row:' + row + ';grid-column:1">' + nice(day) + '</div>');
+    for (var c = 0; c < slots.length * 2 + nOpen; c++) {
+      var cc = "cell" + (c % 2 === 1 && c < slots.length * 2 ? " slotend" : "") + (day === today ? " today" : "") + (dt.getDate() === 1 ? " m1" : "");
+      h.push('<div class="' + cc + '" style="grid-row:' + row + ';grid-column:' + (c + 2) + '"></div>');
+    }
+  }
+
+  // Clashes: two departures in the same slot and column on the same night.
+  var slotIdx = {}; slots.forEach(function(s, i){ slotIdx[s.id] = i; });
+  deps.forEach(function(a){
+    a._clash = a.status !== "cancelled" && a.slot_id && deps.some(function(b){
+      return b !== a && b.status !== "cancelled" && b.slot_id === a.slot_id && b.lane === a.lane
+        && a.start_date < b.end_date && b.start_date < a.end_date;
+    });
+  });
+
+  deps.forEach(function(d){
+    var col;
+    if (d.slot_id && slotIdx[d.slot_id] != null) col = 2 + slotIdx[d.slot_id] * 2 + ((d.lane || 1) - 1);
+    else if (d._openLane != null) col = 2 + slots.length * 2 + d._openLane;
+    else return;
+    var fam = d.has_guests ? family(d.product) : "open";
+
+    // Pre night, the day before day 1.
+    var pre = add(d.start_date, -1);
+    if (pre >= r.from && pre <= r.to) {
+      h.push('<div class="blk night ' + fam + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">Pre night</div>');
+    }
+    var s = d.start_date < r.from ? r.from : d.start_date;
+    var e = d.end_date > r.to ? r.to : d.end_date;
+    if (s > e) return;
+    var span = diff(s, e) + 1;
+    var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
+    var cls = "blk " + fam + (d.status === "provisional" ? " prov" : "") + (d.status === "cancelled" ? " cxl" : "")
+            + (d.end_date_estimated ? " est" : "") + (d._clash || (d.max_seats && d.seats > d.max_seats) ? " clash" : "");
+    var inner = '<b>' + esc(label(d)) + '</b>'
+      + (d.start_date < r.from ? '<span class="t">↑ from ' + nice(d.start_date) + '</span>' : '')
+      + '<span class="t">' + esc(d.type) + '</span>'
+      + '<span class="s' + seatsCls + '">' + d.seats + (d.max_seats ? "/" + d.max_seats : "") + ' seats</span>'
+      + (d.status === "provisional" ? '<span class="t">Provisional</span>' : '')
+      + (d.end_date <= r.to ? '<span class="end">' + (d.end_date_estimated ? "End estimated" : "End") + '</span>' : '');
+    h.push('<button class="' + cls + '" data-id="' + d.id + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '">' + inner + '</button>');
+  });
+
+  g.innerHTML = h.join("");
+  g.querySelectorAll(".blk[data-id]").forEach(function(b){ b.onclick = function(){ openPanel(b.getAttribute("data-id")); }; });
+}
+
+var STATUS = { "30": ["Confirmed", "c"], "20": ["Provisional", "p"], "90": ["Cancelled", "x"], "0": ["Not live", ""] };
+function openPanel(id){
+  var d = data.departures.find(function(x){ return x.id === id; });
+  if (!d) return;
+  var slot = data.slots.find(function(s){ return s.id === d.slot_id; });
+  var tailor = d.product === "Tailor Made";
+  var live = d.bookings.filter(function(b){ return !b.is_master && (b.rr_status === "30" || b.rr_status === "20"); });
+  var other = d.bookings.filter(function(b){ return !b.is_master && live.indexOf(b) < 0; });
+  var master = d.bookings.find(function(b){ return b.is_master; });
+
+  function card(b){
+    var st = STATUS[b.rr_status] || [b.rr_status, ""];
+    var seats = tailor ? (b.pax != null ? b.pax + " guests" : "") : (b.units != null ? b.units + (b.units === 1 ? " seat" : " seats") : "");
+    var join = b.arrive_date !== d.start_date || b.depart_date !== d.end_date
+      ? '<div class="t">' + nice(b.arrive_date) + " → " + nice(b.depart_date) + '</div>' : "";
+    var notes = [["Guests", b.rr_guest], ["Note", b.rr_note], ["Memo", b.rr_memo]]
+      .filter(function(n){ return n[1]; })
+      .map(function(n){ return '<div class="n"><em>' + n[0] + '</em>' + esc(n[1].trim()) + '</div>'; }).join("");
+    return '<div class="bk"><div class="h"><span>' + esc(b.name) + ' <span style="color:#8A8270;font-weight:400">' + esc(b.reservation_id) + '</span></span>'
+      + '<span>' + esc(seats) + ' <span class="tag ' + st[1] + '">' + st[0] + '</span></span></div>' + join + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
+  }
+
+  var p = el("panel");
+  p.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">'
+    + '<div><h2>' + esc(label(d)) + '</h2><p class="meta">' + esc(d.product) + " · " + esc(d.type) + '</p></div>'
+    + '<button class="ghost" id="closePanel">Close ✕</button></div>'
+    + '<table><tr><th>Dates</th><td>Pre night ' + nice(add(d.start_date, -1)) + '<br>' + nice(d.start_date) + " → " + nice(d.end_date) + " (" + diff(d.start_date, d.end_date) + " nights)"
+    + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : '') + '</td></tr>'
+    + '<tr><th>Slot</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? "" : " · placed automatically") : (d.has_guests ? '<span class="tag x">No slot free</span>' : "Open — no guests yet")) + '</td></tr>'
+    + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + '</td></tr>'
+    + '<tr><th>Status</th><td>' + esc(d.status) + '</td></tr></table>'
+    + (master ? '<h3 style="font-size:13px;margin:12px 0 6px">Bush Ways master booking</h3>' + card(master) : '')
+    + '<h3 style="font-size:13px;margin:12px 0 6px">Guest bookings (' + live.length + ')</h3>'
+    + (live.map(card).join("") || '<p class="meta">None yet.</p>')
+    + (other.length ? '<details style="margin-top:10px"><summary style="cursor:pointer;color:#6B6455">Not live in ResRequest (' + other.length + ')</summary>' + other.map(card).join("") + '</details>' : '');
+  p.className = "on";
+  el("closePanel").onclick = function(){ p.className = ""; };
+}
+document.addEventListener("keydown", function(e){ if (e.key === "Escape") el("panel").className = ""; });
+
+// Update from ResRequest: one month per call, so each stays well inside the
+// function's time limit. Only changed bookings are read again, so a repeat
+// is quick.
+el("sync").onclick = function(){
+  var r = range(), btn = el("sync");
+  var months = [], m = r.from.slice(0, 7);
+  while (m <= r.to.slice(0, 7)) {
+    months.push(m);
+    var y = +m.slice(0, 4), mo = +m.slice(5, 7) + 1;
+    if (mo > 12) { y++; mo = 1; }
+    m = y + "-" + String(mo).padStart(2, "0");
+  }
+  btn.disabled = true;
+  var i = 0, placed = 0;
+  (function next(){
+    if (i >= months.length) { btn.disabled = false; setStatus("Updated. " + placed + " new departure" + (placed === 1 ? "" : "s") + " placed."); load(); return; }
+    var mm = months[i++];
+    setStatus("Reading " + MON[+mm.slice(5, 7) - 1] + " " + mm.slice(0, 4) + " from ResRequest… (" + i + " of " + months.length + ")");
+    fetch(FN + "?action=sync&month=" + mm, { method: "POST" }).then(function(x){ return x.json(); }).then(function(res){
+      if (res.error) throw new Error(res.error);
+      placed += res.placed || 0; next();
+    }).catch(function(e){ btn.disabled = false; setStatus("ResRequest update stopped at " + mm + ": " + e.message, true); });
+  })();
+};
+
+load();
+</script>
+</body></html>
