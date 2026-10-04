@@ -121,8 +121,11 @@
   .nights .area.need{color:#8C4A12;font-style:italic}
   .saved{color:#2F6B45;font-size:12px}
   /* Crew names on the line above the pre night, as the Tour Master writes them. */
-  .crewln{z-index:3;font-size:10.5px;color:#43594A;font-weight:600;padding:0 6px;display:flex;align-items:center;
+  .crewln{z-index:3;font-size:11px;color:#232019;font-weight:600;padding:0 6px;display:flex;align-items:center;
           white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  /* The code line at the top of a stack is the safari's own, so full colour;
+     only the pre night itself is drawn lighter. */
+  .blk.night.head{background-image:none;border-style:solid}
   .crewln.bad{color:var(--clash)}
   .alloc{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 6px}
   .alloc td{padding:3px 3px;border-bottom:1px solid #F0ECE3;vertical-align:middle}
@@ -130,7 +133,12 @@
   .alloc .x{width:28px}
   .alloc .x button{padding:3px 8px;background:#fff;color:#8A2A23;border-color:#D9B3AF}
   .alloc .dates input{width:118px}
-  .vgrid{display:grid;grid-template-columns:120px 1fr;gap:4px 6px}
+  .vgrid{display:grid;grid-template-columns:150px 1fr;gap:4px 6px}
+  .grp{margin:6px 0 2px}
+  .grp .gt{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#5B5344;font-weight:700;margin:6px 0 0}
+  .grp button.add{padding:3px 9px;font-size:12px}
+  .chk{font-size:11.5px;color:#6B6455;margin:3px 0 0}
+  .chk.ok{color:#2F6B45;font-weight:600}
   .clashmsg{color:var(--clash);font-size:11.5px;font-weight:600}
   details.when summary{cursor:pointer;color:#6B6455;font-size:11.5px}
   /* The guest mix at the top of the panel, one tile per safari type. */
@@ -325,24 +333,49 @@ function draw(r){
       + (d.placed_by_person ? " · placed by hand" : "") + (allowed ? " · drag to move" : ""));
     var drag = allowed ? ' draggable="true"' : "";
 
-    // The pre night carries the code and seats, as the Tour Master's lines
-    // above day 1 do. Lighter, and never holds the slot.
+    // Above day 1, as on the Tour Master: the code and seats, then the crew
+    // in Mark's format, then the pre night (lighter, never holds the slot).
+    //   BWS2628 9/9
+    //   G - DT - B282BRG
+    //   C - KD - B836AGZ
+    //   CH - Shepy, Alec
+    //   TR - An Other
     var pre = add(d.start_date, -1);
-    // Crew names on the line above that, the Tour Master's top line, when
-    // nothing else in this column is using that day.
-    var crewDay = add(d.start_date, -2);
-    if (d.slot_id && d.crew.length && crewDay >= r.from && crewDay <= r.to && !deps.some(function(o){
-      return o !== d && o.slot_id === d.slot_id && (o.lane || 1) === (d.lane || 1)
-        && add(o.start_date, -1) <= crewDay && crewDay <= o.end_date;
-    })) {
-      var names = d.crew.map(function(c){ return (c.name || "").split(/\s+/)[0]; }).filter(Boolean).join(", ");
-      h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + esc(d.crew.map(function(c){ return ROLE[c.role] + ": " + c.name; }).join(" · ")) + '" style="grid-row:'
-        + (diff(r.from, crewDay) + 2) + ';grid-column:' + col + '">' + esc(names) + '</div>');
-    }
-    if (pre >= r.from && pre <= r.to) {
-      h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">'
-        + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
-    }
+    var first = function(n){ return (n || "").split(/\s+/)[0]; };
+    var lines = [];
+    d.vehicles.filter(function(v){ return v.role !== "backup"; }).forEach(function(v){
+      if (v.driver || v.registration) lines.push("G - " + [first(v.driver), v.registration].filter(Boolean).join(" - "));
+    });
+    d.vehicles.filter(function(v){ return v.role === "backup"; }).forEach(function(v){
+      if (v.driver || v.registration) lines.push("C - " + [first(v.driver), v.registration].filter(Boolean).join(" - "));
+    });
+    [["camp_hand", "CH"], ["translator", "TR"], ["trainee_guide", "TG"], ["guide", "G"], ["chef", "C"]].forEach(function(k){
+      var names = d.crew.filter(function(c){ return c.role === k[0]; }).map(function(c){ return k[0] === "translator" ? c.name : first(c.name); });
+      if (names.length) lines.push(k[1] + " - " + names.join(", "));
+    });
+    var stack = lines.length
+      ? [{ code: true }].concat(lines.map(function(t){ return { text: t }; })).concat([{ pre: true }])
+      : [{ code: true, pre: true }];
+    // A line is drawn only where nothing else in this column is on that day.
+    var busy = function(day){
+      return deps.some(function(o){
+        return o !== d && o.slot_id && o.slot_id === d.slot_id && (o.lane || 1) === (d.lane || 1)
+          && add(o.start_date, -1) <= day && day <= o.end_date;
+      });
+    };
+    stack.forEach(function(ln, i){
+      var day = add(d.start_date, -(stack.length - i));
+      if (day < r.from || day > r.to || (d.slot_id && i < stack.length - 1 && busy(day))) return;
+      var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
+      if (ln.code) {
+        h.push('<button class="blk night ' + fam + (ln.pre ? "" : " head") + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + row + '">'
+          + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
+      } else if (ln.pre) {
+        h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + row + '"><span class="pn">pre night</span></button>');
+      } else {
+        h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + title + '" style="' + row + '">' + esc(ln.text) + '</div>');
+      }
+    });
     var s = d.start_date < r.from ? r.from : d.start_date;
     var e = d.end_date > r.to ? r.to : d.end_date;
     if (s > e) return;
@@ -449,27 +482,30 @@ function reload(openId){
 // real ones at Bush Ways Safaris, owned by maintenance. Loaded once.
 // ---------------------------------------------------------------------
 var ROLE = { guide: "Guide", trainee_guide: "Trainee guide", chef: "Chef", camp_hand: "Camp hand", translator: "Translator" };
-var VROLE = { game_drive: "Game drive", backup: "Back-up", extra: "Extra" };
 var opts = null;
 function loadOptions(){
   if (opts) return Promise.resolve(opts);
   return fetch(FN + "?action=options").then(function(x){ return x.json(); }).then(function(o){ opts = o; return o; });
 }
-function peopleFor(role){
-  // Guides first for guiding and driving, chefs and camp hands first for the
-  // camp; everyone else at Bush Ways Safaris after, since people cover.
-  var first = (role === "chef" || role === "camp_hand") ? "Chefs/Camp Hand" : "Guides";
-  var a = opts.people.filter(function(p){ return p.department === first; });
-  var b = opts.people.filter(function(p){ return p.department !== first; });
+// Guides first for a guide's line, chefs and camp hands first for theirs;
+// everyone else at Bush Ways Safaris after, since people cover.
+function peopleFor(dept){
+  var a = opts.people.filter(function(p){ return p.department === dept; });
+  var b = opts.people.filter(function(p){ return p.department !== dept; });
   return a.concat(b);
 }
-function sel(list, value, label, blank){
-  return '<select>' + '<option value="">' + (blank || "—") + '</option>' + list.map(function(x){
+// A guide drives a game-drive vehicle (GD), a chef a back-up (BU), by the
+// type at the end of the vehicle's description in maintenance. The one
+// already chosen always stays in the list.
+function vehiclesOf(kind, current){
+  return opts.vehicles.filter(function(v){
+    return v.id === current || new RegExp("\\b" + kind + "\\s*$", "i").test(v.description || "");
+  });
+}
+function sel(list, value, label, blank, cls){
+  return '<select' + (cls ? ' class="' + cls + '"' : '') + '><option value="">' + (blank || "—") + '</option>' + list.map(function(x){
     return '<option value="' + x.id + '"' + (x.id === value ? " selected" : "") + '>' + esc(label(x)) + '</option>';
   }).join("") + '</select>';
-}
-function roleSel(map, value){
-  return '<select class="role">' + Object.keys(map).map(function(k){ return '<option value="' + k + '"' + (k === value ? " selected" : "") + '>' + map[k] + '</option>'; }).join("") + '</select>';
 }
 function dates(x){
   var set = x.from_date || x.to_date;
@@ -477,79 +513,94 @@ function dates(x){
     + '<span class="dates"><input type="date" class="from" value="' + (x.from_date || "") + '"> to <input type="date" class="to" value="' + (x.to_date || "") + '"></span></details>';
 }
 function clashTxt(list, what){ return list ? '<div class="clashmsg">' + what + ' also on ' + esc(list.join(", ")) + ' at the same time</div>' : ""; }
+function checkTxt(v){
+  if (!v.check) return "";
+  var c = v.check;
+  if (c.raised_at) return '<div class="chk ok">Safari Vehicle Check open in Maintenance' + (c.stale ? '</div><div class="clashmsg">Changed since it opened: the check still shows the old vehicle, driver or trailer. Change it in Maintenance.' : '') + '</div>';
+  if (c.error) return '<div class="clashmsg">Safari Vehicle Check not opened yet: ' + esc(c.error) + ' Tried again each morning.</div>';
+  return '<div class="chk">Safari Vehicle Check opens ' + nice(c.due) + '</div>';
+}
 
-// Two lines per vehicle: what it is and which one, then who drives it and
-// what it pulls. One line cut every box short.
-function vehicleRow(v){
-  return '<tr class="vrow"><td><div class="vgrid">'
-    + '<div>' + roleSel(VROLE, v.role) + '</div>'
-    + '<div>' + sel(opts.vehicles, v.vehicle_id, function(x){ return x.registration + (x.description ? " · " + x.description : ""); }, "Vehicle") + clashTxt(v.clash, "Vehicle") + '</div>'
-    + '<div>' + sel(peopleFor("guide"), v.driver_id, function(x){ return x.name; }, "Driver / guide") + clashTxt(v.driver_clash, "Driver") + '</div>'
-    + '<div>' + sel(opts.trailers, v.trailer_id, function(x){ return x.registration; }, "No trailer") + clashTxt(v.trailer_clash, "Trailer") + '</div>'
-    + '</div>' + dates(v) + '</td><td class="x"><button title="Remove">✕</button></td></tr>';
+// A guide or chef with their vehicle: one row of departure_vehicles
+// (game_drive for a guide, backup for a chef), the shape of maintenance's
+// Safari Vehicle Check. Each opens its own check (D-011).
+function driverRow(v){
+  var guide = v.role === "game_drive";
+  return '<tr class="vrow" data-role="' + v.role + '"' + (v.id ? ' data-id="' + v.id + '"' : '') + '><td><div class="vgrid">'
+    + '<div>' + sel(peopleFor(guide ? "Guides" : "Chefs/Camp Hand"), v.driver_id, function(x){ return x.name; }, guide ? "Guide" : "Chef", "who") + clashTxt(v.driver_clash, "") + '</div>'
+    + '<div>' + sel(vehiclesOf(guide ? "GD" : "BU", v.vehicle_id), v.vehicle_id, function(x){ return x.registration + " · " + (x.description || ""); }, guide ? "GD vehicle" : "BU vehicle", "veh") + clashTxt(v.clash, "Vehicle") + '</div>'
+    + '<div></div><div>' + sel(opts.trailers, v.trailer_id, function(x){ return x.registration; }, "No trailer", "trl") + clashTxt(v.trailer_clash, "Trailer") + '</div>'
+    + '</div>' + checkTxt(v) + dates(v) + '</td><td class="x"><button title="Remove">✕</button></td></tr>';
 }
 function crewRow(c){
-  var who = c.role === "translator" && !c.person_id
-    ? '<input class="pname" placeholder="Name" value="' + esc(c.person_name || "") + '">'
-    : sel(peopleFor(c.role), c.person_id, function(x){ return x.name + (x.department ? " · " + x.department : ""); }, "Who");
-  return '<tr class="crow"><td style="width:120px">' + roleSel(ROLE, c.role) + '</td><td>' + who + clashTxt(c.clash, "")
-    + dates(c) + '</td><td class="x"><button title="Remove">✕</button></td></tr>';
+  var who = c.role === "translator"
+    ? '<input class="pname" placeholder="Translator\'s name" value="' + esc(c.name || c.person_name || "") + '">'
+    : sel(peopleFor(c.role === "trainee_guide" ? "Guides" : "Chefs/Camp Hand"), c.person_id, function(x){ return x.name; }, ROLE[c.role], "who");
+  return '<tr class="crow" data-role="' + c.role + '"><td>' + who + clashTxt(c.clash, "") + dates(c) + '</td><td class="x"><button title="Remove">✕</button></td></tr>';
 }
+var GROUPS = [
+  { key: "game_drive", title: "Guides", add: "+ Add guide", vehicle: true },
+  { key: "backup", title: "Chefs", add: "+ Add chef", vehicle: true },
+  { key: "camp_hand", title: "Camp hands", add: "+ Add camp hand" },
+  { key: "translator", title: "Translators", add: "+ Add translator" },
+  { key: "trainee_guide", title: "Trainee guides", add: "+ Add trainee guide" },
+];
 function crewSection(d){
-  if (!allowed && !d.crew.length && !d.vehicles.length) return "";
-  return '<h3 style="font-size:13px;margin:12px 0 4px">Vehicles</h3>'
-    + (d.two_vehicles ? '<p class="meta" style="margin:0 0 4px">Premium: a game-drive vehicle and a back-up, each with a driver. The back-up does not take a slot on the board.</p>' : '')
-    + '<table class="alloc" id="vtab"><tbody></tbody></table>'
-    + (allowed ? '<button class="ghost" id="vAdd">+ Add vehicle</button>' : '')
-    + '<h3 style="font-size:13px;margin:12px 0 4px">Crew</h3>'
-    + '<table class="alloc" id="ctab"><tbody></tbody></table>'
-    + (allowed ? '<button class="ghost" id="cAdd">+ Add crew</button>'
-      + '<div class="edit" style="margin-top:8px"><button id="crewSave">Save crew and vehicles</button> <span id="crewMsg"></span></div>' : '');
+  return '<h3 style="font-size:13px;margin:12px 0 2px">Crew and vehicles</h3>'
+    + (d.two_vehicles ? '<p class="meta" style="margin:0 0 4px">Premium: the guide\'s game-drive vehicle and the chef\'s back-up. The back-up does not take a slot on the board.</p>' : '')
+    + '<div id="crewBox"><p class="meta">Loading staff and vehicles…</p></div>'
+    + (allowed ? '<div class="edit" style="margin-top:8px"><button id="crewSave">Save crew and vehicles</button> <span id="crewMsg"></span></div>' : '');
 }
 function wireCrew(d){
-  if (!el("vtab")) return;
-  el("vtab").querySelector("tbody").innerHTML = '<tr><td class="meta">Loading staff and vehicles…</td></tr>';
+  if (!el("crewBox")) return;
   loadOptions().then(function(){
-    var vs = d.vehicles.length ? d.vehicles
-      : (d.two_vehicles ? [{ role: "game_drive" }, { role: "backup" }] : [{ role: "game_drive" }]);
-    var cs = d.crew.length ? d.crew : [{ role: "guide" }, { role: "chef" }, { role: "camp_hand" }];
-    el("vtab").querySelector("tbody").innerHTML = vs.map(vehicleRow).join("");
-    el("ctab").querySelector("tbody").innerHTML = cs.map(crewRow).join("");
+    // A chef or guide saved in the crew list before vehicles were attached
+    // to them is shown on their vehicle line, so nothing is lost.
+    var vs = d.vehicles.slice();
+    d.crew.filter(function(c){ return c.role === "guide" || c.role === "chef"; }).forEach(function(c){
+      var role = c.role === "guide" ? "game_drive" : "backup";
+      if (!vs.some(function(v){ return v.role === role && v.driver_id === c.person_id; })) vs.push({ role: role, driver_id: c.person_id });
+    });
+    var cs = d.crew.filter(function(c){ return c.role !== "guide" && c.role !== "chef"; });
+    var html = GROUPS.map(function(g){
+      var rows = g.vehicle ? vs.filter(function(v){ return v.role === g.key || (g.key === "game_drive" && v.role === "extra"); })
+                           : cs.filter(function(c){ return c.role === g.key; });
+      if (!rows.length && (g.key === "game_drive" || g.key === "backup" || g.key === "camp_hand")) rows = [{ role: g.key }];
+      return '<div class="grp"><div class="gt">' + g.title + '</div><table class="alloc" data-group="' + g.key + '"><tbody>'
+        + rows.map(g.vehicle ? driverRow : crewRow).join("") + '</tbody></table>'
+        + (allowed ? '<button class="ghost add" data-group="' + g.key + '">' + g.add + '</button>' : '') + '</div>';
+    }).join("");
+    el("crewBox").innerHTML = html;
     wireRows();
-  }).catch(function(e){ el("vtab").querySelector("tbody").innerHTML = '<tr><td class="err">Could not load staff: ' + esc(e.message) + '</td></tr>'; });
-
-  function wireRows(){
-    el("panel").querySelectorAll(".alloc .x button").forEach(function(b){ b.onclick = function(){ b.closest("tr").remove(); }; });
-    // A translator who is not on staff is typed by name.
-    el("ctab").querySelectorAll("tr.crow select.role").forEach(function(r){
-      r.onchange = function(){
-        var tr = r.closest("tr"), keep = { role: r.value };
-        var tmp = document.createElement("tbody"); tmp.innerHTML = crewRow(keep);
-        tr.replaceWith(tmp.firstChild); wireRows();
+    el("crewBox").querySelectorAll("button.add").forEach(function(b){
+      b.onclick = function(){
+        var k = b.getAttribute("data-group"), g = GROUPS.find(function(x){ return x.key === k; });
+        el("crewBox").querySelector('table[data-group="' + k + '"] tbody').insertAdjacentHTML("beforeend", g.vehicle ? driverRow({ role: k }) : crewRow({ role: k }));
+        wireRows();
       };
     });
+  }).catch(function(e){ el("crewBox").innerHTML = '<p class="err">Could not load staff: ' + esc(e.message) + '</p>'; });
+
+  function wireRows(){
+    el("crewBox").querySelectorAll(".alloc .x button").forEach(function(b){ b.onclick = function(){ b.closest("tr").remove(); }; });
   }
-  if (el("vAdd")) el("vAdd").onclick = function(){
-    el("vtab").querySelector("tbody").insertAdjacentHTML("beforeend", vehicleRow({ role: "extra" })); wireRows();
-  };
-  if (el("cAdd")) el("cAdd").onclick = function(){
-    el("ctab").querySelector("tbody").insertAdjacentHTML("beforeend", crewRow({ role: "guide" })); wireRows();
-  };
   if (el("crewSave")) el("crewSave").onclick = function(){
     var vehicles = [], crew = [];
-    el("vtab").querySelectorAll("tr.vrow").forEach(function(tr){
-      var s = tr.querySelectorAll("select");
-      vehicles.push({ role: s[0].value, vehicle_id: s[1].value, driver_id: s[2].value, trailer_id: s[3].value,
+    el("crewBox").querySelectorAll("tr.vrow").forEach(function(tr){
+      vehicles.push({ id: tr.getAttribute("data-id") || undefined, role: tr.getAttribute("data-role"),
+        driver_id: tr.querySelector("select.who").value, vehicle_id: tr.querySelector("select.veh").value,
+        trailer_id: tr.querySelector("select.trl").value,
         from_date: tr.querySelector(".from").value, to_date: tr.querySelector(".to").value });
     });
-    el("ctab").querySelectorAll("tr.crow").forEach(function(tr){
-      var role = tr.querySelector("select.role").value, pn = tr.querySelector(".pname"), ps = tr.querySelectorAll("select")[1];
-      crew.push({ role: role, person_id: ps ? ps.value : "", person_name: pn ? pn.value : "",
+    el("crewBox").querySelectorAll("tr.crow").forEach(function(tr){
+      var ps = tr.querySelector("select.who"), pn = tr.querySelector(".pname");
+      crew.push({ role: tr.getAttribute("data-role"), person_id: ps ? ps.value : "", person_name: pn ? pn.value : "",
         from_date: tr.querySelector(".from").value, to_date: tr.querySelector(".to").value });
     });
     el("crewMsg").className = ""; el("crewMsg").textContent = "Saving…";
-    post("crew", { departure_id: d.id, crew: crew, vehicles: vehicles }).then(function(){
-      el("crewMsg").className = "saved"; el("crewMsg").textContent = "Saved.";
+    post("crew", { departure_id: d.id, crew: crew, vehicles: vehicles }).then(function(res){
+      el("crewMsg").className = "saved";
+      el("crewMsg").textContent = "Saved." + (res.raised ? " " + res.raised + " Safari Vehicle Check" + (res.raised === 1 ? "" : "s") + " opened in Maintenance." : "");
       reload(d.id);
     }).catch(function(e){ el("crewMsg").className = "err"; el("crewMsg").textContent = "Not saved: " + e.message; });
   };
