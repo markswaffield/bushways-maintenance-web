@@ -319,7 +319,8 @@ function openPanel(id){
     + '<table><tr><th>Dates</th><td>Pre night ' + nice(add(d.start_date, -1)) + '<br>' + nice(d.start_date) + " → " + nice(d.end_date) + " (" + diff(d.start_date, d.end_date) + " nights)"
     + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : '') + '</td></tr>'
     + '<tr><th>Slot</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? "" : " · placed automatically") : (d.has_guests ? '<span class="tag x">No slot free</span>' : "Open — no guests yet")) + '</td></tr>'
-    + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + '</td></tr>'
+    + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + ' on the busiest night'
+    + (d.booked !== d.seats ? '<br><span class="meta">' + d.booked + ' booked in all: some leave before others join</span>' : '') + '</td></tr>'
     + '<tr><th>Status</th><td>' + esc(d.status) + '</td></tr></table>'
     + (master ? '<h3 style="font-size:13px;margin:12px 0 6px">Bush Ways master booking</h3>' + card(master) : '')
     + '<h3 style="font-size:13px;margin:12px 0 6px">Guest bookings (' + live.length + ')</h3>'
