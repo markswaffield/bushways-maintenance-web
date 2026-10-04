@@ -11,9 +11,11 @@
   safari can end the day the next one starts. A laptop screen, like the
   Day Sheet: seeing every vehicle at once is the point.
 
-  Read-only in this first step. Departures come from ResRequest through the
-  safari-board Edge Function and are placed in slots by its first-free rule
-  (tool-local D-002). Moving them, crew, equipment and campsites come next.
+  Departures come from ResRequest through the safari-board Edge Function and
+  are placed in slots by its first-free rule (tool-local D-002). A person can
+  move one by dragging it to another column, or from its panel; the tool then
+  never moves it again. Campsites are entered night by night in the panel
+  (D-003). Crew and equipment come next.
 
   Columns are SLOTS, not vehicles (D-006). Departures with no guests yet sit
   in the "Open" columns at the right, as they do on the Tour Master (D-007).
@@ -106,6 +108,19 @@
   .nt.camp{color:#8C4A12;font-style:italic}
   .nt.camp::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#D9822B;margin-right:5px}
   .nt.end{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6B6455}
+  .nt.site{font-weight:700;color:#232019}
+  .blk[draggable=true]{cursor:grab}
+  .blk.dragging{opacity:.35}
+  #grid.dropping .cell{background-image:linear-gradient(rgba(67,89,74,.04),rgba(67,89,74,.04))}
+  .drop-hint{z-index:6;pointer-events:none;border:2px dashed #43594A;border-radius:5px;background:rgba(67,89,74,.08)}
+  .pin{font-size:10px;color:#43594A}
+  .edit{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 0}
+  .nights td input{width:100%;padding:4px 6px;font-size:12.5px}
+  .nights tr.need td:first-child{border-left:3px solid #D9822B}
+  .nights .area{color:#6B6455;font-size:12px}
+  .nights .area.need{color:#8C4A12;font-style:italic}
+  .saved{color:#2F6B45;font-size:12px}
+  .err{color:var(--clash);font-size:12px}
 
   #panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:#fff;border-left:1px solid var(--line);
          box-shadow:-4px 0 18px rgba(0,0,0,.12);z-index:20;padding:16px;overflow:auto;display:none}
@@ -127,7 +142,7 @@
 </head><body>
 
 <h1>Safari Board</h1>
-<p class="sub">Every safari departure, on its vehicle slot, read from ResRequest. Laid out like the Tour Master.</p>
+<p class="sub">Every safari departure, on its vehicle slot, read from ResRequest. Drag a safari to move it; click it for its bookings and campsites.</p>
 <div class="whobar">
   <span>👤 <b id="whoami"></b></span>
   <span class="whobar-btns">
@@ -278,13 +293,15 @@ function draw(r){
 
     var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
     var seatsTxt = d.seats + (d.max_seats ? "/" + d.max_seats : "");
-    var title = esc(label(d) + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats");
+    var title = esc(label(d) + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats"
+      + (d.placed_by_person ? " · placed by hand" : "") + (allowed ? " · drag to move" : ""));
+    var drag = allowed ? ' draggable="true"' : "";
 
     // The pre night carries the code and seats, as the Tour Master's lines
     // above day 1 do. Lighter, and never holds the slot.
     var pre = add(d.start_date, -1);
     if (pre >= r.from && pre <= r.to) {
-      h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '" title="' + title + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">'
+      h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">'
         + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
     }
     var s = d.start_date < r.from ? r.from : d.start_date;
@@ -293,19 +310,20 @@ function draw(r){
     var span = diff(s, e) + 1;
     var cls = "blk " + fam + (d.status === "provisional" ? " prov" : "") + (d.status === "cancelled" ? " cxl" : "")
             + (d.end_date_estimated ? " est" : "") + (d._clash || (d.max_seats && d.seats > d.max_seats) ? " clash" : "");
-    h.push('<button class="' + cls + '" data-id="' + d.id + '" title="' + title + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '"></button>');
+    h.push('<button class="' + cls + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '"></button>');
 
     // Night by night: the area, or the code where the route is not known
     // (Tailor Made) or the trip started above the screen.
     d.nights.forEach(function(n, i){
       if (n.date < r.from || n.date > r.to) return;
-      var txt = n.area;
+      var txt = n.campsite || n.area;
       if (i === 0 || n.date === r.from) {
         if (!txt) { if (n.date === r.from) txt = label(d) + " · " + seatsTxt; } // else the pre night already says it
         else if (n.date === r.from) txt = label(d) + " · " + txt; // its pre night is above the screen
       }
       if (!txt) return;
-      h.push('<div class="nt' + (n.needs_campsite ? " camp" : "") + '" style="grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">' + esc(txt) + '</div>');
+      var ncls = n.campsite ? " site" : (n.needs_campsite ? " camp" : "");
+      h.push('<div class="nt' + ncls + '" title="' + esc((n.area || "") + (n.campsite ? " · " + n.campsite : "")) + '" style="grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">' + esc(txt) + '</div>');
     });
     if (d.end_date >= r.from && d.end_date <= r.to) {
       h.push('<div class="nt end" style="grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? "END (estimated)" : "END") + '</div>');
@@ -313,7 +331,95 @@ function draw(r){
   });
 
   g.innerHTML = h.join("");
-  g.querySelectorAll(".blk[data-id]").forEach(function(b){ b.onclick = function(){ openPanel(b.getAttribute("data-id")); }; });
+  g.querySelectorAll(".blk[data-id]").forEach(function(b){
+    b.onclick = function(){ openPanel(b.getAttribute("data-id")); };
+    b.ondragstart = function(e){
+      dragId = b.getAttribute("data-id");
+      e.dataTransfer.setData("text/plain", dragId); e.dataTransfer.effectAllowed = "move";
+      g.querySelectorAll('[data-id="' + dragId + '"]').forEach(function(x){ x.classList.add("dragging"); });
+      g.classList.add("dropping");
+    };
+    b.ondragend = function(){ endDrag(); };
+  });
+}
+
+// Drag a safari to another column. The column under the pointer decides
+// the slot and which of its two columns; dropping in the Open columns does
+// nothing (a trip with guests belongs on a vehicle).
+var dragId = null, hint = null;
+function columnAt(e){
+  var g = el("grid"), x = e.clientX - g.getBoundingClientRect().left - DAYW;
+  var c = Math.floor(x / LANEW);
+  if (c < 0 || c >= data.slots.length * 2) return null;
+  return { slot: data.slots[Math.floor(c / 2)], lane: c % 2 + 1, col: c + 2 };
+}
+function endDrag(){
+  dragId = null; el("grid").classList.remove("dropping");
+  el("grid").querySelectorAll(".dragging").forEach(function(x){ x.classList.remove("dragging"); });
+  if (hint) { hint.remove(); hint = null; }
+}
+el("grid").addEventListener("dragover", function(e){
+  if (!dragId) return;
+  var at = columnAt(e);
+  if (!at) { if (hint) hint.style.display = "none"; return; }
+  e.preventDefault();
+  var d = data.departures.find(function(x){ return x.id === dragId; }), r = range();
+  var s = d.start_date < r.from ? r.from : d.start_date, en = d.end_date > r.to ? r.to : d.end_date;
+  if (!hint) { hint = document.createElement("div"); hint.className = "drop-hint"; el("grid").appendChild(hint); }
+  hint.style.display = "";
+  hint.style.gridColumn = at.col;
+  hint.style.gridRow = (diff(r.from, s) + 2) + " / span " + (diff(s, en) + 1);
+});
+el("grid").addEventListener("drop", function(e){
+  if (!dragId) return;
+  e.preventDefault();
+  var id = dragId, at = columnAt(e);
+  endDrag();
+  if (at) moveTo(id, at.slot.id, at.lane);
+});
+
+function post(action, body){
+  body.person_id = me && me.id;
+  return fetch(FN + "?action=" + action, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    .then(function(x){ return x.json(); })
+    .then(function(res){ if (res.error) throw new Error(res.error); return res; });
+}
+function moveTo(id, slotId, lane){
+  var d = data.departures.find(function(x){ return x.id === id; });
+  var slot = data.slots.find(function(x){ return x.id === slotId; });
+  if (d.slot_id === slotId && (d.lane || 1) === lane) return;
+  setStatus("Moving " + label(d) + " to " + slot.label + "…");
+  post("move", { departure_id: id, slot_id: slotId, lane: lane }).then(function(){
+    setStatus(label(d) + " moved to " + slot.label + ". The tool will not move it again.");
+    reload(id);
+  }).catch(function(e){ setStatus("Could not move: " + e.message, true); });
+}
+// Reload the board and, if a panel was open, reopen it on the same safari.
+function reload(openId){
+  var r = range();
+  fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to).then(function(x){ return x.json(); }).then(function(d){
+    if (d.error) throw new Error(d.error);
+    data = d; draw(r);
+    if (openId && el("panel").className === "on") openPanel(openId);
+  }).catch(function(e){ setStatus("Could not load: " + e.message, true); });
+}
+
+// Night by night: the area from the route, and the campsite a person
+// enters. Nights whose area is a region are marked: those need one (D-003).
+function nightsTable(d){
+  if (!d.nights.length) return "";
+  var rows = d.nights.map(function(n, i){
+    var cell = allowed
+      ? '<input data-date="' + n.date + '" value="' + esc(n.campsite || "") + '" placeholder="' + (n.needs_campsite ? "campsite" : "") + '">'
+      : esc(n.campsite || "");
+    return '<tr class="' + (n.needs_campsite && !n.campsite ? "need" : "") + '"><td>' + (i + 1) + '</td><td>' + nice(n.date) + '</td>'
+      + '<td class="area' + (n.needs_campsite ? " need" : "") + '">' + esc(n.area || "—") + '</td><td>' + cell + '</td></tr>';
+  }).join("");
+  var stray = (d.stray_days || []).map(function(x){ return '<li>' + nice(x.date) + ": " + esc(x.campsite || x.note) + '</li>'; }).join("");
+  return '<h3 style="font-size:13px;margin:12px 0 4px">Nights and campsites</h3>'
+    + '<table class="nights"><tr><th>Night</th><th>Date</th><th>Area</th><th>Campsite</th></tr>' + rows + '</table>'
+    + (stray ? '<p class="err">Entered for nights this safari no longer covers (ResRequest moved its dates):</p><ul>' + stray + '</ul>' : '')
+    + (allowed ? '<div class="edit"><button id="csSave">Save campsites</button> <span id="csMsg"></span></div>' : '');
 }
 
 var STATUS = { "30": ["Confirmed", "c"], "20": ["Provisional", "p"], "90": ["Cancelled", "x"], "0": ["Not live", ""] };
@@ -345,16 +451,37 @@ function openPanel(id){
     + '<button class="ghost" id="closePanel">Close ✕</button></div>'
     + '<table><tr><th>Dates</th><td>Pre night ' + nice(add(d.start_date, -1)) + '<br>' + nice(d.start_date) + " → " + nice(d.end_date) + " (" + diff(d.start_date, d.end_date) + " nights)"
     + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : '') + '</td></tr>'
-    + '<tr><th>Slot</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? "" : " · placed automatically") : (d.has_guests ? '<span class="tag x">No slot free</span>' : "Open — no guests yet")) + '</td></tr>'
+    + '<tr><th>Vehicle</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? ' <span class="pin">· placed by hand</span>' : " · placed automatically") : (d.has_guests ? '<span class="tag x">No slot free</span>' : "Open — no guests yet"))
+    + (allowed ? '<div class="edit"><select id="mvSlot">' + data.slots.map(function(x){ return '<option value="' + x.id + '"' + (x.id === d.slot_id ? " selected" : "") + '>' + esc(x.label) + '</option>'; }).join("")
+      + '</select><select id="mvLane"><option value="1"' + ((d.lane || 1) === 1 ? " selected" : "") + '>column 1</option><option value="2"' + (d.lane === 2 ? " selected" : "") + '>column 2</option></select>'
+      + '<button id="mvGo">Move</button>'
+      + (d.placed_by_person ? '<button class="ghost" id="mvAuto">Let the tool place it</button>' : '') + '</div>' : '')
+    + '</td></tr>'
     + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + ' on the busiest night'
     + (d.booked !== d.seats ? '<br><span class="meta">' + d.booked + ' booked in all: some leave before others join</span>' : '') + '</td></tr>'
     + '<tr><th>Status</th><td>' + esc(d.status) + '</td></tr></table>'
+    + nightsTable(d)
     + (master ? '<h3 style="font-size:13px;margin:12px 0 6px">Bush Ways master booking</h3>' + card(master) : '')
     + '<h3 style="font-size:13px;margin:12px 0 6px">Guest bookings (' + live.length + ')</h3>'
     + (live.map(card).join("") || '<p class="meta">None yet.</p>')
     + (other.length ? '<details style="margin-top:10px"><summary style="cursor:pointer;color:#6B6455">Not live in ResRequest (' + other.length + ')</summary>' + other.map(card).join("") + '</details>' : '');
   p.className = "on";
   el("closePanel").onclick = function(){ p.className = ""; };
+  if (el("mvGo")) el("mvGo").onclick = function(){ moveTo(d.id, el("mvSlot").value, +el("mvLane").value); };
+  if (el("mvAuto")) el("mvAuto").onclick = function(){
+    setStatus("Handing " + label(d) + " back to the tool…");
+    post("release", { departure_id: d.id }).then(function(){ setStatus(label(d) + " placed by the tool again."); reload(d.id); })
+      .catch(function(e){ setStatus("Could not: " + e.message, true); });
+  };
+  if (el("csSave")) el("csSave").onclick = function(){
+    var days = [];
+    p.querySelectorAll("input[data-date]").forEach(function(i){ days.push({ date: i.getAttribute("data-date"), campsite: i.value }); });
+    el("csMsg").className = ""; el("csMsg").textContent = "Saving…";
+    post("campsites", { departure_id: d.id, days: days }).then(function(){
+      el("csMsg").className = "saved"; el("csMsg").textContent = "Saved.";
+      reload(d.id);
+    }).catch(function(e){ el("csMsg").className = "err"; el("csMsg").textContent = "Not saved: " + e.message; });
+  };
 }
 document.addEventListener("keydown", function(e){ if (e.key === "Escape") el("panel").className = ""; });
 
