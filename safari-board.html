@@ -280,10 +280,9 @@ function lookOf(d){
   var name = safariOf(d.type, d.product), lk = Object.assign({}, LOOK[name]);
   // Serval SouthBound's days are light green, NorthBound's light cyan.
   if (d.type === "Serval SouthBound") lk.bb = "#CCFFCC";
-  // A Fish Eagle trip carries the colour of the safari it joins: BWF(P)
-  // with a Leopard (orange), BWF(L) with a Lion (green).
-  if (name === "Fish Eagle" && /FeP/.test(d.product)) { lk.hb = "#FFC000"; lk.bd = "#E0A800"; }
-  if (name === "Fish Eagle" && /FeL/.test(d.product)) { lk.hb = "#92D050"; lk.bd = "#6FAE2E"; }
+  // Every Fish Eagle trip is coloured as a Fish Eagle, BWF(P) and BWF(L)
+  // included: they run parallel to a Leopard or Lion, not inside one (Mark,
+  // 2026-10-04).
   return lk;
 }
 function vars(lk){ return "--hb:" + lk.hb + ";--hf:" + lk.hf + ";--bb:" + lk.bb + ";--bf:" + lk.bf + ";--bd:" + lk.bd + ";"; }
