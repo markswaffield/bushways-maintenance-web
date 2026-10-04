@@ -120,6 +120,19 @@
   .nights .area{color:#6B6455;font-size:12px}
   .nights .area.need{color:#8C4A12;font-style:italic}
   .saved{color:#2F6B45;font-size:12px}
+  /* Crew names on the line above the pre night, as the Tour Master writes them. */
+  .crewln{z-index:3;font-size:10.5px;color:#43594A;font-weight:600;padding:0 6px;display:flex;align-items:center;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .crewln.bad{color:var(--clash)}
+  .alloc{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 6px}
+  .alloc td{padding:3px 3px;border-bottom:1px solid #F0ECE3;vertical-align:middle}
+  .alloc select,.alloc input{width:100%;padding:4px 5px;font-size:12.5px}
+  .alloc .x{width:28px}
+  .alloc .x button{padding:3px 8px;background:#fff;color:#8A2A23;border-color:#D9B3AF}
+  .alloc .dates input{width:118px}
+  .vgrid{display:grid;grid-template-columns:120px 1fr;gap:4px 6px}
+  .clashmsg{color:var(--clash);font-size:11.5px;font-weight:600}
+  details.when summary{cursor:pointer;color:#6B6455;font-size:11.5px}
   /* The guest mix at the top of the panel, one tile per safari type. */
   .mix{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
   .mx{border:1.5px solid;border-radius:8px;padding:6px 10px;display:flex;flex-direction:column;min-width:92px}
@@ -286,13 +299,16 @@ function draw(r){
     }
   }
 
-  // Clashes: two departures in the same slot and column on the same night.
+  // Clashes: two departures in the same slot and column on the same night,
+  // or a person, vehicle or trailer on this safari and another at once.
   var slotIdx = {}; slots.forEach(function(s, i){ slotIdx[s.id] = i; });
   deps.forEach(function(a){
     a._clash = a.status !== "cancelled" && a.slot_id && deps.some(function(b){
       return b !== a && b.status !== "cancelled" && b.slot_id === a.slot_id && b.lane === a.lane
         && a.start_date < b.end_date && b.start_date < a.end_date;
     });
+    a._crewClash = a.crew.some(function(c){ return c.clash; })
+      || a.vehicles.some(function(v){ return v.clash || v.trailer_clash || v.driver_clash; });
   });
 
   deps.forEach(function(d){
@@ -312,6 +328,17 @@ function draw(r){
     // The pre night carries the code and seats, as the Tour Master's lines
     // above day 1 do. Lighter, and never holds the slot.
     var pre = add(d.start_date, -1);
+    // Crew names on the line above that, the Tour Master's top line, when
+    // nothing else in this column is using that day.
+    var crewDay = add(d.start_date, -2);
+    if (d.slot_id && d.crew.length && crewDay >= r.from && crewDay <= r.to && !deps.some(function(o){
+      return o !== d && o.slot_id === d.slot_id && (o.lane || 1) === (d.lane || 1)
+        && add(o.start_date, -1) <= crewDay && crewDay <= o.end_date;
+    })) {
+      var names = d.crew.map(function(c){ return (c.name || "").split(/\s+/)[0]; }).filter(Boolean).join(", ");
+      h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + esc(d.crew.map(function(c){ return ROLE[c.role] + ": " + c.name; }).join(" · ")) + '" style="grid-row:'
+        + (diff(r.from, crewDay) + 2) + ';grid-column:' + col + '">' + esc(names) + '</div>');
+    }
     if (pre >= r.from && pre <= r.to) {
       h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">'
         + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
@@ -321,7 +348,7 @@ function draw(r){
     if (s > e) return;
     var span = diff(s, e) + 1;
     var cls = "blk " + fam + (d.status === "provisional" ? " prov" : "") + (d.status === "cancelled" ? " cxl" : "")
-            + (d.end_date_estimated ? " est" : "") + (d._clash || (d.max_seats && d.seats > d.max_seats) ? " clash" : "");
+            + (d.end_date_estimated ? " est" : "") + (d._clash || d._crewClash || (d.max_seats && d.seats > d.max_seats) ? " clash" : "");
     h.push('<button class="' + cls + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '"></button>');
 
     // Night by night: the area, or the code where the route is not known
@@ -343,6 +370,7 @@ function draw(r){
   });
 
   g.innerHTML = h.join("");
+  g.querySelectorAll(".crewln[data-id]").forEach(function(b){ b.onclick = function(){ openPanel(b.getAttribute("data-id")); }; });
   g.querySelectorAll(".blk[data-id]").forEach(function(b){
     b.onclick = function(){ openPanel(b.getAttribute("data-id")); };
     b.ondragstart = function(e){
@@ -414,6 +442,117 @@ function reload(openId){
     data = d; draw(r);
     if (openId && el("panel").className === "on") openPanel(openId);
   }).catch(function(e){ setStatus("Could not load: " + e.message, true); });
+}
+
+// ---------------------------------------------------------------------
+// Crew and vehicles (D-005, D-009). People, vehicles and trailers are the
+// real ones at Bush Ways Safaris, owned by maintenance. Loaded once.
+// ---------------------------------------------------------------------
+var ROLE = { guide: "Guide", trainee_guide: "Trainee guide", chef: "Chef", camp_hand: "Camp hand", translator: "Translator" };
+var VROLE = { game_drive: "Game drive", backup: "Back-up", extra: "Extra" };
+var opts = null;
+function loadOptions(){
+  if (opts) return Promise.resolve(opts);
+  return fetch(FN + "?action=options").then(function(x){ return x.json(); }).then(function(o){ opts = o; return o; });
+}
+function peopleFor(role){
+  // Guides first for guiding and driving, chefs and camp hands first for the
+  // camp; everyone else at Bush Ways Safaris after, since people cover.
+  var first = (role === "chef" || role === "camp_hand") ? "Chefs/Camp Hand" : "Guides";
+  var a = opts.people.filter(function(p){ return p.department === first; });
+  var b = opts.people.filter(function(p){ return p.department !== first; });
+  return a.concat(b);
+}
+function sel(list, value, label, blank){
+  return '<select>' + '<option value="">' + (blank || "—") + '</option>' + list.map(function(x){
+    return '<option value="' + x.id + '"' + (x.id === value ? " selected" : "") + '>' + esc(label(x)) + '</option>';
+  }).join("") + '</select>';
+}
+function roleSel(map, value){
+  return '<select class="role">' + Object.keys(map).map(function(k){ return '<option value="' + k + '"' + (k === value ? " selected" : "") + '>' + map[k] + '</option>'; }).join("") + '</select>';
+}
+function dates(x){
+  var set = x.from_date || x.to_date;
+  return '<details class="when"' + (set ? " open" : "") + '><summary>' + (set ? "Part of the safari" : "Whole safari") + '</summary>'
+    + '<span class="dates"><input type="date" class="from" value="' + (x.from_date || "") + '"> to <input type="date" class="to" value="' + (x.to_date || "") + '"></span></details>';
+}
+function clashTxt(list, what){ return list ? '<div class="clashmsg">' + what + ' also on ' + esc(list.join(", ")) + ' at the same time</div>' : ""; }
+
+// Two lines per vehicle: what it is and which one, then who drives it and
+// what it pulls. One line cut every box short.
+function vehicleRow(v){
+  return '<tr class="vrow"><td><div class="vgrid">'
+    + '<div>' + roleSel(VROLE, v.role) + '</div>'
+    + '<div>' + sel(opts.vehicles, v.vehicle_id, function(x){ return x.registration + (x.description ? " · " + x.description : ""); }, "Vehicle") + clashTxt(v.clash, "Vehicle") + '</div>'
+    + '<div>' + sel(peopleFor("guide"), v.driver_id, function(x){ return x.name; }, "Driver / guide") + clashTxt(v.driver_clash, "Driver") + '</div>'
+    + '<div>' + sel(opts.trailers, v.trailer_id, function(x){ return x.registration; }, "No trailer") + clashTxt(v.trailer_clash, "Trailer") + '</div>'
+    + '</div>' + dates(v) + '</td><td class="x"><button title="Remove">✕</button></td></tr>';
+}
+function crewRow(c){
+  var who = c.role === "translator" && !c.person_id
+    ? '<input class="pname" placeholder="Name" value="' + esc(c.person_name || "") + '">'
+    : sel(peopleFor(c.role), c.person_id, function(x){ return x.name + (x.department ? " · " + x.department : ""); }, "Who");
+  return '<tr class="crow"><td style="width:120px">' + roleSel(ROLE, c.role) + '</td><td>' + who + clashTxt(c.clash, "")
+    + dates(c) + '</td><td class="x"><button title="Remove">✕</button></td></tr>';
+}
+function crewSection(d){
+  if (!allowed && !d.crew.length && !d.vehicles.length) return "";
+  return '<h3 style="font-size:13px;margin:12px 0 4px">Vehicles</h3>'
+    + (d.two_vehicles ? '<p class="meta" style="margin:0 0 4px">Premium: a game-drive vehicle and a back-up, each with a driver. The back-up does not take a slot on the board.</p>' : '')
+    + '<table class="alloc" id="vtab"><tbody></tbody></table>'
+    + (allowed ? '<button class="ghost" id="vAdd">+ Add vehicle</button>' : '')
+    + '<h3 style="font-size:13px;margin:12px 0 4px">Crew</h3>'
+    + '<table class="alloc" id="ctab"><tbody></tbody></table>'
+    + (allowed ? '<button class="ghost" id="cAdd">+ Add crew</button>'
+      + '<div class="edit" style="margin-top:8px"><button id="crewSave">Save crew and vehicles</button> <span id="crewMsg"></span></div>' : '');
+}
+function wireCrew(d){
+  if (!el("vtab")) return;
+  el("vtab").querySelector("tbody").innerHTML = '<tr><td class="meta">Loading staff and vehicles…</td></tr>';
+  loadOptions().then(function(){
+    var vs = d.vehicles.length ? d.vehicles
+      : (d.two_vehicles ? [{ role: "game_drive" }, { role: "backup" }] : [{ role: "game_drive" }]);
+    var cs = d.crew.length ? d.crew : [{ role: "guide" }, { role: "chef" }, { role: "camp_hand" }];
+    el("vtab").querySelector("tbody").innerHTML = vs.map(vehicleRow).join("");
+    el("ctab").querySelector("tbody").innerHTML = cs.map(crewRow).join("");
+    wireRows();
+  }).catch(function(e){ el("vtab").querySelector("tbody").innerHTML = '<tr><td class="err">Could not load staff: ' + esc(e.message) + '</td></tr>'; });
+
+  function wireRows(){
+    el("panel").querySelectorAll(".alloc .x button").forEach(function(b){ b.onclick = function(){ b.closest("tr").remove(); }; });
+    // A translator who is not on staff is typed by name.
+    el("ctab").querySelectorAll("tr.crow select.role").forEach(function(r){
+      r.onchange = function(){
+        var tr = r.closest("tr"), keep = { role: r.value };
+        var tmp = document.createElement("tbody"); tmp.innerHTML = crewRow(keep);
+        tr.replaceWith(tmp.firstChild); wireRows();
+      };
+    });
+  }
+  if (el("vAdd")) el("vAdd").onclick = function(){
+    el("vtab").querySelector("tbody").insertAdjacentHTML("beforeend", vehicleRow({ role: "extra" })); wireRows();
+  };
+  if (el("cAdd")) el("cAdd").onclick = function(){
+    el("ctab").querySelector("tbody").insertAdjacentHTML("beforeend", crewRow({ role: "guide" })); wireRows();
+  };
+  if (el("crewSave")) el("crewSave").onclick = function(){
+    var vehicles = [], crew = [];
+    el("vtab").querySelectorAll("tr.vrow").forEach(function(tr){
+      var s = tr.querySelectorAll("select");
+      vehicles.push({ role: s[0].value, vehicle_id: s[1].value, driver_id: s[2].value, trailer_id: s[3].value,
+        from_date: tr.querySelector(".from").value, to_date: tr.querySelector(".to").value });
+    });
+    el("ctab").querySelectorAll("tr.crow").forEach(function(tr){
+      var role = tr.querySelector("select.role").value, pn = tr.querySelector(".pname"), ps = tr.querySelectorAll("select")[1];
+      crew.push({ role: role, person_id: ps ? ps.value : "", person_name: pn ? pn.value : "",
+        from_date: tr.querySelector(".from").value, to_date: tr.querySelector(".to").value });
+    });
+    el("crewMsg").className = ""; el("crewMsg").textContent = "Saving…";
+    post("crew", { departure_id: d.id, crew: crew, vehicles: vehicles }).then(function(){
+      el("crewMsg").className = "saved"; el("crewMsg").textContent = "Saved.";
+      reload(d.id);
+    }).catch(function(e){ el("crewMsg").className = "err"; el("crewMsg").textContent = "Not saved: " + e.message; });
+  };
 }
 
 // Night by night: the area from the route, and the campsite a person
@@ -489,6 +628,7 @@ function openPanel(id){
     + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + ' on the busiest night'
     + (d.booked !== d.seats ? '<br><span class="meta">' + d.booked + ' booked in all: some leave before others join</span>' : '') + '</td></tr>'
     + '<tr><th>Status</th><td>' + esc(d.status) + '</td></tr></table>'
+    + crewSection(d)
     + nightsTable(d)
     + (master ? '<h3 style="font-size:13px;margin:12px 0 6px">Bush Ways master booking</h3>' + card(master) : '')
     + '<h3 style="font-size:13px;margin:12px 0 6px">Guest bookings (' + live.length + ')</h3>'
@@ -502,6 +642,7 @@ function openPanel(id){
     post("release", { departure_id: d.id }).then(function(){ setStatus(label(d) + " placed by the tool again."); reload(d.id); })
       .catch(function(e){ setStatus("Could not: " + e.message, true); });
   };
+  wireCrew(d);
   if (el("csSave")) el("csSave").onclick = function(){
     var days = [];
     p.querySelectorAll("input[data-date]").forEach(function(i){ days.push({ date: i.getAttribute("data-date"), campsite: i.value }); });
