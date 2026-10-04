@@ -120,6 +120,17 @@
   .nights .area{color:#6B6455;font-size:12px}
   .nights .area.need{color:#8C4A12;font-style:italic}
   .saved{color:#2F6B45;font-size:12px}
+  /* The guest mix at the top of the panel, one tile per safari type. */
+  .mix{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+  .mx{border:1.5px solid;border-radius:8px;padding:6px 10px;display:flex;flex-direction:column;min-width:92px}
+  .mx b{font-size:20px;line-height:1.1}
+  .mx span{font-weight:600;font-size:12.5px}
+  .mx small{color:#6B6455;font-size:11px}
+  .mx.adv,.sf.adv{background:var(--adv-bg);border-color:var(--adv-bd)}
+  .mx.pre,.sf.pre{background:var(--pre-bg);border-color:var(--pre-bd)}
+  .mx.acc,.sf.acc{background:var(--acc-bg);border-color:var(--acc-bd)}
+  .mx.tm,.sf.tm{background:var(--tm-bg);border-color:var(--tm-bd)}
+  .sf{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border:1px solid;border-radius:9px;vertical-align:1px}
   .err{color:var(--clash);font-size:12px}
 
   #panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:#fff;border-left:1px solid var(--line);
@@ -294,6 +305,7 @@ function draw(r){
     var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
     var seatsTxt = d.seats + (d.max_seats ? "/" + d.max_seats : "");
     var title = esc(label(d) + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats"
+      + (d.mix.length > 1 ? " · " + mixText(d) : "")
       + (d.placed_by_person ? " · placed by hand" : "") + (allowed ? " · drag to move" : ""));
     var drag = allowed ? ' draggable="true"' : "";
 
@@ -422,13 +434,29 @@ function nightsTable(d){
     + (allowed ? '<div class="edit"><button id="csSave">Save campsites</button> <span id="csMsg"></span></div>' : '');
 }
 
+// The guest mix: seats per safari type, like the Tour Master's "8PC 3FC".
+function mixText(d){
+  return d.mix.map(function(m){ return m.type + " " + m.seats; }).join(" · ");
+}
+function mixBox(d){
+  if (!d.mix.length) return "";
+  var several = d.mix.length > 1;
+  return '<div class="mix">' + d.mix.map(function(m){
+    var whole = m.from === d.start_date && m.to === d.end_date;
+    return '<div class="mx ' + family(d.product) + '"><b>' + m.seats + '</b><span>' + esc(m.type) + '</span>'
+      + (several && !whole ? '<small>' + nice(m.from) + ' → ' + nice(m.to) + '</small>' : '') + '</div>';
+  }).join("") + '</div>';
+}
+
 var STATUS = { "30": ["Confirmed", "c"], "20": ["Provisional", "p"], "90": ["Cancelled", "x"], "0": ["Not live", ""] };
 function openPanel(id){
   var d = data.departures.find(function(x){ return x.id === id; });
   if (!d) return;
   var slot = data.slots.find(function(s){ return s.id === d.slot_id; });
   var tailor = d.product === "Tailor Made";
-  var live = d.bookings.filter(function(b){ return !b.is_master && (b.rr_status === "30" || b.rr_status === "20"); });
+  var fam = family(d.product);
+  var live = d.bookings.filter(function(b){ return !b.is_master && (b.rr_status === "30" || b.rr_status === "20"); })
+    .sort(function(a, b){ return a.arrive_date < b.arrive_date ? -1 : a.arrive_date > b.arrive_date ? 1 : (a.type || "").localeCompare(b.type || ""); });
   var other = d.bookings.filter(function(b){ return !b.is_master && live.indexOf(b) < 0; });
   var master = d.bookings.find(function(b){ return b.is_master; });
 
@@ -440,7 +468,7 @@ function openPanel(id){
     var notes = [["Guests", b.rr_guest], ["Note", b.rr_note], ["Memo", b.rr_memo]]
       .filter(function(n){ return n[1]; })
       .map(function(n){ return '<div class="n"><em>' + n[0] + '</em>' + esc(n[1].trim()) + '</div>'; }).join("");
-    return '<div class="bk"><div class="h"><span>' + esc(b.name) + ' <span style="color:#8A8270;font-weight:400">' + esc(b.reservation_id) + '</span></span>'
+    return '<div class="bk"><div class="h"><span>' + (b.type && !b.is_master ? '<span class="sf ' + fam + '">' + esc(b.type) + '</span> ' : '') + esc(b.name) + ' <span style="color:#8A8270;font-weight:400">' + esc(b.reservation_id) + '</span></span>'
       + '<span>' + esc(seats) + ' <span class="tag ' + st[1] + '">' + st[0] + '</span></span></div>' + join + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
   }
 
@@ -449,6 +477,7 @@ function openPanel(id){
       '<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">'
     + '<div><h2>' + esc(label(d)) + '</h2><p class="meta">' + esc(d.product) + " · " + esc(d.type) + '</p></div>'
     + '<button class="ghost" id="closePanel">Close ✕</button></div>'
+    + mixBox(d)
     + '<table><tr><th>Dates</th><td>Pre night ' + nice(add(d.start_date, -1)) + '<br>' + nice(d.start_date) + " → " + nice(d.end_date) + " (" + diff(d.start_date, d.end_date) + " nights)"
     + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : '') + '</td></tr>'
     + '<tr><th>Vehicle</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? ' <span class="pin">· placed by hand</span>' : " · placed automatically") : (d.has_guests ? '<span class="tag x">No slot free</span>' : "Open — no guests yet"))
