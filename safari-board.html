@@ -94,7 +94,18 @@
   .blk.clash{outline:2.5px solid var(--clash);outline-offset:-1px}
   /* The pre night: the vehicle is being prepared, perhaps a meet and greet or
      shopping. Lighter, and never a block that holds the slot (Mark, 2026-10-04). */
-  .blk.night{opacity:.45;border-style:dotted;z-index:1;font-size:10.5px;justify-content:center}
+  .blk.night{border-style:dotted;z-index:1;justify-content:center;padding:0 5px;flex-direction:row;align-items:center;gap:5px;
+             white-space:nowrap;background-image:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.55))}
+  .blk.night b{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+  .blk.night .s{flex:none}
+  .blk.night .pn{font-size:10px;color:#8A8270;font-style:italic}
+  .blk.night .s{font-size:11px}
+  /* One line per night, laid over the block like the Tour Master's cells. */
+  .nt{z-index:3;pointer-events:none;font-size:11px;padding:0 8px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;color:#3B362B}
+  /* An area, not a place: a person has to enter the campsite (D-003). */
+  .nt.camp{color:#8C4A12;font-style:italic}
+  .nt.camp::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#D9822B;margin-right:5px}
+  .nt.end{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6B6455}
 
   #panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:#fff;border-left:1px solid var(--line);
          box-shadow:-4px 0 18px rgba(0,0,0,.12);z-index:20;padding:16px;overflow:auto;display:none}
@@ -141,7 +152,8 @@
   <span><i style="background:var(--acc-bg);border-color:var(--acc-bd)"></i>Accommodated</span>
   <span><i style="background:var(--tm-bg);border-color:var(--tm-bd)"></i>Tailor Made</span>
   <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>Open, no guests yet</span>
-  <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night</span>
+  <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with code and seats</span>
+  <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
   <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
 </div>
 
@@ -150,7 +162,7 @@
 
 <script>
 var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-board";
-var ROW = 24, DAYW = 92, LANEW = 96;
+var ROW = 24, DAYW = 92, LANEW = 112;
 
 var me = null;
 try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
@@ -264,25 +276,40 @@ function draw(r){
     else return;
     var fam = d.has_guests ? family(d.product) : "open";
 
-    // Pre night, the day before day 1.
+    var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
+    var seatsTxt = d.seats + (d.max_seats ? "/" + d.max_seats : "");
+    var title = esc(label(d) + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats");
+
+    // The pre night carries the code and seats, as the Tour Master's lines
+    // above day 1 do. Lighter, and never holds the slot.
     var pre = add(d.start_date, -1);
     if (pre >= r.from && pre <= r.to) {
-      h.push('<div class="blk night ' + fam + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">Pre night</div>');
+      h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '" title="' + title + '" style="grid-row:' + (diff(r.from, pre) + 2) + ';grid-column:' + col + '">'
+        + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
     }
     var s = d.start_date < r.from ? r.from : d.start_date;
     var e = d.end_date > r.to ? r.to : d.end_date;
     if (s > e) return;
     var span = diff(s, e) + 1;
-    var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
     var cls = "blk " + fam + (d.status === "provisional" ? " prov" : "") + (d.status === "cancelled" ? " cxl" : "")
             + (d.end_date_estimated ? " est" : "") + (d._clash || (d.max_seats && d.seats > d.max_seats) ? " clash" : "");
-    var inner = '<b>' + esc(label(d)) + '</b>'
-      + (d.start_date < r.from ? '<span class="t">↑ from ' + nice(d.start_date) + '</span>' : '')
-      + '<span class="t">' + esc(d.type) + '</span>'
-      + '<span class="s' + seatsCls + '">' + d.seats + (d.max_seats ? "/" + d.max_seats : "") + ' seats</span>'
-      + (d.status === "provisional" ? '<span class="t">Provisional</span>' : '')
-      + (d.end_date <= r.to ? '<span class="end">' + (d.end_date_estimated ? "End estimated" : "End") + '</span>' : '');
-    h.push('<button class="' + cls + '" data-id="' + d.id + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '">' + inner + '</button>');
+    h.push('<button class="' + cls + '" data-id="' + d.id + '" title="' + title + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '"></button>');
+
+    // Night by night: the area, or the code where the route is not known
+    // (Tailor Made) or the trip started above the screen.
+    d.nights.forEach(function(n, i){
+      if (n.date < r.from || n.date > r.to) return;
+      var txt = n.area;
+      if (i === 0 || n.date === r.from) {
+        if (!txt) { if (n.date === r.from) txt = label(d) + " · " + seatsTxt; } // else the pre night already says it
+        else if (n.date === r.from) txt = label(d) + " · " + txt; // its pre night is above the screen
+      }
+      if (!txt) return;
+      h.push('<div class="nt' + (n.needs_campsite ? " camp" : "") + '" style="grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">' + esc(txt) + '</div>');
+    });
+    if (d.end_date >= r.from && d.end_date <= r.to) {
+      h.push('<div class="nt end" style="grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? "END (estimated)" : "END") + '</div>');
+    }
   });
 
   g.innerHTML = h.join("");
