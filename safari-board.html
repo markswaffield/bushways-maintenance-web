@@ -85,15 +85,20 @@
   .blk .s.full{color:#2F6B45}
   .blk .s.over{color:var(--clash)}
   .blk .end{margin-top:auto;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-  .blk.adv{background:var(--adv-bg);border-color:var(--adv-bd)}
-  .blk.pre{background:var(--pre-bg);border-color:var(--pre-bd)}
-  .blk.acc{background:var(--acc-bg);border-color:var(--acc-bd)}
-  .blk.tm{background:var(--tm-bg);border-color:var(--tm-bd)}
+  /* Each safari in the Tour Master's own colours (Mark, 2026-10-04: "the
+     colour codings are not to reflect each safari type, but rather each
+     safari, this would be the header safari"). Set per block from LOOK:
+     --hb/--hf the code line, --bb/--bf the days, --bd the edge. */
+  .blk.sx{background:var(--bb);border-color:var(--bd);color:var(--bf)}
+  .blk.night.sx{background:#fff;color:var(--muted)}
+  .blk.night.sx.head{background:var(--hb);color:var(--hf);border-color:var(--bd)}
+  .blk.night.sx.head .s{color:inherit}
   .blk.open{background:var(--open-bg);border-color:var(--open-bd);border-style:dashed}
   .blk.prov{border-style:dashed}
   .blk.cxl{background:#EEE;border-color:#999;color:#777;text-decoration:line-through}
   .blk.est{border-bottom-style:dotted}
-  .blk.clash{outline:2.5px solid var(--clash);outline-offset:-1px}
+  /* A white ring then a red one, so a clash shows on a red Tailor Made too. */
+  .blk.clash{box-shadow:0 0 0 2px #fff,0 0 0 4.5px var(--clash);z-index:4}
   /* The pre night: the vehicle is being prepared, perhaps a meet and greet or
      shopping. Lighter, and never a block that holds the slot (Mark, 2026-10-04). */
   .blk.night{border-style:dotted;z-index:1;justify-content:center;padding:0 5px;flex-direction:row;align-items:center;gap:5px;
@@ -105,7 +110,7 @@
   /* One line per night, laid over the block like the Tour Master's cells. */
   .nt{z-index:3;pointer-events:none;font-size:11px;padding:0 8px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;color:#3B362B}
   /* An area, not a place: a person has to enter the campsite (D-003). */
-  .nt.camp{color:#8C4A12;font-style:italic}
+  .nt.camp{font-style:italic}
   .nt.camp::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#D9822B;margin-right:5px}
   .nt.end{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6B6455}
   .nt.site{font-weight:700;color:#232019}
@@ -146,11 +151,8 @@
   .mx{border:1.5px solid;border-radius:8px;padding:6px 10px;display:flex;flex-direction:column;min-width:92px}
   .mx b{font-size:20px;line-height:1.1}
   .mx span{font-weight:600;font-size:12.5px}
-  .mx small{color:#6B6455;font-size:11px}
-  .mx.adv,.sf.adv{background:var(--adv-bg);border-color:var(--adv-bd)}
-  .mx.pre,.sf.pre{background:var(--pre-bg);border-color:var(--pre-bd)}
-  .mx.acc,.sf.acc{background:var(--acc-bg);border-color:var(--acc-bd)}
-  .mx.tm,.sf.tm{background:var(--tm-bg);border-color:var(--tm-bd)}
+  .mx small{color:inherit;opacity:.8;font-size:11px}
+  .mx.sx,.sf.sx{background:var(--hb);border-color:var(--bd);color:var(--hf)}
   .sf{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border:1px solid;border-radius:9px;vertical-align:1px}
   .err{color:var(--clash);font-size:12px}
 
@@ -194,10 +196,7 @@
   <span class="status" id="status"></span>
 </div>
 <div class="legend">
-  <span><i style="background:var(--adv-bg);border-color:var(--adv-bd)"></i>Adventure</span>
-  <span><i style="background:var(--pre-bg);border-color:var(--pre-bd)"></i>Premium</span>
-  <span><i style="background:var(--acc-bg);border-color:var(--acc-bd)"></i>Accommodated</span>
-  <span><i style="background:var(--tm-bg);border-color:var(--tm-bd)"></i>Tailor Made</span>
+  <span id="legendSafaris" style="display:contents"></span>
   <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>Open, no guests yet</span>
   <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with code and seats</span>
   <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
@@ -257,12 +256,44 @@ function load(){
   }).catch(function(e){ setStatus("Could not load: " + e.message, true); });
 }
 
-function family(p){
-  if (/^Adventure/.test(p)) return "adv";
-  if (p === "Premium") return "pre";
-  if (p === "Accommodated") return "acc";
-  return "tm";
+// The Tour Master's colours, read from the workbook itself (2026-10-04):
+// hb/hf the code cell's fill and text, bb/bf the day cells', bd the edge.
+var LOOK = {
+  "Leopard":     { hb: "#FFC000", hf: "#F20884", bb: "#FFFFFF", bf: "#F20884", bd: "#E0A800" },
+  "Lion":        { hb: "#92D050", hf: "#0000D4", bb: "#FFFFFF", bf: "#0000D4", bd: "#6FAE2E" },
+  "Fish Eagle":  { hb: "#B3A2C7", hf: "#0000D4", bb: "#FFFFFF", bf: "#0000D4", bd: "#8E7BA8" },
+  "Buffalo":     { hb: "#FF0000", hf: "#FFFFFF", bb: "#FFFFFF", bf: "#903C3A", bd: "#C00000" },
+  "Serval":      { hb: "#FF6600", hf: "#000000", bb: "#CCFFFF", bf: "#000000", bd: "#E05A00" },
+  "Caracal":     { hb: "#B3B1A9", hf: "#000000", bb: "#FFFFFF", bf: "#000000", bd: "#8F8D85" },
+  "Sable":       { hb: "#FFCC99", hf: "#000000", bb: "#92D050", bf: "#000000", bd: "#D9A066" },
+  "Tailor Made": { hb: "#FF0000", hf: "#000000", bb: "#FF0000", bf: "#000000", bd: "#B00000" },
+};
+// The header safari a type belongs to: Kalahari is the start of a Leopard.
+function safariOf(type, product){
+  if (product === "Tailor Made") return "Tailor Made";
+  if (/^Serval/.test(type)) return "Serval";
+  if (/^Sable/.test(type)) return "Sable";
+  if (type === "Kalahari") return "Leopard";
+  return LOOK[type] ? type : "Tailor Made";
 }
+function lookOf(d){
+  var name = safariOf(d.type, d.product), lk = Object.assign({}, LOOK[name]);
+  // Serval SouthBound's days are light green, NorthBound's light cyan.
+  if (d.type === "Serval SouthBound") lk.bb = "#CCFFCC";
+  // A Fish Eagle trip carries the colour of the safari it joins: BWF(P)
+  // with a Leopard (orange), BWF(L) with a Lion (green).
+  if (name === "Fish Eagle" && /FeP/.test(d.product)) { lk.hb = "#FFC000"; lk.bd = "#E0A800"; }
+  if (name === "Fish Eagle" && /FeL/.test(d.product)) { lk.hb = "#92D050"; lk.bd = "#6FAE2E"; }
+  return lk;
+}
+function vars(lk){ return "--hb:" + lk.hb + ";--hf:" + lk.hf + ";--bb:" + lk.bb + ";--bf:" + lk.bf + ";--bd:" + lk.bd + ";"; }
+(function(){
+  var l = document.getElementById("legendSafaris");
+  if (l) l.innerHTML = Object.keys(LOOK).map(function(k){
+    var x = LOOK[k];
+    return '<span><i style="background:' + x.hb + ';border-color:' + x.bd + '"></i><b style="color:' + (x.bf === "#000000" ? "inherit" : x.bf) + ';font-weight:600">' + k + '</b></span>';
+  }).join("");
+})();
 function label(d){
   if (d.code) return d.code;
   var b = d.bookings.find(function(b){ return b.rr_status === "30" || b.rr_status === "20"; }) || d.bookings[0];
@@ -324,7 +355,10 @@ function draw(r){
     if (d.slot_id && slotIdx[d.slot_id] != null) col = 2 + slotIdx[d.slot_id] * 2 + ((d.lane || 1) - 1);
     else if (d._openLane != null) col = 2 + slots.length * 2 + d._openLane;
     else return;
-    var fam = d.has_guests ? family(d.product) : "open";
+    var live = d.has_guests && d.status !== "cancelled";
+    var lk = live ? lookOf(d) : null;
+    var fam = live ? "sx" : "open";
+    var sv = lk ? vars(lk) : "";
 
     var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
     var seatsTxt = d.seats + (d.max_seats ? "/" + d.max_seats : "");
@@ -368,10 +402,10 @@ function draw(r){
       if (day < r.from || day > r.to || (d.slot_id && i < stack.length - 1 && busy(day))) return;
       var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
       if (ln.code) {
-        h.push('<button class="blk night ' + fam + (ln.pre ? "" : " head") + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + row + '">'
+        h.push('<button class="blk night ' + fam + (ln.pre && lines.length ? "" : " head") + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
           + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
       } else if (ln.pre) {
-        h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + row + '"><span class="pn">pre night</span></button>');
+        h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '"><span class="pn">pre night</span></button>');
       } else {
         h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + title + '" style="' + row + '">' + esc(ln.text) + '</div>');
       }
@@ -382,7 +416,7 @@ function draw(r){
     var span = diff(s, e) + 1;
     var cls = "blk " + fam + (d.status === "provisional" ? " prov" : "") + (d.status === "cancelled" ? " cxl" : "")
             + (d.end_date_estimated ? " est" : "") + (d._clash || d._crewClash || (d.max_seats && d.seats > d.max_seats) ? " clash" : "");
-    h.push('<button class="' + cls + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '"></button>');
+    h.push('<button class="' + cls + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + 'grid-row:' + (diff(r.from, s) + 2) + ' / span ' + span + ';grid-column:' + col + '"></button>');
 
     // Night by night: the area, or the code where the route is not known
     // (Tailor Made) or the trip started above the screen.
@@ -395,10 +429,10 @@ function draw(r){
       }
       if (!txt) return;
       var ncls = n.campsite ? " site" : (n.needs_campsite ? " camp" : "");
-      h.push('<div class="nt' + ncls + '" title="' + esc((n.area || "") + (n.campsite ? " · " + n.campsite : "")) + '" style="grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">' + esc(txt) + '</div>');
+      h.push('<div class="nt' + ncls + '" title="' + esc((n.area || "") + (n.campsite ? " · " + n.campsite : "")) + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">' + esc(txt) + '</div>');
     });
     if (d.end_date >= r.from && d.end_date <= r.to) {
-      h.push('<div class="nt end" style="grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? "END (estimated)" : "END") + '</div>');
+      h.push('<div class="nt end" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? "END (estimated)" : "END") + '</div>');
     }
   });
 
@@ -633,7 +667,8 @@ function mixBox(d){
   var several = d.mix.length > 1;
   return '<div class="mix">' + d.mix.map(function(m){
     var whole = m.from === d.start_date && m.to === d.end_date;
-    return '<div class="mx ' + family(d.product) + '"><b>' + m.seats + '</b><span>' + esc(m.type) + '</span>'
+    var tl = lookOf({ type: m.type, product: d.product });
+    return '<div class="mx sx" style="' + vars(tl) + '"><b>' + m.seats + '</b><span>' + esc(m.type) + '</span>'
       + (several && !whole ? '<small>' + nice(m.from) + ' → ' + nice(m.to) + '</small>' : '') + '</div>';
   }).join("") + '</div>';
 }
@@ -644,7 +679,7 @@ function openPanel(id){
   if (!d) return;
   var slot = data.slots.find(function(s){ return s.id === d.slot_id; });
   var tailor = d.product === "Tailor Made";
-  var fam = family(d.product);
+
   var live = d.bookings.filter(function(b){ return !b.is_master && (b.rr_status === "30" || b.rr_status === "20"); })
     .sort(function(a, b){ return a.arrive_date < b.arrive_date ? -1 : a.arrive_date > b.arrive_date ? 1 : (a.type || "").localeCompare(b.type || ""); });
   var other = d.bookings.filter(function(b){ return !b.is_master && live.indexOf(b) < 0; });
@@ -658,7 +693,7 @@ function openPanel(id){
     var notes = [["Guests", b.rr_guest], ["Note", b.rr_note], ["Memo", b.rr_memo]]
       .filter(function(n){ return n[1]; })
       .map(function(n){ return '<div class="n"><em>' + n[0] + '</em>' + esc(n[1].trim()) + '</div>'; }).join("");
-    return '<div class="bk"><div class="h"><span>' + (b.type && !b.is_master ? '<span class="sf ' + fam + '">' + esc(b.type) + '</span> ' : '') + esc(b.name) + ' <span style="color:#8A8270;font-weight:400">' + esc(b.reservation_id) + '</span></span>'
+    return '<div class="bk"><div class="h"><span>' + (b.type && !b.is_master ? '<span class="sf sx" style="' + vars(lookOf({ type: b.type, product: d.product })) + '">' + esc(b.type) + '</span> ' : '') + esc(b.name) + ' <span style="color:#8A8270;font-weight:400">' + esc(b.reservation_id) + '</span></span>'
       + '<span>' + esc(seats) + ' <span class="tag ' + st[1] + '">' + st[0] + '</span></span></div>' + join + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
   }
 
