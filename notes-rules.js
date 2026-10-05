@@ -56,10 +56,18 @@
 // the party eat pork" IS an answer and must not be swallowed. These are the
 // real forms seen across 172 bookings, typos included — agents write "None
 // advsed" and "None advied" as often as they spell it correctly.
+//
+// "null" — the AI layer (index.ts's aiExtractCore) is told to return the
+// real JSON value null for an unstated fact, and mostly does, but a model
+// sometimes writes the literal word "null" inside the value instead — found
+// 2026-10-05 against a real booking (Casanova x2), both dietary and medical.
+// "northing" — a real typo for "nothing" (Wolff x2, same day), not a
+// nonsense word; "nothing"'s own trailing-word list grows a "provided (by
+// clients)" branch at the same time, which this specific note also needed.
 var NOTHING = new RegExp("^\\s*(?:" + [
-  "n\\.?/?a\\.?", "nil", "no", "-", "–", "not applicable", "tba", "tbc", "unknown",
-  "non[e]?\\s*(?:advised|advsed|advied|adviced|stated|provided|requested|known|noted|given|reported|for\\s+now|at\\s+this\\s+stage|so\\s+far)?",
-  "nothing\\s*(?:advised|noted|reported|specific)?",
+  "n\\.?/?a\\.?", "nil", "no", "null", "-", "–", "not applicable", "tba", "tbc", "unknown",
+  "non[e]?\\s*(?:advised|advsed|advied|adviced|stated|provided(?:\\s+by\\s+(?:the\\s+)?clients?)?|requested|known|noted|given|reported|for\\s+now|at\\s+this\\s+stage|so\\s+far)?",
+  "(?:nothing|northing)\\s*(?:advised|noted|reported|specific|provided(?:\\s+by\\s+(?:the\\s+)?clients?)?)?",
   "not\\s+advised", "none\\s+that\\s+we\\s+know\\s+of"
 ].join("|") + ")\\s*\\.?\\s*$", "i");
 
@@ -69,10 +77,19 @@ var NOTHING = new RegExp("^\\s*(?:" + [
 // answer two fields at once — so a combined label fills dietary AND medical.
 // Matching on the leading word missed half of them.
 
+// occasion: NOT bare "special" — De Laet x2, 2026-10-05, found this reading
+// "Dietary or Special requirements: Emma is vegetarian..." as an occasion
+// label too, since the word "special" sits right there, and so special_
+// occasion ended up holding the dietary sentence a second time. "Special
+// request/occasion/event" is a real, deliberate label (measured across the
+// 172 bookings above); "special" modifying "requirements" inside an
+// otherwise-dietary label is not. "requirements" does not match "request"
+// (they diverge at the fifth letter), so this draws the line cleanly without
+// a special case for this one agent's wording.
 var FIELD_WORDS = {
   dietary:  /dietar|(^|[^a-z])diet([^a-z]|$)|allerg|intoleran/i,
   medical:  /medical|allerg|condition|mobilit|wheelchair/i,
-  occasion: /special|occasion|\bocc\b|event|celebrat|anniversar|birthday|honeymoon/i,
+  occasion: /special\s*(?:occasion|event|request)s?\b|(?:^|[^a-z])occasion|\bocc\b|celebrat|anniversar|birthday|honeymoon/i,
   bed:      /room\s*type|bed/i,
   basis:    /basis|board|package/i
 };
@@ -193,8 +210,15 @@ function bed(text){
 
 // Mark: "Fully Inclusive or Self Drive... FI and SD". Both can be true —
 // a self-driving party can still be fully inclusive once they arrive.
+//
+// FBA — Mark, 2026-10-05: "FBA stands for Full Board and Activities
+// (drinks are excluded) wheras FI - drinks are included... this is
+// sometimes used here [Khwai] and for BRC... must be treated the same
+// as FI." Same meaning for the day sheet either way: the camp provides
+// the activities, so a real guide and vehicle are needed, not Self Drive.
 var BASES = [
   { code:"FI",  re:/fully\s*inclusive|\bF\.?I\.?\b/i },
+  { code:"FBA", re:/full\s*board\s*(?:and|&)\s*activit\w*|\bFBA\b/i },
   { code:"SD",  re:/self[\s-]*driv\w*/i },
   { code:"DBB", re:/\bDBB\b|dinner,?\s*bed\s*(?:&|and)\s*breakfast/i },
   { code:"B&B", re:/\bB\s*&\s*B\b|bed\s*(?:&|and)\s*breakfast/i }
@@ -216,13 +240,36 @@ function basis(text){
   return found.length ? { value: found.join("/"), source: src, confident: sure } : null;
 }
 
+// De Laet x2, 2026-10-05: "Special Note is honeymoon" — but "Honeymooners"
+// sat on its own line under [note], no colon, no label. labelled() only
+// ever looks at "Something: value" lines, so it never saw this at all.
+// Same shape bed() already has for a bare "Double" on its own line — try
+// the labelled form first, then a short line that's just this word (plus a
+// little else — "Honeymoon trip"), then anywhere in a longer sentence, with
+// lower confidence since that's a passing mention rather than a statement.
+var OCCASION_WORDS = /\b(?:honeymoon(?:ers?)?|anniversary|birthday|engagement|proposal|celebrat\w*)\b/i;
+function occasion(text){
+  var lab = labelled(text, "occasion");
+  if (lab && lab.value) return lab;
+  var all = lines(text);
+  for (var i = 0; i < all.length; i++){
+    if (all[i].length > 30) continue;                 // a sentence, not a bare line
+    if (OCCASION_WORDS.test(all[i])) return { value: all[i], source: all[i], confident: true };
+  }
+  for (var j = 0; j < all.length; j++){
+    if (OCCASION_WORDS.test(all[j])) return { value: all[j], source: all[j], confident: false };
+  }
+  return null;
+}
+
 function extract(guestInfo, notes){
   var both = [guestInfo || "", notes || ""].join("\n");
   var out = {};
-  ["dietary","medical","occasion"].forEach(function(k){
+  ["dietary","medical"].forEach(function(k){
     var r = labelled(both, k);
     if (r) out[k] = r;
   });
+  var oc = occasion(both); if (oc) out.occasion = oc;
   var bd = bed(both);      if (bd) out.bed = bd;
   var bs = basis(both);    if (bs) out.basis = bs;
   return out;

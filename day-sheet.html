@@ -525,6 +525,11 @@ function basisFor(row, key){
 // guide vehicle option must remain blank and must not be filled in as Self
 // Drive - this will only apply for the Arrivals and Departures."
 //
+// FBA (Full Board and Activities, drinks excluded — FI includes drinks) means
+// the same thing operationally: Mark, 2026-10-05, "when it is FBA then it
+// means the lodge must provide activities so a guide and vehicle need to be
+// allocated... this must be treated the same as FI."
+//
 // The two are not in conflict, which is why bookings really do read "FI/SD":
 // a party can drive themselves between camps and still be fully inclusive once
 // they arrive. So the transfer pickers keep the option; the stay's do not.
@@ -532,7 +537,7 @@ function selfDriveAllowed(row, key){
   var f = SELF_DRIVE_FOR[key];
   if (!f) return false;
   if (f[1] !== "stay") return true;                       // arrival and departure, always
-  return !/\bFI\b/.test(basisFor(row, key));
+  return !/\bFI\b|\bFBA\b/.test(basisFor(row, key));
 }
 
 // Does the booking itself say this party drives themselves? The basis comes
@@ -779,13 +784,16 @@ function cellType(b){
   // Triple) and if they are Fully Inclusive (FI). If you pick up that they are
   // Self Drive - this must be noted in the Arrival/Departure Notes."
   //
-  // So FI is the only basis shown here. Self drive is a movement fact, not a
-  // property of the room, and belongs beside the pickup it replaces — where a
-  // driver will actually look for it. The importer writes it there.
-  if (/\bFI\b/.test(b.booking_basis || "")) {
+  // So FI (and, 2026-10-05, FBA alongside it — "must be treated the same as
+  // FI and must be shown on the type section") are the only basis codes shown
+  // here. Self drive is a movement fact, not a property of the room, and
+  // belongs beside the pickup it replaces — where a driver will actually look
+  // for it. The importer writes it there.
+  ["FI", "FBA"].forEach(function(code){
+    if (!(new RegExp("\\b"+code+"\\b")).test(b.booking_basis || "")) return;
     bits.push('<span class="tag basis'+(x.basis && x.basis.confident === false ? " unsure" : "")
-      + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">FI</span>');
-  }
+      + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">'+code+'</span>');
+  });
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 
