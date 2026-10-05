@@ -157,6 +157,11 @@
   .grp .gt{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#5B5344;font-weight:700;margin:6px 0 0}
   .grp button.add{padding:3px 9px;font-size:12px}
   .chk{font-size:11.5px;color:#6B6455;margin:3px 0 0}
+  .hist{width:100%;border-collapse:collapse;font-size:12.5px}
+  .hist td{padding:5px 6px;border-bottom:1px solid #ECE8DE;vertical-align:top}
+  .hist .hw{width:118px;color:#6B6455;font-size:11.5px;white-space:nowrap}
+  .hist .hw b{color:#232019;font-weight:600}
+  #panel select:disabled,#panel input:disabled,#panel textarea:disabled{background:#F7F5F0;color:#232019;opacity:1}
   .chk.ok{color:#2F6B45;font-weight:600}
   .clashmsg{color:var(--clash);font-size:11.5px;font-weight:600}
   details.when summary{cursor:pointer;color:#6B6455;font-size:11.5px}
@@ -228,9 +233,11 @@ var ROW = 24, DAYW = 92, LANEW = 112;
 var me = null;
 try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
 if (!me) { location.href = "./"; }
-// Safari operations are run from Maun: administrators, and anyone at the
-// Bush Ways Safaris location.
-var allowed = me && (me.is_administrator || (me.locations || []).some(function (l) { return l.name === "Bush Ways Safaris"; }));
+// Access comes from the server, never from the page (D-017): 'edit' for
+// administrators and Tour Master editors, 'view' for view-only, or none.
+// `allowed` means may edit; `canView` means may look.
+var allowed = false, canView = false, level = null;
+function who(){ return "&person_id=" + encodeURIComponent(me && me.id || ""); }
 document.getElementById("whoami").textContent = me ? me.name : "";
 document.getElementById("signOut").onclick = function () {
   sessionStorage.removeItem("bw_signin"); sessionStorage.removeItem("bw_camp"); location.href = "./";
@@ -257,14 +264,26 @@ el("today").onclick = function(){ el("from").value = add(iso(new Date()), -7); l
 
 var data = null;
 function load(){
-  if (!allowed) {
-    el("grid").innerHTML = '<p class="loading">The Tour Master is for safari operations and administrators. <button onclick="location.href=\'./\'">← Back to tools</button></p>';
+  if (level === null) {
+    fetch(FN + "?action=access" + who()).then(function(x){ return x.json(); }).then(function(a){
+      level = a.level || "none"; allowed = level === "edit"; canView = level === "edit" || level === "view";
+      if (!allowed) {
+        // View only: nothing that changes the board is offered.
+        el("sync").style.display = "none";
+        el("whoami").insertAdjacentHTML("afterend", ' <span class="tag p" style="margin-left:6px">View only</span>');
+      }
+      load();
+    }).catch(function(e){ setStatus("Could not check access: " + e.message, true); });
+    return;
+  }
+  if (!canView) {
+    el("grid").innerHTML = '<p class="loading">You do not have access to the Tour Master. <button onclick="location.href=\'./\'">← Back to tools</button></p>';
     return;
   }
   try { sessionStorage.setItem("sb_from", el("from").value); } catch (e) {}
   var r = range();
   setStatus("Loading…");
-  fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to).then(function(x){return x.json();}).then(function(d){
+  fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to + who()).then(function(x){return x.json();}).then(function(d){
     if (d.error) throw new Error(d.error);
     data = d; draw(r);
     setStatus(d.last_synced ? "Last read from ResRequest " + new Date(d.last_synced).toLocaleString() : "Not yet read from ResRequest");
@@ -538,7 +557,7 @@ function moveTo(id, slotId, lane){
 // Reload the board and, if a panel was open, reopen it on the same safari.
 function reload(openId){
   var r = range();
-  fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to).then(function(x){ return x.json(); }).then(function(d){
+  fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to + who()).then(function(x){ return x.json(); }).then(function(d){
     if (d.error) throw new Error(d.error);
     data = d; draw(r);
     if (openId && el("panel").className === "on") openPanel(openId);
@@ -553,7 +572,7 @@ var ROLE = { guide: "Guide", trainee_guide: "Trainee guide", chef: "Chef", camp_
 var opts = null;
 function loadOptions(){
   if (opts) return Promise.resolve(opts);
-  return fetch(FN + "?action=options").then(function(x){ return x.json(); }).then(function(o){ opts = o; return o; });
+  return fetch(FN + "?action=options" + who()).then(function(x){ return x.json(); }).then(function(o){ opts = o; return o; });
 }
 // Guides first for a guide's line, chefs and camp hands first for theirs;
 // everyone else at Bush Ways Safaris after, since people cover.
@@ -649,6 +668,7 @@ function wireCrew(d){
     }).join("");
     el("crewBox").innerHTML = html;
     wireRows();
+    lockIfViewOnly();
     el("crewBox").querySelectorAll("button.add").forEach(function(b){
       b.onclick = function(){
         var k = b.getAttribute("data-group"), g = GROUPS.find(function(x){ return x.key === k; });
@@ -681,6 +701,13 @@ function wireCrew(d){
       reload(d.id);
     }).catch(function(e){ el("crewMsg").className = "err"; el("crewMsg").textContent = "Not saved: " + e.message; });
   };
+}
+
+// View only: every box in the panel shows its value but cannot be changed.
+function lockIfViewOnly(){
+  if (allowed) return;
+  el("panel").querySelectorAll("input, select, textarea").forEach(function(x){ x.disabled = true; });
+  el("panel").querySelectorAll(".alloc .x, button.add").forEach(function(x){ x.style.display = "none"; });
 }
 
 // Night by night: the area from the route, and the campsite a person
@@ -758,6 +785,7 @@ function openPanel(id){
     + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + ' on the busiest night'
     + (d.booked !== d.seats ? '<br><span class="meta">' + d.booked + ' booked in all: some leave before others join</span>' : '') + '</td></tr>'
     + '<tr><th>Status</th><td>' + (d.shelved ? '<span class="tag x">Cancelled on the board</span> everything kept; drag it onto a vehicle or press Put it back to reactivate' : esc(d.status)) + '</td></tr></table>'
+    + '<h3 style="font-size:13px;margin:12px 0 4px">History</h3><div id="histBox"><p class="meta">Loading…</p></div>'
     + notesSection(d)
     + crewSection(d)
     + nightsTable(d)
@@ -766,6 +794,17 @@ function openPanel(id){
     + (live.map(card).join("") || '<p class="meta">None yet.</p>')
     + (other.length ? '<details style="margin-top:10px"><summary style="cursor:pointer;color:#6B6455">Not live in ResRequest (' + other.length + ')</summary>' + other.map(card).join("") + '</details>' : '');
   p.className = "on";
+  // Every change made on this safari, who and when (D-017).
+  fetch(FN + "?action=history&departure_id=" + d.id + who()).then(function(x){ return x.json(); }).then(function(h){
+    if (!el("histBox")) return;
+    el("histBox").innerHTML = (h.changes || []).length
+      ? '<table class="hist">' + h.changes.map(function(c){
+          return '<tr><td class="hw">' + new Date(c.at).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+            + '<br><b>' + esc(c.by) + '</b></td><td>' + esc(c.summary) + '</td></tr>';
+        }).join("") + '</table>'
+      : '<p class="meta">No changes made on the Tour Master yet. Changes from ResRequest are not listed here.</p>';
+  }).catch(function(){ if (el("histBox")) el("histBox").innerHTML = '<p class="err">Could not load the history.</p>'; });
+  lockIfViewOnly();
   el("closePanel").onclick = function(){ p.className = ""; };
   if (el("mvGo")) el("mvGo").onclick = function(){ moveTo(d.id, el("mvSlot").value, +el("mvLane").value); };
   if (el("mvAuto")) el("mvAuto").onclick = function(){
@@ -808,7 +847,7 @@ el("sync").onclick = function(){
   var btn = el("sync");
   btn.disabled = true;
   setStatus("Reading changes from ResRequest…");
-  fetch(FN + "?action=sync_delta", { method: "POST" }).then(function(x){ return x.json(); }).then(function(res){
+  fetch(FN + "?action=sync_delta" + who(), { method: "POST" }).then(function(x){ return x.json(); }).then(function(res){
     if (res.error) throw new Error(res.error);
     btn.disabled = false;
     setStatus("Updated: " + res.safari_bookings + " safari booking" + (res.safari_bookings === 1 ? "" : "s") + " changed, "

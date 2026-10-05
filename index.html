@@ -153,7 +153,7 @@
   <div id="toolBox" class="signin-box" hidden>
     <div class="title">Choose a tool</div>
     <button onclick="pickTool('maintenance')">Maintenance</button>
-    <button onclick="pickTool('day-sheet')">Day Sheet</button>
+    <button id="daySheetBtn" onclick="pickTool('day-sheet')">Day Sheet</button>
     <!-- safari-ops (root D-029): safari operations in Maun and administrators only. -->
     <button id="safariBoardBtn" onclick="pickTool('safari-board')" hidden>Tour Master</button>
     <div id="campPicker" hidden>
@@ -194,8 +194,19 @@
   // skip the picker entirely and land exactly where they always have —
   // Day Sheet was never theirs to see, so showing them a choice with
   // one dead entry would be worse than no choice at all.
+  // Tour Master access is a grant, not a flag (root D-030; safari-ops
+  // D-017): some who have it are not managers, some managers do not. Asked
+  // of the Tour Master's own server, which is the only judge of it.
+  var TM_FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-board";
   function route(me) {
-    if (!(me.is_manager || me.is_administrator)) {
+    fetch(TM_FN + "?action=access&person_id=" + encodeURIComponent(me.id))
+      .then(function (r) { return r.json(); })
+      .then(function (a) { me.tour_master = a.level || null; })
+      .catch(function () { me.tour_master = null; })
+      .then(function () { routeKnown(me); });
+  }
+  function routeKnown(me) {
+    if (!(me.is_manager || me.is_administrator) && !me.tour_master) {
       // Exactly the routing this page always did — untouched for
       // anyone who doesn't even see the tool picker below.
       if (me.locations && me.locations.length > 1) { location.href = "./base-dashboard.html"; return; }
@@ -210,8 +221,10 @@
     document.getElementById("loadingMsg").hidden = true;
     document.getElementById("toolBox").hidden = false;
     window._meForPicker = me;
-    document.getElementById("safariBoardBtn").hidden = !(me.is_administrator ||
-      (me.locations || []).some(function (l) { return l.name === "Bush Ways Safaris"; }));
+    document.getElementById("safariBoardBtn").hidden = !me.tour_master;
+    // The Day Sheet stays managers' and administrators' (D-026); someone
+    // here only for the Tour Master does not see it.
+    document.getElementById("daySheetBtn").hidden = !(me.is_manager || me.is_administrator);
   }
 
   var multiCamp = null; // set when pickTool needs the camp dropdown
