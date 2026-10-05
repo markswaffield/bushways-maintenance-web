@@ -53,7 +53,8 @@
   .pinned{position:sticky;top:0;z-index:20;background:var(--bg);
     padding:12px 14px 0;margin:-12px -14px 10px;
     box-shadow:0 1px 0 var(--line), 0 6px 10px -8px rgba(18,45,49,.25)}
-  .pinned .whobar{margin-bottom:10px}
+  .pinned .whobar{margin-bottom:8px}
+  .pinned .toolbar{margin-bottom:10px}
 
   /* Every clickable navigation action is a real, padded button — never a
      bare link and never text styled to look like one. Root CLAUDE.md. */
@@ -148,34 +149,40 @@
   [hidden]{display:none!important}
 </style></head><body>
 
+<!-- Everything that must stay reachable while you scroll a month of nights:
+     the title, who is signed in and the way out, and the buttons that do
+     the work. Mark, 2026-10-05: "i would also like the title buttons-
+     Update from Res Req, Fill Empty Rooms etc to remain fixed at the top. I
+     would like the "Day Sheet" Button to move into this block."
+     syncPinned() measures the whole band, so adding or wrapping a button
+     adjusts the grid below it on its own. -->
 <div class="pinned" id="pinned">
   <h1 id="campTitle">Room Allocation</h1>
   <div class="whobar">
     <span>👤 <b id="whoami"></b></span>
     <span class="whobar-btns">
-      <button class="ghost" onclick="location.href='./day-sheet.html'">← Day Sheet</button>
       <button class="ghost" onclick="location.href='./'">← Change camp / tool</button>
       <button id="signOut">Sign out</button>
     </span>
   </div>
+  <div class="toolbar">
+    <div><label for="from">From</label><input type="date" id="from"></div>
+    <div><label for="nights">Nights shown</label>
+      <select id="nights">
+        <option value="7">7</option>
+        <option value="14" selected>14</option>
+        <option value="21">21</option>
+        <option value="31">31</option>
+      </select></div>
+    <div><button id="syncBtn">Update from ResRequest</button></div>
+    <div><button id="fillBtn" class="ghost">Fill empty rooms</button></div>
+    <div><button id="reload" class="ghost">Refresh</button></div>
+    <div><button id="print" class="ghost">Print</button></div>
+    <div><button class="ghost" id="daySheetBtn">← Day Sheet</button></div>
+    <div style="align-self:center"><span class="status" id="status"></span></div>
+  </div>
 </div>
 <p class="sub">Rooms down, nights across, holding rows underneath on the same dates. Drag a party to another room, or click to pick up and click to put down.</p>
-
-<div class="toolbar">
-  <div><label for="from">From</label><input type="date" id="from"></div>
-  <div><label for="nights">Nights shown</label>
-    <select id="nights">
-      <option value="7">7</option>
-      <option value="14" selected>14</option>
-      <option value="21">21</option>
-      <option value="31">31</option>
-    </select></div>
-  <div><button id="syncBtn">Update from ResRequest</button></div>
-  <div><button id="fillBtn" class="ghost">Fill empty rooms</button></div>
-  <div><button id="reload" class="ghost">Refresh</button></div>
-  <div><button id="print" class="ghost">Print</button></div>
-  <div style="align-self:center"><span class="status" id="status"></span></div>
-</div>
 
 <div id="app"><p class="loading">Loading…</p></div>
 
@@ -568,6 +575,7 @@ el("fillBtn").onclick = function(){
     .catch(function(e){ btn.disabled = false; setStatus("That did not run: " + e.message, "bad"); });
 };
 
+el("daySheetBtn").onclick = function(){ location.href = "./day-sheet.html"; };
 el("reload").onclick = load;
 el("print").onclick = function(){ window.print(); };
 el("from").onchange = load;
