@@ -40,8 +40,20 @@
   *{box-sizing:border-box}
   body{margin:0;padding:12px 14px 40px;background:var(--bg);color:var(--ink);
     font:15px/1.45 "Open Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-  h1{margin:0 0 2px;font-size:22px;letter-spacing:.01em}
+  h1{margin:0 0 7px;font-size:22px;letter-spacing:.01em}
   p.sub{margin:0 0 10px;color:var(--ink-soft);font-size:13.5px}
+
+  /* The title and the signed-in bar stay put — Mark, 2026-10-05: "the
+     heading and the next block with name and buttons to go back or change
+     camp etc - this must be pinned and remain visible at the top". The
+     negative margins pull it out to the full window width so the band
+     reads as a header rather than a floating card, and --pin carries its
+     measured height down to the grid's own sticky date row, which has to
+     sit directly underneath it rather than behind it. */
+  .pinned{position:sticky;top:0;z-index:20;background:var(--bg);
+    padding:12px 14px 0;margin:-12px -14px 10px;
+    box-shadow:0 1px 0 var(--line), 0 6px 10px -8px rgba(18,45,49,.25)}
+  .pinned .whobar{margin-bottom:10px}
 
   /* Every clickable navigation action is a real, padded button — never a
      bare link and never text styled to look like one. Root CLAUDE.md. */
@@ -70,7 +82,15 @@
   .status.bad{color:#8C2F2F;font-weight:600}
   .status.good{color:#2F6B3A;font-weight:600}
 
-  .wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+  /* The grid scrolls INSIDE this box, which is what makes the date row and
+     the room column stay put. `overflow-x:auto` alone already makes this a
+     scroll container on both axes (a visible axis computes to auto when the
+     other is not visible), so a sticky thead inside it sticks to this box
+     rather than to the window — and with no height limit it had no room to
+     stick at all and the dates scrolled away. --wrapmax is measured so the
+     box ends at the bottom of the window. */
+  .wrap{overflow:auto;max-height:var(--wrapmax,70vh);background:var(--card);
+    border:1px solid var(--line);border-radius:10px}
   table{border-collapse:collapse;width:100%;font-size:13px}
   th,td{border:1px solid var(--line);padding:0;text-align:left;vertical-align:middle}
   thead th{position:sticky;top:0;z-index:3;background:#EDF1F0;padding:6px 7px;
@@ -107,6 +127,7 @@
   tr.holdrow td.night{background:#FCFAF5}
   tr.holdrow td.night.drop{background:#F2E6CE;outline:2px dashed var(--gold);outline-offset:-3px}
   tr.holdrow .blk{background:var(--gold-soft);border-color:var(--gold)}
+  tr.holdrow .blk.unmatched{background:#F0E6F2;border-color:#8A5E96;border-style:dashed}
   tr.holdrow .blk.gone{background:var(--dead);border-color:var(--dead-line)}
   tr.holdadd td{background:#FCFAF5;padding:4px 9px;border-top:0}
   tr.holdadd button{padding:4px 10px;font-size:11.5px;font-weight:600}
@@ -119,24 +140,26 @@
   @media print{
     body{background:#fff;padding:0}
     .toolbar,.whobar,.legend{display:none}
-    .wrap{border:0;overflow:visible}
+    .pinned{position:static;margin:0;padding:0;box-shadow:none}
+    .wrap{border:0;overflow:visible;max-height:none}
     thead th{position:static}
     th.roomcol,td.roomcol{position:static}
   }
   [hidden]{display:none!important}
 </style></head><body>
 
-<h1 id="campTitle">Room Allocation</h1>
-<p class="sub">Rooms down, nights across, holding rows underneath on the same dates. Drag a party to another room, or click to pick up and click to put down.</p>
-
-<div class="whobar">
-  <span>👤 <b id="whoami"></b></span>
-  <span class="whobar-btns">
-    <button class="ghost" onclick="location.href='./day-sheet.html'">← Day Sheet</button>
-    <button class="ghost" onclick="location.href='./'">← Change camp / tool</button>
-    <button id="signOut">Sign out</button>
-  </span>
+<div class="pinned" id="pinned">
+  <h1 id="campTitle">Room Allocation</h1>
+  <div class="whobar">
+    <span>👤 <b id="whoami"></b></span>
+    <span class="whobar-btns">
+      <button class="ghost" onclick="location.href='./day-sheet.html'">← Day Sheet</button>
+      <button class="ghost" onclick="location.href='./'">← Change camp / tool</button>
+      <button id="signOut">Sign out</button>
+    </span>
+  </div>
 </div>
+<p class="sub">Rooms down, nights across, holding rows underneath on the same dates. Drag a party to another room, or click to pick up and click to put down.</p>
 
 <div class="toolbar">
   <div><label for="from">From</label><input type="date" id="from"></div>
@@ -293,6 +316,7 @@ function draw(){
 
   el("app").innerHTML = h;
   wire();
+  syncPinned();
 }
 
 // How many holding rows a block shows. Mark asked for five to begin with,
@@ -366,6 +390,7 @@ function blockHtml(b, inHold){
   else cls += b.auto ? "" : " hand";
   if (b.off_type) cls += " offtype";
   if (b.cancelled) cls += " gone";
+  if (b.unmatched) cls += " unmatched";
   if (picked && ((picked.stay_id && picked.stay_id === b.stay_id)
       || (!picked.stay_id && picked.booking_id === b.booking_id && inHold))) cls += " picked";
 
@@ -373,6 +398,10 @@ function blockHtml(b, inHold){
   if (b.medical) flags += '<span class="flag" title="' + esc(b.medical) + '">⚕</span>';
   if (b.dietary) flags += '<span class="flag" title="' + esc(b.dietary) + '">🍽</span>';
   if (b.occasion) flags += '<span class="flag" title="' + esc(b.occasion) + '">★</span>';
+  // No room type on the booking, so the board has no pool to choose from.
+  // Marked rather than filed into a block of its own, so every lodge's
+  // holding rows read the same way.
+  if (b.unmatched) flags += '<span class="flag" title="No room type on this booking — drag them wherever they should go">?</span>';
 
   var sub = [];
   if (b.bed_type) sub.push(b.bed_type);
@@ -543,6 +572,29 @@ el("reload").onclick = load;
 el("print").onclick = function(){ window.print(); };
 el("from").onchange = load;
 el("nights").onchange = load;
+
+// The grid's date row is sticky too, so it has to know how tall the pinned
+// header actually is — guessing a number here is how a header ends up
+// covering the dates. Measured, and re-measured whenever the window changes
+// shape, because the buttons wrap onto a second line on a narrow screen.
+function syncPinned(){
+  var p = el("pinned");
+  if (p) document.documentElement.style.setProperty("--pin", p.offsetHeight + "px");
+
+  // Give the grid box whatever height is left below the header, so it ends
+  // at the bottom of the window and scrolls internally. That is what keeps
+  // the date row and the room column visible while you scroll down to the
+  // holding rows — which is the whole point of the holding rows sitting in
+  // the same date block.
+  var wrap = document.querySelector(".wrap");
+  if (!wrap) return;
+  var docTop = wrap.getBoundingClientRect().top + (window.scrollY || 0);
+  var avail = window.innerHeight - docTop - 24;
+  document.documentElement.style.setProperty("--wrapmax", Math.max(avail, 260) + "px");
+}
+window.addEventListener("resize", syncPinned);
+window.addEventListener("orientationchange", syncPinned);
+syncPinned();
 
 el("from").value = today();
 load();
