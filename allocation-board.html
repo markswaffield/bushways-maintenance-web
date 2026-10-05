@@ -35,6 +35,12 @@
     --auto:#EAF2F4; --auto-line:#9FBEC4;
     --hand:#E7F0E4; --hand-line:#7FA373;
     --warn:#FBECD8; --warn-line:#C98A2E;
+    /* Bronze is the brand accent (bushways/brand/design-system.md: Bronze
+       #a57452, "impact labels, decorative elements, hover states"). Filled
+       at that exact value, white text on it is only 3.9:1, which is under
+       AA for text this size — so the fill is a darker bronze at 5.5:1 and
+       #a57452 itself stays the lighter relative it is meant to be. */
+    --bronze:#8D5E3C; --bronze-line:#6F4A2E;
     --dead:#F2E6E6; --dead-line:#B98A8A;
   }
   *{box-sizing:border-box}
@@ -61,6 +67,15 @@
   button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--ink);
     background:var(--ink);color:#fff;padding:9px 14px;font-weight:600}
   button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
+  /* The way back to the Day Sheet, which is the one button on this page a
+     manager reaches for constantly — the two screens are used together all
+     day. Mark, 2026-10-05: "i would like to highlight the Day Sheet Button
+     a bit more." Filled in the brand gold rather than the dark ink, so it
+     stands out from the four plain buttons beside it without competing with
+     Update from ResRequest, which is the action that actually does work
+     here. */
+  button.key{background:var(--bronze);color:#fff;border-color:var(--bronze-line);
+    font-weight:700;box-shadow:0 1px 2px rgba(18,45,49,.2)}
   button:disabled{opacity:.45;cursor:default}
 
   .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
@@ -178,7 +193,7 @@
     <div><button id="fillBtn" class="ghost">Fill empty rooms</button></div>
     <div><button id="reload" class="ghost">Refresh</button></div>
     <div><button id="print" class="ghost">Print</button></div>
-    <div><button class="ghost" id="daySheetBtn">← Day Sheet</button></div>
+    <div><button class="key" id="daySheetBtn">← Day Sheet</button></div>
     <div style="align-self:center"><span class="status" id="status"></span></div>
   </div>
 </div>
