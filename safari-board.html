@@ -66,6 +66,10 @@
       padding:6px 4px;text-align:center;border-right:1px solid #2E4B4F;white-space:nowrap;height:30px}
   .hd.corner{left:0;z-index:7}
   .hd.open{background:#5B5344}
+  .hd.cxl{background:#6E6E6E}
+  .cell.cxlcol{background:#F4F4F4}
+  .nmark{font-size:11px;margin-left:3px}
+  #notesBox textarea{width:100%;min-height:90px;font:inherit;font-size:13px;padding:7px;border:1px solid var(--line);border-radius:6px}
   .day{position:sticky;left:0;z-index:4;background:#fff;border-bottom:1px solid #ECE8DE;border-right:1px solid var(--line);
        padding:0 6px;font-size:11.5px;white-space:nowrap;display:flex;align-items:center;gap:4px}
   .day.we{background:var(--weekend)}
@@ -206,6 +210,7 @@
   <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with seats</span>
   <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
   <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
+  <span><i style="background:#E9E9E9;border-color:#9A9A9A"></i>Cancelled on the board</span>
 </div>
 
 <div id="wrap"><div id="grid"><p class="loading">Loading…</p></div></div>
@@ -290,6 +295,7 @@ function lookOf(d){
   // 2026-10-04).
   return lk;
 }
+var GREY = { hb: "#BFBFBF", hf: "#333333", bb: "#E9E9E9", bf: "#555555", bd: "#9A9A9A" };
 function vars(lk){ return "--hb:" + lk.hb + ";--hf:" + lk.hf + ";--bb:" + lk.bb + ";--bf:" + lk.bf + ";--bd:" + lk.bd + ";"; }
 (function(){
   var l = document.getElementById("legendSafaris");
@@ -306,7 +312,10 @@ function label(d){
 
 function draw(r){
   var nDays = diff(r.from, r.to) + 1;
-  var slots = data.slots;
+  // Vehicles (two columns each), then Open, then the Cancelled columns (one
+  // each) at the end of the sheet (Mark, 2026-10-05; D-013).
+  var slots = data.slots.filter(function(x){ return x.kind !== "cancelled"; });
+  var cslots = data.slots.filter(function(x){ return x.kind === "cancelled"; });
   var deps = data.departures;
 
   // Open columns: departures with no slot, packed into as few lanes as fit.
@@ -319,7 +328,9 @@ function draw(r){
   });
   var nOpen = Math.max(openLanes.length, 1);
 
-  var cols = DAYW + "px repeat(" + (slots.length * 2 + nOpen) + "," + LANEW + "px)";
+  layout = { v: slots.length, nOpen: nOpen, c: cslots };
+  var nCols = slots.length * 2 + nOpen + cslots.length;
+  var cols = DAYW + "px repeat(" + nCols + "," + LANEW + "px)";
   var g = el("grid");
   g.style.gridTemplateColumns = cols;
   g.style.gridTemplateRows = "30px repeat(" + nDays + "," + ROW + "px)";
@@ -330,14 +341,18 @@ function draw(r){
     h.push('<div class="hd slot" style="grid-row:1;grid-column:' + (2 + i * 2) + ' / span 2">' + esc(s.label) + '</div>');
   });
   h.push('<div class="hd open" style="grid-row:1;grid-column:' + (2 + slots.length * 2) + ' / span ' + nOpen + '">Open — no guests yet</div>');
+  cslots.forEach(function(x, i){
+    h.push('<div class="hd cxl" style="grid-row:1;grid-column:' + (2 + slots.length * 2 + nOpen + i) + '">Cancelled</div>');
+  });
 
   var today = iso(new Date());
   for (var k = 0; k < nDays; k++) {
     var day = add(r.from, k), dt = parse(day), row = k + 2;
     var cls = (dt.getDay() === 0 || dt.getDay() === 6 ? " we" : "") + (day === today ? " today" : "") + (dt.getDate() === 1 ? " m1" : "");
     h.push('<div class="day' + cls + '" style="grid-row:' + row + ';grid-column:1">' + nice(day) + '</div>');
-    for (var c = 0; c < slots.length * 2 + nOpen; c++) {
-      var cc = "cell" + (c % 2 === 1 && c < slots.length * 2 ? " slotend" : "") + (day === today ? " today" : (dt.getDay() === 0 || dt.getDay() === 6 ? " we" : "")) + (dt.getDate() === 1 ? " m1" : "");
+    for (var c = 0; c < nCols; c++) {
+      var cc = "cell" + (c % 2 === 1 && c < slots.length * 2 ? " slotend" : "") + (c === slots.length * 2 + nOpen - 1 ? " slotend" : "")
+        + (c >= slots.length * 2 + nOpen ? " cxlcol" : "") + (day === today ? " today" : (dt.getDay() === 0 || dt.getDay() === 6 ? " we" : "")) + (dt.getDate() === 1 ? " m1" : "");
       h.push('<div class="' + cc + '" style="grid-row:' + row + ';grid-column:' + (c + 2) + '"></div>');
     }
   }
@@ -345,22 +360,26 @@ function draw(r){
   // Clashes: two departures in the same slot and column on the same night,
   // or a person, vehicle or trailer on this safari and another at once.
   var slotIdx = {}; slots.forEach(function(s, i){ slotIdx[s.id] = i; });
+  var cIdx = {}; cslots.forEach(function(s, i){ cIdx[s.id] = i; });
   deps.forEach(function(a){
-    a._clash = a.status !== "cancelled" && a.slot_id && deps.some(function(b){
+    a._clash = a.status !== "cancelled" && !a.shelved && a.slot_id && deps.some(function(b){
       return b !== a && b.status !== "cancelled" && b.slot_id === a.slot_id && b.lane === a.lane
         && a.start_date < b.end_date && b.start_date < a.end_date;
     });
-    a._crewClash = a.crew.some(function(c){ return c.clash; })
+    a._crewClash = !a.shelved && a.crew.some(function(c){ return c.clash; })
       || a.vehicles.some(function(v){ return v.clash || v.trailer_clash || v.driver_clash; });
   });
 
   deps.forEach(function(d){
     var col;
     if (d.slot_id && slotIdx[d.slot_id] != null) col = 2 + slotIdx[d.slot_id] * 2 + ((d.lane || 1) - 1);
+    else if (d.slot_id && cIdx[d.slot_id] != null) col = 2 + slots.length * 2 + nOpen + cIdx[d.slot_id];
     else if (d._openLane != null) col = 2 + slots.length * 2 + d._openLane;
     else return;
     var live = d.has_guests && d.status !== "cancelled";
-    var lk = live ? lookOf(d) : null;
+    // Moved to the Cancelled columns: everything kept, drawn grey.
+    var lk = d.shelved ? GREY : live ? lookOf(d) : null;
+    if (d.shelved) live = true;
     var fam = live ? "sx" : "open";
     var sv = lk ? vars(lk) : "";
 
@@ -368,6 +387,7 @@ function draw(r){
     var seatsTxt = d.seats + (d.max_seats ? "/" + d.max_seats : "");
     var title = esc(label(d) + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats"
       + (d.mix.length > 1 ? " · " + mixText(d) : "")
+      + (d.shelved ? " · CANCELLED on the board" : "") + (d.notes ? " · notes: " + d.notes : "")
       + (d.placed_by_person ? " · placed by hand" : "") + (allowed ? " · drag to move" : ""));
     var drag = allowed ? ' draggable="true"' : "";
 
@@ -407,7 +427,7 @@ function draw(r){
       var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
       if (ln.code) {
         h.push('<button class="blk night ' + fam + ' head" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
-          + '<b>' + esc(label(d)) + '</b></button>');
+          + '<b>' + esc(label(d)) + '</b>' + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
       } else if (ln.pre) {
         h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
           + '<span class="s' + seatsCls + '">' + seatsTxt + ' seats</span><span class="pn">pre night</span></button>');
@@ -458,12 +478,16 @@ function draw(r){
 // Drag a safari to another column. The column under the pointer decides
 // the slot and which of its two columns; dropping in the Open columns does
 // nothing (a trip with guests belongs on a vehicle).
-var dragId = null, hint = null;
+var dragId = null, hint = null, layout = { v: 0, nOpen: 1, c: [] };
 function columnAt(e){
   var g = el("grid"), x = e.clientX - g.getBoundingClientRect().left - DAYW;
   var c = Math.floor(x / LANEW);
-  if (c < 0 || c >= data.slots.length * 2) return null;
-  return { slot: data.slots[Math.floor(c / 2)], lane: c % 2 + 1, col: c + 2 };
+  var vs = data.slots.filter(function(x){ return x.kind !== "cancelled"; });
+  if (c < 0) return null;
+  if (c < layout.v * 2) return { slot: vs[Math.floor(c / 2)], lane: c % 2 + 1, col: c + 2 };
+  var k = c - layout.v * 2 - layout.nOpen;
+  if (k >= 0 && k < layout.c.length) return { slot: layout.c[k], lane: 1, col: c + 2 };
+  return null;
 }
 function endDrag(){
   dragId = null; el("grid").classList.remove("dropping");
@@ -584,6 +608,15 @@ var GROUPS = [
   { key: "translator", title: "Translators", add: "+ Add translator" },
   { key: "trainee_guide", title: "Trainee guides", add: "+ Add trainee guide" },
 ];
+// Additional notes (D-014): what is not recorded in ResRequest.
+function notesSection(d){
+  return '<h3 style="font-size:13px;margin:12px 0 4px">Additional notes</h3><div id="notesBox">'
+    + (allowed ? '<textarea id="ntText" placeholder="Anything not recorded in ResRequest">' + esc(d.notes || "") + '</textarea>'
+      + '<div class="edit"><button id="ntSave">Save notes</button> <span id="ntMsg"></span>'
+      + (d.notes_updated_at ? '<span class="meta">Last saved ' + new Date(d.notes_updated_at).toLocaleString() + '</span>' : '') + '</div>'
+      : '<p style="white-space:pre-wrap">' + esc(d.notes || "None.") + '</p>') + '</div>';
+}
+
 function crewSection(d){
   return '<h3 style="font-size:13px;margin:12px 0 2px">Crew and vehicles</h3>'
     + (d.two_vehicles ? '<p class="meta" style="margin:0 0 4px">Premium: the guide\'s game-drive vehicle and the chef\'s back-up. The back-up does not take a slot on the board.</p>' : '')
@@ -714,11 +747,13 @@ function openPanel(id){
     + (allowed ? '<div class="edit"><select id="mvSlot">' + data.slots.map(function(x){ return '<option value="' + x.id + '"' + (x.id === d.slot_id ? " selected" : "") + '>' + esc(x.label) + '</option>'; }).join("")
       + '</select><select id="mvLane"><option value="1"' + ((d.lane || 1) === 1 ? " selected" : "") + '>column 1</option><option value="2"' + (d.lane === 2 ? " selected" : "") + '>column 2</option></select>'
       + '<button id="mvGo">Move</button>'
-      + (d.placed_by_person ? '<button class="ghost" id="mvAuto">Let the tool place it</button>' : '') + '</div>' : '')
+      + (d.placed_by_person && !d.shelved ? '<button class="ghost" id="mvAuto">Let the tool place it</button>' : '')
+      + (!d.shelved ? '<button class="ghost" id="mvCancel">Move to Cancelled</button>' : '<button id="mvAuto">Put it back on the board</button>') + '</div>' : '')
     + '</td></tr>'
     + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + ' on the busiest night'
     + (d.booked !== d.seats ? '<br><span class="meta">' + d.booked + ' booked in all: some leave before others join</span>' : '') + '</td></tr>'
-    + '<tr><th>Status</th><td>' + esc(d.status) + '</td></tr></table>'
+    + '<tr><th>Status</th><td>' + (d.shelved ? '<span class="tag x">Cancelled on the board</span> everything kept; drag it onto a vehicle or press Put it back to reactivate' : esc(d.status)) + '</td></tr></table>'
+    + notesSection(d)
     + crewSection(d)
     + nightsTable(d)
     + (master ? '<h3 style="font-size:13px;margin:12px 0 6px">Bush Ways master booking</h3>' + card(master) : '')
@@ -729,11 +764,26 @@ function openPanel(id){
   el("closePanel").onclick = function(){ p.className = ""; };
   if (el("mvGo")) el("mvGo").onclick = function(){ moveTo(d.id, el("mvSlot").value, +el("mvLane").value); };
   if (el("mvAuto")) el("mvAuto").onclick = function(){
+    // Also "Put it back on the board": the tool places it on a free vehicle.
     setStatus("Handing " + label(d) + " back to the tool…");
     post("release", { departure_id: d.id }).then(function(){ setStatus(label(d) + " placed by the tool again."); reload(d.id); })
       .catch(function(e){ setStatus("Could not: " + e.message, true); });
   };
   wireCrew(d);
+  if (el("ntSave")) el("ntSave").onclick = function(){
+    el("ntMsg").className = ""; el("ntMsg").textContent = "Saving…";
+    post("notes", { departure_id: d.id, notes: el("ntText").value }).then(function(){
+      el("ntMsg").className = "saved"; el("ntMsg").textContent = "Saved."; reload(d.id);
+    }).catch(function(e){ el("ntMsg").className = "err"; el("ntMsg").textContent = "Not saved: " + e.message; });
+  };
+  // Move to the first Cancelled column free for these dates.
+  if (el("mvCancel")) el("mvCancel").onclick = function(){
+    var cs = data.slots.filter(function(x){ return x.kind === "cancelled"; });
+    var free = cs.find(function(c){
+      return !data.departures.some(function(o){ return o !== d && o.slot_id === c.id && o.start_date < d.end_date && d.start_date < o.end_date; });
+    }) || cs[0];
+    moveTo(d.id, free.id, 1);
+  };
   if (el("csSave")) el("csSave").onclick = function(){
     var days = [];
     p.querySelectorAll("input[data-date]").forEach(function(i){ days.push({ date: i.getAttribute("data-date"), campsite: i.value }); });
