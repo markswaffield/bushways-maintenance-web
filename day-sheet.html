@@ -784,16 +784,32 @@ function cellType(b){
   // Triple) and if they are Fully Inclusive (FI). If you pick up that they are
   // Self Drive - this must be noted in the Arrival/Departure Notes."
   //
-  // So FI (and, 2026-10-05, FBA alongside it — "must be treated the same as
-  // FI and must be shown on the type section") are the only basis codes shown
-  // here. Self drive is a movement fact, not a property of the room, and
-  // belongs beside the pickup it replaces — where a driver will actually look
-  // for it. The importer writes it there.
-  ["FI", "FBA"].forEach(function(code){
+  // Widened twice since: FBA alongside FI, 2026-10-05 ("must be treated the
+  // same as FI and must be shown on the type section"); then DBB and FB the
+  // same day, once Konig x4/Camino x4 turned out to be real split-rate
+  // bookings rather than a sync bug — "Konig and Camino are booked under
+  // different rates for the 2 days. 1 days is DBB and one day is FBA... I
+  // think we can change the rule and put DBB, FB and FBA into the type."
+  // Self drive itself is still never shown here — a movement fact, not a
+  // property of the room, and belongs beside the pickup it replaces, where a
+  // driver will actually look for it. The importer writes it there.
+  ["FI", "FBA", "FB", "DBB"].forEach(function(code){
     if (!(new RegExp("\\b"+code+"\\b")).test(b.booking_basis || "")) return;
     bits.push('<span class="tag basis'+(x.basis && x.basis.confident === false ? " unsure" : "")
       + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">'+code+'</span>');
   });
+  // The structured room type ResRequest actually holds the booking against
+  // (room_type_needed) — not a free-text guess, so no extraction needed —
+  // shown only when it's one worth a manager noticing. Mark, 2026-10-05:
+  // "Also if a FAM or Interleading room has been specifically been asked
+  // for." Standard/Meru Tent/Pilot-Guide say nothing a manager doesn't
+  // already expect, so they stay out of this column.
+  if (/family/i.test(b.room_type_needed || "")) {
+    bits.push('<span class="tag" title="Room type requested: '+esc(b.room_type_needed)+'">FAM</span>');
+  }
+  if (/inter-?leading/i.test(b.room_type_needed || "")) {
+    bits.push('<span class="tag" title="Room type requested: '+esc(b.room_type_needed)+'">Interleading</span>');
+  }
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 

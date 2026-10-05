@@ -216,9 +216,20 @@ function bed(text){
 // sometimes used here [Khwai] and for BRC... must be treated the same
 // as FI." Same meaning for the day sheet either way: the camp provides
 // the activities, so a real guide and vehicle are needed, not Self Drive.
+// FB — Mark, 2026-10-05, after Konig x4/Camino x4 turned out to be real,
+// not a sync bug ("Konig and Camino are booked under different rates for
+// the 2 days. 1 days is DBB and one day is FBA"): "I think we can change
+// the rule and put DBB, FB and FBA into the type." Full Board without
+// Activities — unlike FI/FBA, FB alone does not mean the camp is running
+// the day, so it stays out of selfDriveAllowed() below. The negative
+// lookahead keeps a genuine FBA line from also matching FB — "full board"
+// is a substring of "full board and activities", and basis() joins every
+// code that matches into one value, so an unguarded FB would show "FB/FBA"
+// on an FBA booking rather than just "FBA".
 var BASES = [
   { code:"FI",  re:/fully\s*inclusive|\bF\.?I\.?\b/i },
   { code:"FBA", re:/full\s*board\s*(?:and|&)\s*activit\w*|\bFBA\b/i },
+  { code:"FB",  re:/full\s*board(?!\s*(?:and|&)\s*activit\w*)|\bF\.?B\.?\b/i },
   { code:"SD",  re:/self[\s-]*driv\w*/i },
   { code:"DBB", re:/\bDBB\b|dinner,?\s*bed\s*(?:&|and)\s*breakfast/i },
   { code:"B&B", re:/\bB\s*&\s*B\b|bed\s*(?:&|and)\s*breakfast/i }
