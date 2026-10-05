@@ -126,6 +126,8 @@
   button{width:100%;margin-top:10px;padding:13px 18px;font-size:16px;font-weight:600;
          border:1px solid #43594A;border-radius:8px;background:#43594A;color:#fff;cursor:pointer}
   button.secondary{background:#fff;border:1px solid #C9C2AC;color:#5B5344;font-weight:400}
+  button.signout{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620}
+  .pickwho{margin:18px 0 0;padding-top:12px;border-top:1px solid #E6E0D0;font-size:13px;color:#5B5344}
   .err{color:#A8502F;font-size:12.5px;margin:8px 0 0}
   .loading{color:#D8D2C4;font-size:14px;text-align:center;margin-top:20px}
   [hidden]{display:none!important}
@@ -162,6 +164,11 @@
       <button onclick="goToCamp()">Go</button>
       <button class="secondary" onclick="document.getElementById('campPicker').hidden = true">← Back</button>
     </div>
+    <!-- Mark, 2026-10-05: "if you are on the Bush Ways Dashboard - there is
+         no sign out option". Who is signed in, and a real padded Sign out,
+         shaded the way Sign out is on every other page. -->
+    <p class="pickwho">Signed in as <b id="pickWho"></b></p>
+    <button class="signout" onclick="signOutHere()">Sign out</button>
   </div>
 
   <p class="loading" id="loadingMsg">Loading…</p>
@@ -220,12 +227,20 @@
     document.getElementById("signinBox").hidden = true;
     document.getElementById("loadingMsg").hidden = true;
     document.getElementById("toolBox").hidden = false;
+    document.getElementById("pickWho").textContent = me.name || "";
     window._meForPicker = me;
     document.getElementById("safariBoardBtn").hidden = !me.tour_master;
     // The Day Sheet stays managers' and administrators' (D-026); someone
     // here only for the Tour Master does not see it.
     document.getElementById("daySheetBtn").hidden = !(me.is_manager || me.is_administrator);
   }
+
+  // Back to the sign-in screen, as every other page's Sign out does.
+  window.signOutHere = function () {
+    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_camp");
+    location.href = "./";
+  };
 
   var multiCamp = null; // set when pickTool needs the camp dropdown
   window.pickTool = function (tool) {
