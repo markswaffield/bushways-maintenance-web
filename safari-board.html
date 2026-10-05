@@ -2,9 +2,11 @@
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#122d31">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
-<title>Safari Board</title>
+<title>Tour Master</title>
 <!--
-  The Safari Board — tools/safari-ops/. Replaces the Tour Master workbook.
+  The Tour Master — tools/safari-ops/. Replaces the Tour Master workbook and
+  takes its name (Mark, 2026-10-05). Called the Safari Board in the code and
+  docs; the file name and URL stay safari-board.html so no link breaks.
 
   Laid out like the Tour Master on purpose (Mark, 2026-10-04): days down
   the side, the vehicle slots across the top, two columns per slot so one
@@ -187,7 +189,7 @@
 </style>
 </head><body>
 
-<h1>Safari Board</h1>
+<h1>Tour Master</h1>
 <p class="sub">Every safari departure, on its vehicle slot, read from ResRequest. Drag a safari to move it; click it for its bookings and campsites.</p>
 <div class="whobar">
   <span>👤 <b id="whoami"></b></span>
@@ -256,7 +258,7 @@ el("today").onclick = function(){ el("from").value = add(iso(new Date()), -7); l
 var data = null;
 function load(){
   if (!allowed) {
-    el("grid").innerHTML = '<p class="loading">The Safari Board is for safari operations and administrators. <button onclick="location.href=\'./\'">← Back to tools</button></p>';
+    el("grid").innerHTML = '<p class="loading">The Tour Master is for safari operations and administrators. <button onclick="location.href=\'./\'">← Back to tools</button></p>';
     return;
   }
   try { sessionStorage.setItem("sb_from", el("from").value); } catch (e) {}
