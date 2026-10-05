@@ -4,7 +4,7 @@
    (a different origin) — the local copy of checklist content and the
    upload queue are separate pieces, not built yet.
    Bump VERSION on every change, or phones keep the old worker. */
-var VERSION = "2026-10-04s";
+var VERSION = "2026-10-05a";
 var CACHE = "bw-shell-" + VERSION;
 
 var SHELL = [
@@ -93,7 +93,12 @@ self.addEventListener("fetch", function (e) {
   e.respondWith(
     caches.open(CACHE).then(function (c) {
       return c.match(req).then(function (hit) {
-        var net = fetch(req).then(function (res) {
+        // cache: "no-cache" makes the refresh behind ask GitHub every time,
+        // rather than taking the browser's own copy, which GitHub allows for
+        // ten minutes (max-age=600). Without it a change could take three or
+        // four reloads to land (Mark, 2026-10-05). Still answers from the
+        // phone first, so nothing waits on the network.
+        var net = fetch(req.url, { cache: "no-cache", credentials: "same-origin" }).then(function (res) {
           if (res && res.status === 200 && res.type === "basic") c.put(req, res.clone());
           return res;
         }).catch(function () {
