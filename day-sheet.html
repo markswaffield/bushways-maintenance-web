@@ -376,6 +376,12 @@
   <div><button id="save" disabled>Save changes</button></div>
   <div class="full-only"><button class="ghost" id="reload">Refresh</button></div>
   <div class="full-only lean-hide"><button class="ghost" id="print">Print</button></div>
+  <!-- The Allocation Board, per lodge — Mark, 2026-10-05: "The board needs
+       to be accesible from the Day Sheet for each lodge." It carries the camp
+       across in sessionStorage, the same way this page received it, so there
+       is no lodge to pick again. A real padded button, like every other
+       navigation action in every tool (root CLAUDE.md). -->
+  <div><button id="boardBtn" title="Who is in which room, and move them">🛏 Room Allocation</button></div>
   <div><button id="importBtn" title="Choose a ResRequest Operations Chart export">Import Ops Chart</button></div>
   <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
   <div><label for="statusFilter">Show</label><select id="statusFilter">
@@ -417,6 +423,9 @@ if (shownCamp) {
 function campParam() {
   return shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "";
 }
+document.getElementById("boardBtn").onclick = function () {
+  location.href = "./allocation-board.html";
+};
 document.getElementById("signOut").onclick = function () {
   sessionStorage.removeItem("bw_signin");
   sessionStorage.removeItem("bw_camp");

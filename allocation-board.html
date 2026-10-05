@@ -1,0 +1,479 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122d31">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Room Allocation</title>
+<!--
+  The Allocation Board — tools/daily-operations/, D-029.
+
+  Rooms are allocated HERE, not in ResRequest's Rooming Calendar. Mark,
+  2026-10-05: "we will no longer use the Res Req allocation tool... creating
+  our own room allocation board - which gets automatically populated, with
+  the option to then move guests from 1 room to another."
+
+  A LAPTOP SCREEN, same reasoning as the Day Sheet it sits beside: rooms down
+  the side, nights across the top, so a manager sees the whole fortnight at
+  once. That is the function, not a preference — spotting that a family is
+  split across the camp, or that room 4 is empty for three nights while
+  somebody sits in the holding area, only works if you can see it all.
+
+  THE HOLDING AREA at the bottom is Mark's own ask, and it has two jobs:
+  bookings the board could not place land there and are visible rather than
+  lost, and a manager can park somebody there deliberately to free a room up
+  and shuffle others into it.
+
+  MOVING A GUEST: drag, or click to pick up and click to put down. Both,
+  because drag alone is fiddly over a wide grid and click alone feels wrong
+  to anyone who has used the Safari Board. The server refuses a move into an
+  occupied room (roomClash in day-sheet/index.ts), so neither route can
+  double-book a room even from a stale tab.
+-->
+<style>
+  :root{
+    --ink:#122D31; --ink-soft:#3C5A5F; --line:#D8DEDC; --bg:#F4F6F5;
+    --card:#FFFFFF; --gold:#8C6A2F; --gold-soft:#F4E3D3;
+    --auto:#EAF2F4; --auto-line:#9FBEC4;
+    --hand:#E7F0E4; --hand-line:#7FA373;
+    --warn:#FBECD8; --warn-line:#C98A2E;
+    --dead:#F2E6E6; --dead-line:#B98A8A;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:12px 14px 40px;background:var(--bg);color:var(--ink);
+    font:15px/1.45 "Open Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  h1{margin:0 0 2px;font-size:22px;letter-spacing:.01em}
+  p.sub{margin:0 0 10px;color:var(--ink-soft);font-size:13.5px}
+
+  /* Every clickable navigation action is a real, padded button — never a
+     bare link and never text styled to look like one. Root CLAUDE.md. */
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--ink);
+    background:var(--ink);color:#fff;padding:9px 14px;font-weight:600}
+  button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
+  button:disabled{opacity:.45;cursor:default}
+
+  .whobar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+    gap:6px 10px;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:8px 11px;margin:0 0 10px;font-size:13px;color:var(--ink-soft)}
+  .whobar b{color:var(--ink)}
+  .whobar-btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .whobar-btns button{padding:6px 11px;font-size:12.5px}
+  .whobar-btns button:last-child{background:var(--gold-soft);border-color:var(--gold);
+    color:#4A3620}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;margin:0 0 12px}
+  .toolbar label{display:block;font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--ink-soft);margin-bottom:3px}
+  .toolbar input,.toolbar select{font:inherit;padding:7px 9px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;color:var(--ink)}
+  .status{font-size:13px;color:var(--ink-soft)}
+  .status.bad{color:#8C2F2F;font-weight:600}
+  .status.good{color:#2F6B3A;font-weight:600}
+
+  .wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--line);padding:0;text-align:left;vertical-align:middle}
+  thead th{position:sticky;top:0;z-index:3;background:#EDF1F0;padding:6px 7px;
+    font-size:11.5px;font-weight:700;white-space:nowrap}
+  thead th.wknd{background:#E3EAE8}
+  th.roomcol,td.roomcol{position:sticky;left:0;z-index:2;background:#F7F9F8;
+    padding:6px 9px;min-width:150px;white-space:nowrap}
+  thead th.roomcol{z-index:4}
+  td.roomcol b{font-size:13.5px}
+  td.roomcol span{display:block;font-size:11px;color:var(--ink-soft)}
+  tr.typehead td{background:#E8EEEC;padding:4px 9px;font-size:11.5px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)}
+  td.night{min-width:62px;height:42px}
+  td.night.drop{background:#DDEAEE;outline:2px dashed var(--auto-line);outline-offset:-3px}
+
+  .blk{display:block;margin:2px;padding:4px 6px;border-radius:6px;font-size:12px;
+    line-height:1.25;cursor:grab;border:1px solid var(--auto-line);background:var(--auto);
+    overflow:hidden}
+  .blk.hand{background:var(--hand);border-color:var(--hand-line)}
+  .blk.offtype{background:var(--warn);border-color:var(--warn-line)}
+  .blk.gone{background:var(--dead);border-color:var(--dead-line);text-decoration:line-through}
+  .blk b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .blk em{font-style:normal;color:var(--ink-soft);font-size:11px}
+  .blk.picked{outline:3px solid var(--gold);outline-offset:-1px}
+  .flag{display:inline-block;margin-left:3px;font-size:10.5px}
+
+  .hold{margin:14px 0 0;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:11px 12px}
+  .hold h2{margin:0 0 3px;font-size:16px}
+  .hold p{margin:0 0 9px;font-size:12.5px;color:var(--ink-soft)}
+  .holdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:7px}
+  .holdgrid.drop{outline:2px dashed var(--gold);outline-offset:3px;border-radius:8px}
+  .slot{border:1px dashed var(--line);border-radius:8px;min-height:52px;
+    display:flex;align-items:center;justify-content:center;color:#9AA8A5;font-size:11.5px}
+  .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:10px 0 0;font-size:11.5px;
+    color:var(--ink-soft)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;
+    margin-right:4px;vertical-align:-1px;border:1px solid}
+  .loading{padding:26px;text-align:center;color:var(--ink-soft)}
+
+  @media print{
+    body{background:#fff;padding:0}
+    .toolbar,.whobar,.legend{display:none}
+    .wrap{border:0;overflow:visible}
+    thead th{position:static}
+    th.roomcol,td.roomcol{position:static}
+  }
+  [hidden]{display:none!important}
+</style></head><body>
+
+<h1 id="campTitle">Room Allocation</h1>
+<p class="sub">Rooms down, nights across. Drag a party to another room, or click to pick up and click to put down.</p>
+
+<div class="whobar">
+  <span>👤 <b id="whoami"></b></span>
+  <span class="whobar-btns">
+    <button class="ghost" onclick="location.href='./day-sheet.html'">← Day Sheet</button>
+    <button class="ghost" onclick="location.href='./'">← Change camp / tool</button>
+    <button id="signOut">Sign out</button>
+  </span>
+</div>
+
+<div class="toolbar">
+  <div><label for="from">From</label><input type="date" id="from"></div>
+  <div><label for="nights">Nights shown</label>
+    <select id="nights">
+      <option value="7">7</option>
+      <option value="14" selected>14</option>
+      <option value="21">21</option>
+      <option value="31">31</option>
+    </select></div>
+  <div><button id="syncBtn">Update from ResRequest</button></div>
+  <div><button id="fillBtn" class="ghost">Fill empty rooms</button></div>
+  <div><button id="reload" class="ghost">Refresh</button></div>
+  <div><button id="print" class="ghost">Print</button></div>
+  <div style="align-self:center"><span class="status" id="status"></span></div>
+</div>
+
+<div id="app"><p class="loading">Loading…</p></div>
+
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/day-sheet";
+
+// The same sign-in gate as the Day Sheet. Nobody reaches this page without
+// having been through the group's picker, which is itself gated to managers
+// and administrators, but the gate is repeated here because a page that
+// edits a lodge's rooming must not be openable by link alone.
+var me = null;
+try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
+if (!me) { location.href = "./"; }
+var camp = null;
+try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
+var shownCamp = camp || (me && me.locations && me.locations[0]);
+
+var board = null;
+var picked = null;   // the stay or booking currently picked up
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function el(id){return document.getElementById(id);}
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function addDays(iso,n){var d=new Date(iso+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+function setStatus(t,cls){var s=el("status");s.textContent=t;s.className="status"+(cls?" "+cls:"");}
+function personId(){return me && me.id;}
+
+el("whoami").textContent = (me && (me.nickname || me.name)) || "";
+el("signOut").onclick = function(){
+  sessionStorage.removeItem("bw_signin"); sessionStorage.removeItem("bw_camp");
+  location.href = "./";
+};
+if (shownCamp) {
+  el("campTitle").textContent = "Room Allocation — " + (shownCamp.abbreviation || shownCamp.name);
+  document.title = (shownCamp.abbreviation || shownCamp.name) + " — Room Allocation";
+}
+function campParam(){ return shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : ""; }
+
+// ── loading ──────────────────────────────────────────────────────────
+function windowDates(){
+  var from = el("from").value || today();
+  var to = addDays(from, Math.max(parseInt(el("nights").value,10) || 14, 1));
+  return { from: from, to: to };
+}
+
+function load(){
+  var w = windowDates();
+  setStatus("Loading…");
+  fetch(FN + "?action=board&from=" + w.from + "&to=" + w.to + campParam())
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if (d.error) { setStatus(d.error, "bad"); return; }
+      board = d;
+      draw();
+      setStatus("");
+    })
+    .catch(function(e){ setStatus("Could not load the board: " + e.message, "bad"); });
+}
+
+// ── drawing ──────────────────────────────────────────────────────────
+//
+// A stay occupies NIGHTS, not days: 10th to the 12th is two nights, the
+// 10th and the 11th, and the room is free again on the 12th for whoever
+// arrives that morning. Getting this wrong by one is how a board shows a
+// clash that is really a turnover, so the grid is nights throughout and the
+// last column is the night before the end date.
+function draw(){
+  if (!board) return;
+  var nights = board.dates.slice(0, -1);
+  if (!nights.length) nights = board.dates;
+
+  var stayByRoom = {};
+  (board.cells || []).forEach(function(c){
+    (stayByRoom[c.room_id] = stayByRoom[c.room_id] || []).push(c);
+  });
+
+  var h = '<div class="wrap"><table><thead><tr><th class="roomcol">Room</th>';
+  nights.forEach(function(d){
+    var dt = new Date(d + "T00:00:00Z");
+    var dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()];
+    var wk = (dt.getUTCDay() === 0 || dt.getUTCDay() === 6) ? " wknd" : "";
+    h += '<th class="night' + wk + '">' + dow + '<br>' + d.slice(8) + '/' + d.slice(5,7) + '</th>';
+  });
+  h += '</tr></thead><tbody>';
+
+  var lastType = null;
+  board.rooms.forEach(function(room){
+    if (room.room_type !== lastType) {
+      lastType = room.room_type;
+      h += '<tr class="typehead"><td colspan="' + (nights.length + 1) + '">'
+        + esc(room.room_type || "Rooms") + '</td></tr>';
+    }
+    h += '<tr><td class="roomcol"><b>' + esc(room.label) + '</b></td>';
+    var mine = (stayByRoom[room.id] || []).slice().sort(function(a,b){
+      return a.from < b.from ? -1 : a.from > b.from ? 1 : 0; });
+    var i = 0;
+    while (i < nights.length) {
+      var night = nights[i];
+      var stay = null;
+      for (var k = 0; k < mine.length; k++) {
+        // The stay covering this night: starts on or before it, ends after it.
+        if (mine[k].from <= night && mine[k].to > night) { stay = mine[k]; break; }
+      }
+      if (!stay) {
+        h += '<td class="night" data-room="' + room.id + '" data-night="' + night + '"></td>';
+        i++;
+        continue;
+      }
+      var span = 0;
+      while (i + span < nights.length && stay.to > nights[i + span]) span++;
+      h += '<td class="night" colspan="' + span + '" data-room="' + room.id
+        + '" data-night="' + night + '">' + blockHtml(stay) + '</td>';
+      i += span;
+    }
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  // The holding area. Mark asked for empty rows at the bottom "so we would
+  // have space to move someone off the rooming board, so we could then move
+  // others into their slot" — so there are always some, even when nothing is
+  // waiting, because their job is to be a place to put something.
+  var hold = board.holding || [];
+  h += '<div class="hold"><h2>Holding area</h2>'
+    + '<p>Nobody here is in a room yet. Drag a party out of the grid to park them, '
+    + 'then move others into the room they left.</p>'
+    + '<div class="holdgrid" id="holdgrid">';
+  hold.forEach(function(b){ h += blockHtml(b, true); });
+  var spare = Math.max(4 - hold.length, 2);
+  for (var s = 0; s < spare; s++) h += '<div class="slot">empty</div>';
+  h += '</div></div>';
+
+  h += '<div class="legend">'
+    + '<span><i style="background:var(--auto);border-color:var(--auto-line)"></i>placed by the board</span>'
+    + '<span><i style="background:var(--hand);border-color:var(--hand-line)"></i>placed by a person</span>'
+    + '<span><i style="background:var(--warn);border-color:var(--warn-line)"></i>not the room type booked</span>'
+    + '<span><i style="background:var(--dead);border-color:var(--dead-line)"></i>cancelled in ResRequest</span>'
+    + '</div>';
+
+  el("app").innerHTML = h;
+  wire();
+}
+
+function blockHtml(b, inHold){
+  var cls = "blk";
+  if (inHold) cls += " hold-blk";
+  else cls += b.auto ? "" : " hand";
+  if (b.off_type) cls += " offtype";
+  if (b.cancelled) cls += " gone";
+  if (picked && ((picked.stay_id && picked.stay_id === b.stay_id)
+      || (!picked.stay_id && picked.booking_id === b.booking_id && inHold))) cls += " picked";
+
+  var flags = "";
+  if (b.medical) flags += '<span class="flag" title="' + esc(b.medical) + '">⚕</span>';
+  if (b.dietary) flags += '<span class="flag" title="' + esc(b.dietary) + '">🍽</span>';
+  if (b.occasion) flags += '<span class="flag" title="' + esc(b.occasion) + '">★</span>';
+
+  var sub = [];
+  if (b.bed_type) sub.push(b.bed_type);
+  if (b.basis) sub.push(b.basis);
+  if (inHold) {
+    sub.push(b.arrive.slice(8) + "/" + b.arrive.slice(5,7) + "–" + b.depart.slice(8) + "/" + b.depart.slice(5,7));
+    if (b.still_to_place > 1) sub.push(b.still_to_place + " rooms");
+    if (b.pool) sub.push(b.pool);
+  }
+
+  return '<div class="' + cls + '" draggable="true"'
+    + ' data-stay="' + esc(b.stay_id || "") + '"'
+    + ' data-booking="' + esc(b.booking_id) + '"'
+    + ' title="' + esc(blockTitle(b)) + '">'
+    + '<b>' + esc(b.guest) + flags + '</b>'
+    + (sub.length ? '<em>' + esc(sub.join(" · ")) + '</em>' : '')
+    + '</div>';
+}
+
+function blockTitle(b){
+  var t = [b.guest];
+  if (b.ref) t.push("Ref " + b.ref);
+  t.push(b.arrive + " to " + b.depart);
+  if (b.sold_as) t.push("Sold as " + b.sold_as);
+  if (b.rooms_needed > 1) t.push(b.rooms_needed + " rooms needed");
+  if (b.bed_type) t.push("Beds: " + b.bed_type);
+  if (b.basis) t.push("Basis: " + b.basis);
+  if (b.dietary) t.push("Dietary: " + b.dietary);
+  if (b.medical) t.push("Medical: " + b.medical);
+  if (b.occasion) t.push("Occasion: " + b.occasion);
+  if (b.eta) t.push("ETA " + b.eta);
+  if (b.cancelled) t.push("CANCELLED in ResRequest — release the room when you are ready");
+  if (b.off_type) t.push("This is not the room type the booking was sold against");
+  if (b.why) t.push(b.why);
+  return t.join("\n");
+}
+
+// ── moving ───────────────────────────────────────────────────────────
+function wire(){
+  var blocks = document.querySelectorAll(".blk");
+  Array.prototype.forEach.call(blocks, function(b){
+    b.addEventListener("dragstart", function(ev){
+      pick(b);
+      try { ev.dataTransfer.setData("text/plain", b.dataset.booking); } catch (e) {}
+      ev.dataTransfer.effectAllowed = "move";
+    });
+    b.addEventListener("click", function(ev){ ev.stopPropagation(); pick(b); });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll("td.night"), function(td){
+    td.addEventListener("dragover", function(ev){
+      if (!picked) return;
+      ev.preventDefault(); td.classList.add("drop");
+    });
+    td.addEventListener("dragleave", function(){ td.classList.remove("drop"); });
+    td.addEventListener("drop", function(ev){
+      ev.preventDefault(); td.classList.remove("drop");
+      putDown(td.dataset.room);
+    });
+    td.addEventListener("click", function(){ if (picked) putDown(td.dataset.room); });
+  });
+
+  var hg = el("holdgrid");
+  if (hg) {
+    hg.addEventListener("dragover", function(ev){
+      if (!picked || !picked.stay_id) return;
+      ev.preventDefault(); hg.classList.add("drop");
+    });
+    hg.addEventListener("dragleave", function(){ hg.classList.remove("drop"); });
+    hg.addEventListener("drop", function(ev){
+      ev.preventDefault(); hg.classList.remove("drop"); park();
+    });
+    hg.addEventListener("click", function(){ if (picked && picked.stay_id) park(); });
+  }
+}
+
+function pick(b){
+  picked = { stay_id: b.dataset.stay || null, booking_id: b.dataset.booking };
+  Array.prototype.forEach.call(document.querySelectorAll(".blk.picked"), function(x){
+    x.classList.remove("picked"); });
+  b.classList.add("picked");
+  var name = b.querySelector("b") ? b.querySelector("b").textContent : "That party";
+  setStatus(name + " picked up — click a room to put them there"
+    + (picked.stay_id ? ", or the holding area to park them" : "") + ".");
+}
+
+function post(action, body){
+  return fetch(FN + "?action=" + action, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(function(r){ return r.json(); });
+}
+
+function putDown(roomId){
+  if (!picked || !roomId) return;
+  var p = picked; picked = null;
+  setStatus("Moving…");
+  var call = p.stay_id
+    ? post("move", { room_stay_id: p.stay_id, room_id: roomId, person_id: personId() })
+    : post("allocate", { booking_id: p.booking_id, room_id: roomId, person_id: personId() });
+  call.then(function(d){
+    if (d.error) { setStatus(d.error, "bad"); load(); return; }
+    setStatus("Moved.", "good");
+    load();
+  }).catch(function(e){ setStatus("That did not save: " + e.message, "bad"); });
+}
+
+function park(){
+  if (!picked || !picked.stay_id) return;
+  var p = picked; picked = null;
+  setStatus("Taking them off the board…");
+  post("unallocate", { room_stay_id: p.stay_id }).then(function(d){
+    if (d.error) { setStatus(d.error, "bad"); return; }
+    setStatus("Parked in the holding area.", "good");
+    load();
+  }).catch(function(e){ setStatus("That did not save: " + e.message, "bad"); });
+}
+
+// Clicking the background puts down whatever is in your hand.
+document.addEventListener("click", function(){
+  if (!picked) return;
+  picked = null;
+  Array.prototype.forEach.call(document.querySelectorAll(".blk.picked"), function(x){
+    x.classList.remove("picked"); });
+  setStatus("");
+});
+
+// ── the two buttons that do work ─────────────────────────────────────
+el("syncBtn").onclick = function(){
+  var w = windowDates();
+  var btn = this; btn.disabled = true;
+  setStatus("Reading ResRequest — this takes up to a minute…");
+  post("sync_resrequest", { location_id: shownCamp && shownCamp.id, from: w.from, to: w.to })
+    .then(function(d){
+      btn.disabled = false;
+      if (d.error) { setStatus(d.error, "bad"); return; }
+      var bits = [d.legs_here + " bookings read"];
+      if (d.created) bits.push(d.created + " new");
+      if (d.adopted) bits.push(d.adopted + " matched to rows already here");
+      if (d.cancelled) bits.push(d.cancelled + " now cancelled");
+      if (d.unmapped_types) bits.push(d.unmapped_types.count + " on a room type we do not know");
+      setStatus(bits.join(", ") + ".", "good");
+      load();
+    })
+    .catch(function(e){ btn.disabled = false; setStatus("ResRequest did not answer: " + e.message, "bad"); });
+};
+
+el("fillBtn").onclick = function(){
+  var w = windowDates();
+  var btn = this; btn.disabled = true;
+  setStatus("Filling empty rooms…");
+  post("auto_place", { location_id: shownCamp && shownCamp.id, from: w.from, to: w.to })
+    .then(function(d){
+      btn.disabled = false;
+      if (d.error) { setStatus(d.error, "bad"); return; }
+      var msg = d.placed + (d.placed === 1 ? " party placed" : " parties placed");
+      if (d.unplaced && d.unplaced.length) msg += ", " + d.unplaced.length + " still in the holding area";
+      setStatus(msg + ".", "good");
+      load();
+    })
+    .catch(function(e){ btn.disabled = false; setStatus("That did not run: " + e.message, "bad"); });
+};
+
+el("reload").onclick = load;
+el("print").onclick = function(){ window.print(); };
+el("from").onchange = load;
+el("nights").onchange = load;
+
+el("from").value = today();
+load();
+</script>
+</body></html>
