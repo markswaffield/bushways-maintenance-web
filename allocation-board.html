@@ -97,14 +97,19 @@
   .blk.picked{outline:3px solid var(--gold);outline-offset:-1px}
   .flag{display:inline-block;margin-left:3px;font-size:10.5px}
 
-  .hold{margin:14px 0 0;background:var(--card);border:1px solid var(--line);
-    border-radius:10px;padding:11px 12px}
-  .hold h2{margin:0 0 3px;font-size:16px}
-  .hold p{margin:0 0 9px;font-size:12.5px;color:var(--ink-soft)}
-  .holdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:7px}
-  .holdgrid.drop{outline:2px dashed var(--gold);outline-offset:3px;border-radius:8px}
-  .slot{border:1px dashed var(--line);border-radius:8px;min-height:52px;
-    display:flex;align-items:center;justify-content:center;color:#9AA8A5;font-size:11.5px}
+  /* Holding rows sit IN the grid, on the same date columns as the rooms
+     above them — Mark, 2026-10-05: "this needs to be a rows below the board
+     - so that anyone not in room will still be held in the same date block
+     - easier for visual identification". Tinted so the eye reads them as
+     off-board without losing the date alignment that is the whole point. */
+  tr.holdrow td.roomcol{background:#F6F1E8;color:var(--ink-soft)}
+  tr.holdrow td.roomcol b{color:#6B5428;font-weight:600}
+  tr.holdrow td.night{background:#FCFAF5}
+  tr.holdrow td.night.drop{background:#F2E6CE;outline:2px dashed var(--gold);outline-offset:-3px}
+  tr.holdrow .blk{background:var(--gold-soft);border-color:var(--gold)}
+  tr.holdrow .blk.gone{background:var(--dead);border-color:var(--dead-line)}
+  tr.holdadd td{background:#FCFAF5;padding:4px 9px;border-top:0}
+  tr.holdadd button{padding:4px 10px;font-size:11.5px;font-weight:600}
   .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:10px 0 0;font-size:11.5px;
     color:var(--ink-soft)}
   .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;
@@ -122,7 +127,7 @@
 </style></head><body>
 
 <h1 id="campTitle">Room Allocation</h1>
-<p class="sub">Rooms down, nights across. Drag a party to another room, or click to pick up and click to put down.</p>
+<p class="sub">Rooms down, nights across, holding rows underneath on the same dates. Drag a party to another room, or click to pick up and click to put down.</p>
 
 <div class="whobar">
   <span>👤 <b id="whoami"></b></span>
@@ -234,62 +239,125 @@ function draw(){
   });
   h += '</tr></thead><tbody>';
 
-  var lastType = null;
-  board.rooms.forEach(function(room){
-    if (room.room_type !== lastType) {
-      lastType = room.room_type;
-      h += '<tr class="typehead"><td colspan="' + (nights.length + 1) + '">'
-        + esc(room.room_type || "Rooms") + '</td></tr>';
-    }
-    h += '<tr><td class="roomcol"><b>' + esc(room.label) + '</b></td>';
-    var mine = (stayByRoom[room.id] || []).slice().sort(function(a,b){
-      return a.from < b.from ? -1 : a.from > b.from ? 1 : 0; });
-    var i = 0;
-    while (i < nights.length) {
-      var night = nights[i];
-      var stay = null;
-      for (var k = 0; k < mine.length; k++) {
-        // The stay covering this night: starts on or before it, ends after it.
-        if (mine[k].from <= night && mine[k].to > night) { stay = mine[k]; break; }
-      }
-      if (!stay) {
-        h += '<td class="night" data-room="' + room.id + '" data-night="' + night + '"></td>';
-        i++;
-        continue;
-      }
-      var span = 0;
-      while (i + span < nights.length && stay.to > nights[i + span]) span++;
-      h += '<td class="night" colspan="' + span + '" data-room="' + room.id
-        + '" data-night="' + night + '">' + blockHtml(stay) + '</td>';
-      i += span;
-    }
-    h += '</tr>';
+  // Units in blocks — Rooms, then Campsites at Boteti. Each block gets its
+  // own holding rows directly underneath it, because a party waiting for a
+  // campsite has nothing to do with a room standing empty.
+  var groups = [];
+  (board.rooms || []).forEach(function(room){
+    var g = groups[groups.length - 1];
+    if (!g || g.name !== room.group) { g = { name: room.group, rooms: [] }; groups.push(g); }
+    g.rooms.push(room);
   });
-  h += '</tbody></table></div>';
+  // A block with nobody waiting still gets its rows; a block with more
+  // waiting than fits gets enough rows to show them all, because a booking
+  // that cannot be drawn is a booking nobody will deal with.
+  groups.forEach(function(g){
+    g.holding = (board.holding || []).filter(function(b){ return b.group === g.name; });
+  });
+  // Anyone whose block has no units at all (a type we have no rooms for)
+  // still has to appear somewhere.
+  var placedGroups = {};
+  groups.forEach(function(g){ placedGroups[g.name] = true; });
+  (board.holding || []).forEach(function(b){
+    if (placedGroups[b.group]) return;
+    placedGroups[b.group] = true;
+    groups.push({ name: b.group, rooms: [],
+      holding: (board.holding || []).filter(function(x){ return x.group === b.group; }) });
+  });
 
-  // The holding area. Mark asked for empty rows at the bottom "so we would
-  // have space to move someone off the rooming board, so we could then move
-  // others into their slot" — so there are always some, even when nothing is
-  // waiting, because their job is to be a place to put something.
-  var hold = board.holding || [];
-  h += '<div class="hold"><h2>Holding area</h2>'
-    + '<p>Nobody here is in a room yet. Drag a party out of the grid to park them, '
-    + 'then move others into the room they left.</p>'
-    + '<div class="holdgrid" id="holdgrid">';
-  hold.forEach(function(b){ h += blockHtml(b, true); });
-  var spare = Math.max(4 - hold.length, 2);
-  for (var s = 0; s < spare; s++) h += '<div class="slot">empty</div>';
-  h += '</div></div>';
+  groups.forEach(function(g, gi){
+    h += '<tr class="typehead"><td colspan="' + (nights.length + 1) + '">'
+      + esc(g.name) + '</td></tr>';
+
+    g.rooms.forEach(function(room){
+      h += '<tr><td class="roomcol"><b>' + esc(room.label) + '</b>'
+        + '<span>' + esc(room.room_type || "") + '</span></td>';
+      var mine = (stayByRoom[room.id] || []).slice().sort(function(a,b){
+        return a.from < b.from ? -1 : a.from > b.from ? 1 : 0; });
+      h += rowCells(nights, mine, { room: room.id });
+      h += '</tr>';
+    });
+
+    h += holdingRowsHtml(g, gi, nights);
+  });
+
+  h += '</tbody></table></div>';
 
   h += '<div class="legend">'
     + '<span><i style="background:var(--auto);border-color:var(--auto-line)"></i>placed by the board</span>'
     + '<span><i style="background:var(--hand);border-color:var(--hand-line)"></i>placed by a person</span>'
     + '<span><i style="background:var(--warn);border-color:var(--warn-line)"></i>not the room type booked</span>'
     + '<span><i style="background:var(--dead);border-color:var(--dead-line)"></i>cancelled in ResRequest</span>'
+    + '<span>Drag anyone into a <b>holding row</b> to free their room.</span>'
     + '</div>';
 
   el("app").innerHTML = h;
   wire();
+}
+
+// How many holding rows a block shows. Mark asked for five to begin with,
+// with the option of more — so five is a floor, not a cap: if more parties
+// are waiting on the same night than there are rows, the block grows by
+// itself rather than hiding one of them.
+var HOLD_MIN = 5;
+var extraHoldRows = {};
+
+function holdingRowsHtml(g, gi, nights){
+  // Pack the waiting parties into rows the same way the grid packs rooms:
+  // first row where those nights are free. Two parties waiting on different
+  // dates share a row, which is what makes the block readable.
+  var rows = [];
+  (g.holding || []).slice().sort(function(a,b){
+    return a.arrive < b.arrive ? -1 : a.arrive > b.arrive ? 1 : 0;
+  }).forEach(function(b){
+    var block = { from: b.arrive, to: b.depart, booking: b };
+    for (var i = 0; i < rows.length; i++) {
+      var clash = rows[i].some(function(x){ return b.arrive < x.to && b.depart > x.from; });
+      if (!clash) { rows[i].push(block); return; }
+    }
+    rows.push([block]);
+  });
+
+  var want = Math.max(HOLD_MIN + (extraHoldRows[g.name] || 0), rows.length);
+  var h = '';
+  for (var r = 0; r < want; r++) {
+    var mine = (rows[r] || []).map(function(x){
+      return { from: x.from, to: x.to, holding: x.booking };
+    });
+    h += '<tr class="holdrow"><td class="roomcol"><b>Holding ' + (r + 1) + '</b>'
+      + '<span>' + (r === 0 ? esc(g.name.toLowerCase()) : "") + '</span></td>';
+    h += rowCells(nights, mine, { holding: g.name });
+    h += '</tr>';
+  }
+  h += '<tr class="holdadd"><td colspan="' + (nights.length + 1) + '">'
+    + '<button class="ghost" data-addhold="' + esc(g.name) + '">+ Add a holding row</button>'
+    + '</td></tr>';
+  return h;
+}
+
+// One row of night cells, shared by room rows and holding rows so the two
+// line up on exactly the same dates — which is the whole reason the holding
+// area moved into the grid.
+function rowCells(nights, blocks, target){
+  var h = '', i = 0;
+  while (i < nights.length) {
+    var night = nights[i];
+    var block = null;
+    for (var k = 0; k < blocks.length; k++) {
+      // The block covering this night: starts on or before it, ends after it.
+      if (blocks[k].from <= night && blocks[k].to > night) { block = blocks[k]; break; }
+    }
+    var attrs = ' data-night="' + night + '"'
+      + (target.room ? ' data-room="' + target.room + '"' : '')
+      + (target.holding ? ' data-holding="' + esc(target.holding) + '"' : '');
+    if (!block) { h += '<td class="night"' + attrs + '></td>'; i++; continue; }
+    var span = 0;
+    while (i + span < nights.length && block.to > nights[i + span]) span++;
+    h += '<td class="night" colspan="' + span + '"' + attrs + '>'
+      + blockHtml(block.holding || block, !!block.holding) + '</td>';
+    i += span;
+  }
+  return h;
 }
 
 function blockHtml(b, inHold){
@@ -355,30 +423,33 @@ function wire(){
   });
 
   Array.prototype.forEach.call(document.querySelectorAll("td.night"), function(td){
+    var isHold = !!td.dataset.holding;
     td.addEventListener("dragover", function(ev){
       if (!picked) return;
+      // Nothing to do dropping an already-waiting party back into holding.
+      if (isHold && !picked.stay_id) return;
       ev.preventDefault(); td.classList.add("drop");
     });
     td.addEventListener("dragleave", function(){ td.classList.remove("drop"); });
     td.addEventListener("drop", function(ev){
       ev.preventDefault(); td.classList.remove("drop");
-      putDown(td.dataset.room);
+      if (isHold) park(); else putDown(td.dataset.room);
     });
-    td.addEventListener("click", function(){ if (picked) putDown(td.dataset.room); });
+    td.addEventListener("click", function(ev){
+      if (!picked) return;
+      ev.stopPropagation();
+      if (isHold) park(); else putDown(td.dataset.room);
+    });
   });
 
-  var hg = el("holdgrid");
-  if (hg) {
-    hg.addEventListener("dragover", function(ev){
-      if (!picked || !picked.stay_id) return;
-      ev.preventDefault(); hg.classList.add("drop");
+  Array.prototype.forEach.call(document.querySelectorAll("[data-addhold]"), function(btn){
+    btn.addEventListener("click", function(ev){
+      ev.stopPropagation();
+      var g = btn.dataset.addhold;
+      extraHoldRows[g] = (extraHoldRows[g] || 0) + 1;
+      draw();
     });
-    hg.addEventListener("dragleave", function(){ hg.classList.remove("drop"); });
-    hg.addEventListener("drop", function(ev){
-      ev.preventDefault(); hg.classList.remove("drop"); park();
-    });
-    hg.addEventListener("click", function(){ if (picked && picked.stay_id) park(); });
-  }
+  });
 }
 
 function pick(b){
@@ -388,7 +459,7 @@ function pick(b){
   b.classList.add("picked");
   var name = b.querySelector("b") ? b.querySelector("b").textContent : "That party";
   setStatus(name + " picked up — click a room to put them there"
-    + (picked.stay_id ? ", or the holding area to park them" : "") + ".");
+    + (picked.stay_id ? ", or a holding row to free their room" : "") + ".");
 }
 
 function post(action, body){
@@ -418,7 +489,7 @@ function park(){
   setStatus("Taking them off the board…");
   post("unallocate", { room_stay_id: p.stay_id }).then(function(d){
     if (d.error) { setStatus(d.error, "bad"); return; }
-    setStatus("Parked in the holding area.", "good");
+    setStatus("Moved to a holding row — their room is free now.", "good");
     load();
   }).catch(function(e){ setStatus("That did not save: " + e.message, "bad"); });
 }
