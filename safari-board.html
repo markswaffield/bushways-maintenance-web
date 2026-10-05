@@ -112,6 +112,9 @@
      shopping. Lighter, and never a block that holds the slot (Mark, 2026-10-04). */
   .blk.night{border-style:dotted;z-index:1;justify-content:center;padding:0 5px;flex-direction:row;align-items:center;gap:5px;
              white-space:nowrap;background-image:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.55))}
+  /* The pre night line starts at the left, so the seats are never the part
+     cut off when the column is narrow (Mark, 2026-10-05). */
+  .blk.night:not(.head){justify-content:flex-start}
   .blk.night b{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;letter-spacing:-.01em}
   .blk.night .s{flex:none}
   .blk.night .pn{font-size:10px;color:#8A8270;font-style:italic}
