@@ -382,13 +382,11 @@
        is no lodge to pick again. A real padded button, like every other
        navigation action in every tool (root CLAUDE.md). -->
   <div><button id="boardBtn" title="Who is in which room, and move them">🛏 Room Allocation</button></div>
-  <!-- The AI reader, on bookings that came from the API. Mark, 2026-10-05:
-       "is the AI tool working to translate all the notes onto the Day
-       Sheet?" The rules run on their own when the sheet loads; this adds the
-       AI sweep for notes with no headings, behind a button because it costs
-       money per booking. -->
+  <!-- The AI reader. Mark, 2026-10-05: "is the AI tool working to translate
+       all the notes onto the Day Sheet?" The rules run on their own when the
+       sheet loads and the nightly sweep does the lot at 23:45 (D-031); this
+       is for when somebody wants it read sooner. -->
   <div><button class="ghost" id="readNotesBtn" title="Read dietaries, medical, bed type and movements out of the booking notes">Read the notes</button></div>
-  <div><button id="importBtn" title="Choose a ResRequest Operations Chart export">Import Ops Chart</button></div>
   <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
   <div><label for="statusFilter">Show</label><select id="statusFilter">
     <option value="">Everything</option>
@@ -1063,18 +1061,6 @@ function render(){
   h += '<p class="warn" id="clashnote"></p><p class="warn amber" id="guidenote"></p>';
 
   h += '<div class="drawer"' + (drawerOpen ? "" : " hidden") + '><div class="below">';
-  // Importing the ResRequest Operations Chart. ResRequest's API cannot give
-  // us the room allocation and they have no scheduled-email facility, so a
-  // manager exports the chart and drops it here — tool-local D-014. Reads the
-  // export's `notes` sheet, never `chart` (D-013).
-  h += '<div class="panel opsimport"><h2>Import the ResRequest Operations Chart</h2>'
-    +  '<p class="meta">Export the Operations Chart from ResRequest for this camp, then choose the file here. '
-    +  'It reads the bookings <b>and</b> the rooms you allocated, and shows you what it will do before it does it. '
-    +  'Nothing is changed until you press Import.</p>'
-    +  '<div class="row"><input type="file" id="opsfile" accept=".xlsx,.xls,.csv,.xml"></div>'
-    +  '<div id="opsreport"></div>'
-    +  '<div class="row" style="margin-top:8px"><button id="opsimport" hidden>Import</button> '
-    +  '<span class="status" id="msg-ops"></span></div></div>';
 
   h += '<div class="panel"><h2>Notes not tied to one room</h2>'
      + '<textarea id="general" rows="4" placeholder="Dietary notes, a pickup arrangement…">'
@@ -1307,19 +1293,6 @@ el("leanBtn").addEventListener("click", function(){
   try { localStorage.setItem("bw_daysheet_lean", on ? "1" : "0"); } catch (e) {}
 });
 
-el("importBtn").addEventListener("click", function(){
-  // Open the drawer first, so the report this produces is actually on screen
-  // when it arrives, then hand straight over to the file chooser.
-  if (!drawerOpen){
-    drawerOpen = true;
-    el("drawerBtn").textContent = "Hide bookings & notes";
-    var d = document.querySelector(".drawer");
-    if (d) d.hidden = false;
-  }
-  var f = el("opsfile");
-  if (f){ f.value = ""; f.click(); }
-});
-
 el("statusFilter").addEventListener("change", function(){
   statusFilter = this.value;
   this.classList.toggle("on", !!statusFilter);
@@ -1336,172 +1309,6 @@ window.addEventListener("beforeunload", function(e){
   if (Object.keys(dirty).length){ e.preventDefault(); e.returnValue = ""; }
 });
 
-
-/* ---------------------------------------------------------------------------
-   The ResRequest Operations Chart importer.
-
-   WHY A FILE AND NOT AN API CALL, because it looks like a step backwards and
-   is not: ResRequest's API cannot give us the room allocation. Two of their
-   108 methods expose a room and both come back empty for our camps — tested
-   to destruction over three rounds with their own support (D-011, D-012,
-   D-015). Their Operations Chart export CAN (D-013), and they have confirmed
-   they have no scheduled-email facility, so a person exports it and drops it
-   in. That is D-014 and it is the route, not a stopgap.
-
-   THE SHEET THAT MATTERS IS `notes`, NEVER `chart`. The `chart` sheet auto-fits
-   and prints a room for every booking whether or not anyone chose one — on one
-   real export it invented rooms for 107 bookings on a day when nothing at all
-   was allocated. The `notes` sheet's per-leg `Room` column is blank exactly
-   when the booking is unallocated, and that blank is an ANSWER, not a gap.
-   Read D-013 before touching this.
---------------------------------------------------------------------------- */
-
-// SheetJS is ~900KB, and root CLAUDE.md is explicit that bandwidth in Maun is
-// limited — so it is fetched the first time somebody actually picks a file,
-// not on every page load. The service worker ignores cross-origin requests,
-// so this is never served stale.
-var xlsxLib = null;
-function loadXlsx(){
-  if (xlsxLib) return xlsxLib;
-  xlsxLib = new Promise(function(resolve, reject){
-    var s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    s.onload = function(){ resolve(window.XLSX); };
-    s.onerror = function(){ xlsxLib = null; reject(new Error("could not load the spreadsheet reader — check the connection")); };
-    document.head.appendChild(s);
-  });
-  return xlsxLib;
-}
-
-/* The note-reading rules used to sit here. They now live in
-   notes-rules.js, loaded above, because the nightly sweep on the server
-   needs the same rules and two hand-maintained copies would drift — the
-   one that drifted being the one putting a flight in front of the wrong
-   driver. Edit supabase/functions/day-sheet/notes-rules.js and run
-   scripts/build-notes-rules.sh. */
-
-function parseOpsChart(rows, campNames){
-  // A lodge can be more than one property in ResRequest. Boteti is two —
-  // "Boteti River Camp" (Rooms, Family Room) and "Boteti River Camp -
-  // Campsites" (the eight campsites AND the Meru Tents) — and Mark's real
-  // export carries all 78 legs in one file. So this matches against a LIST.
-  var wanted = (Array.isArray(campNames) ? campNames : [campNames])
-    .filter(Boolean).map(function(n){ return String(n).toLowerCase(); });
-  var MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
-                jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
-  function iso(v){
-    if (v == null) return null;
-    var t = String(v).trim();
-    var m = t.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})$/);
-    if (m){ var mm = MONTHS[m[2].toLowerCase()]; if (mm) return m[3]+"-"+mm+"-"+("0"+m[1]).slice(-2); }
-    m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? m[0] : null;
-  }
-  function cell(r,i){ var v = r && r[i]; return v == null ? "" : String(v).trim(); }
-  function num(v){ var n = parseInt(String(v).replace(/[^0-9-]/g,""),10); return isNaN(n) ? null : n; }
-
-  var out = [], camps = {}, cur = null, section = "";
-  function flush(){
-    if (!cur) return;
-    var mine = cur.legs.filter(function(l){ return wanted.indexOf(l.property.toLowerCase()) >= 0; });
-    // One real party is one booking even when the sheet splits it over several
-    // lines: group by the dates, sum the rooms, collect the room numbers.
-    var groups = {};
-    mine.forEach(function(l){
-      var k = l.arrive+"|"+l.depart;
-      var g = groups[k] || (groups[k] = { arrive:l.arrive, depart:l.depart, rooms_needed:0,
-                                          rooms:[], accomm:l.accomm, adults:0, children:0 });
-      g.rooms_needed += (l.rms || 1);
-      g.adults += (l.adults || 0);
-      g.children += (l.children || 0);
-      // A room is identified by its TYPE as well as its number, never the
-      // number alone. ResRequest restarts the numbering for the Pilot guide
-      // room, so "Room 1 / Pilot guide room" is the pilot room and NOT
-      // Standard Room 1 — a real overlap this caught, where Arkle in room 1
-      // and a tour leader in pilot room 1 looked like a double-booking.
-      // Resolving the label is the server's job; the type travels with it.
-      var nums = String(l.room).split(/[,\/]/).map(function(r){ return r.trim(); }).filter(Boolean);
-      // A campsite IS its accommodation — "Campsite 3 (1 to 6)" names the
-      // site, and in Boteti's real export every campsite leg has the Room
-      // column blank. So it still claims a unit; the server resolves which.
-      if (!nums.length && /campsite/i.test(l.accomm || "")) nums = [""];
-      nums.forEach(function(r){ g.rooms.push({ number: r, accomm: l.accomm || "" }); });
-    });
-    var got = extract(cur.guests, cur.notes);
-    Object.keys(groups).forEach(function(k){
-      var g = groups[k];
-      var mv = movement(cur.guests, cur.notes, g.arrive, g.depart,
-                        Object.keys(cur.camps || {}).length || 1, wanted);
-      // Self drive belongs with the movement, not in the Type column (Mark,
-      // 2026-09-29). Only added where the line does not already say so — most
-      // self-drive bookings spell it out ("self-driving ex Nata Lodge"), and
-      // repeating it would just make the cell longer.
-      if (/self[\s-]*driv/i.test(got.basis && got.basis.value ? (cur.guests || "") + " " + (cur.notes || "") : "")) {
-        ["arrival", "departure"].forEach(function (k) {
-          var cur_v = mv[k] && mv[k].value;
-          if (cur_v && /self[\s-]*driv/i.test(cur_v)) return;       // already says it
-          mv[k] = { value: cur_v ? "Self drive — " + cur_v : "Self drive",
-                    source: (mv[k] && mv[k].source) || "booking basis",
-                    confident: mv[k] ? mv[k].confident : false };
-        });
-      }
-      out.push({ booking_ref:cur.ref, guest_name:cur.name, agent:cur.agent||null,
-                 arrival_details: mv.arrival && mv.arrival.value || null,
-                 departure_details: mv.departure && mv.departure.value || null,
-                 arrive_date:g.arrive, depart_date:g.depart,
-                 adults:g.adults||null, children:g.children||null,
-                 rooms_needed:g.rooms_needed||1, room_type_needed:g.accomm||null,
-                 special_requests:cur.notes||null, rooms:g.rooms,
-                 // Mark, 2026-09-27: the Type column carries the bed
-                 // configuration and the board basis; Notes carries the
-                 // summary of dietaries, medical and special occasions.
-                 // All five are read out of free prose — see extract().
-                 bed_type: got.bed && got.bed.value || null,
-                 booking_basis: got.basis && got.basis.value || null,
-                 dietary: got.dietary && got.dietary.value || null,
-                 medical: got.medical && got.medical.value || null,
-                 special_occasion: got.occasion && got.occasion.value || null,
-                 // The block itself, kept whole. A missed allergy is a real
-                 // risk to a guest, so an extracted value is never the only
-                 // record and a manager can always see what it came from.
-                 guest_details: cur.guests || null,
-                 extraction: Object.assign({}, got,
-                   mv.arrival ? { arrival: mv.arrival } : null,
-                   mv.departure ? { departure: mv.departure } : null) });
-    });
-    cur = null;
-  }
-
-  for (var i=0; i<rows.length; i++){
-    var r = rows[i], c0 = cell(r,0), c1 = cell(r,1), c5 = cell(r,5);
-    if (c0 === "Arrival date") continue;
-    if (!c0 && !c1 && !cell(r,2)){ flush(); continue; }
-    if (iso(c0) && /^WB\d+/i.test(c5)){
-      flush();
-      cur = { ref:c5, name:cell(r,3), legs:[], agent:"", guests:"", notes:"" };
-      section = ""; continue;
-    }
-    if (!cur) continue;
-    if (c0 === "Itinerary summary"){ section = "legs"; continue; }
-    if (c0 === "Extras"){ section = "extras"; continue; }
-    if (c0 === "Guest information"){ cur.guests = c1; section = ""; continue; }
-    if (c0 === "Notes"){ cur.notes = c1; section = ""; continue; }
-    if (c0 === "Agent"){ cur.agent = c1; section = ""; continue; }
-    if (c0 === "Repeat Guests"){ section = ""; continue; }
-    // An itinerary leg carries its arrive date in column 2. Extras rows look
-    // similar but carry theirs in column 3 — hence tracking the section
-    // rather than sniffing the shape.
-    if (section === "legs" && iso(cell(r,2)) && c5){
-      camps[c5] = (camps[c5]||0) + 1;
-      (cur.camps || (cur.camps = {}))[c5] = true;
-      cur.legs.push({ room:c1, arrive:iso(cell(r,2)), depart:iso(cell(r,3)),
-                      property:c5, accomm:cell(r,6),
-                      rms:num(cell(r,7)), adults:num(cell(r,8)), children:num(cell(r,9)) });
-    }
-  }
-  flush();
-  return { bookings: out, camps: camps };
-}
 
 // Which bookings are worth sending to the AI layer, and which are not.
 //
@@ -1703,157 +1510,9 @@ function addDaysISO(iso, n){
   return d.toISOString().slice(0, 10);
 }
 
-var opsPending = null;
-
-function opsMsg(text, kind){
-  var m = el("msg-ops");
-  if (m){ m.textContent = text || ""; m.className = "status" + (kind ? " " + kind : ""); }
-}
-
-function showOpsReport(parsed, res){
-  var withRoom = parsed.bookings.filter(function(b){ return b.rooms.length; }).length;
-  var mine = ((shownCamp && shownCamp.resrequest_names) || [shownCamp && shownCamp.name])
-    .filter(Boolean).map(function(n){ return String(n).toLowerCase(); });
-  var other = Object.keys(parsed.camps).filter(function(c){
-    return mine.indexOf(c.toLowerCase()) < 0;
-  });
-  var h = '<p class="meta" style="margin-top:8px">Found <b>'+parsed.bookings.length+'</b> booking'
-        + (parsed.bookings.length===1?"":"s") + ' for '+esc(shownCamp ? shownCamp.name : "this camp")
-        + ' — <b>'+withRoom+'</b> with a room allocated, <b>'+(parsed.bookings.length-withRoom)
-        + '</b> still to place.</p>';
-  if (other.length) h += '<p class="meta">Other camps in this file (ignored): '+esc(other.join(", "))+'.</p>';
-  if (parsed.aiRead){
-    h += '<p class="meta">'
-      + (parsed.aiOff
-          ? "Read " + parsed.aiRead + " booking(s) by label only — the AI reader is not configured."
-          : "Read " + parsed.aiRead + " booking(s) whose notes carry no headings; found something in <b>"
-            + (parsed.aiFilled || 0) + "</b>. Those show on the sheet marked as worth a look.")
-      + "</p>";
-  }
-  if (!parsed.bookings.length){
-    h += '<p class="warn">Nothing in this file is for this camp. Check you exported the right property, '
-      +  'and that you are on the right camp\'s day sheet.</p>';
-  }
-  if (res){
-    h += '<p class="meta"><b>'+res.created+'</b> new, <b>'+res.updated+'</b> already here and refreshed, <b>'
-      +  res.allocated+'</b> to be placed in a room'
-      +  (res.already_placed ? ', <b>'+res.already_placed+'</b> already in the right room' : '')
-      +  '.</p>';
-    if (res.warnings && res.warnings.length){
-      h += '<p class="warn">'+res.warnings.length+' thing'+(res.warnings.length===1?"":"s")+' to look at:</p><ul class="meta">';
-      res.warnings.slice(0, 25).forEach(function(w){ h += "<li>"+esc(w)+"</li>"; });
-      if (res.warnings.length > 25) h += "<li>… and "+(res.warnings.length-25)+" more</li>";
-      h += "</ul>";
-    }
-  }
-  el("opsreport").innerHTML = h;
-}
-
-document.addEventListener("change", function(e){
-  if (e.target.id !== "opsfile") return;
-  var file = e.target.files && e.target.files[0];
-  el("opsimport").hidden = true;
-  el("opsreport").innerHTML = "";
-  opsPending = null;
-  if (!file) return;
-  if (!shownCamp){ opsMsg("Pick a camp first", "err"); return; }
-
-  if (!drawerOpen){
-    drawerOpen = true;
-    el("drawerBtn").textContent = "Hide bookings & notes";
-    var dr = document.querySelector(".drawer");
-    if (dr) dr.hidden = false;
-  }
-  var panel = document.querySelector(".panel.opsimport");
-  if (panel) panel.scrollIntoView({ block: "nearest" });
-  opsMsg("Reading…");
-  loadXlsx().then(function(XLSX){
-    return file.arrayBuffer().then(function(buf){
-      var wb = XLSX.read(buf, { type: "array" });
-      if (wb.SheetNames.indexOf("notes") < 0){
-        throw new Error("this file has no 'notes' sheet — is it an Operations Chart export?");
-      }
-      // raw:false so dates arrive as the text the sheet shows, which is what
-      // the parser expects; defval keeps the columns aligned.
-      var rows = XLSX.utils.sheet_to_json(wb.Sheets["notes"], { header: 1, raw: false, defval: "" });
-      var parsed = parseOpsChart(rows, (shownCamp.resrequest_names && shownCamp.resrequest_names.length)
-                                              ? shownCamp.resrequest_names : [shownCamp.name]);
-      if (!parsed.bookings.length){ showOpsReport(parsed, null); opsMsg(""); return; }
-      var ask = parsed.bookings.filter(needsAi);
-      var step = Promise.resolve();
-      if (ask.length){
-        opsMsg("Reading "+ask.length+" booking"+(ask.length===1?"":"s")+" the labels did not cover…");
-        step = post("ai_extract", {
-          items: ask.map(function(b, i){
-            b._ai = "b" + i;
-            // The camp and the leg's own dates go with the text: movement notes
-            // cover a whole itinerary, and without them the model cannot tell
-            // which lodge's transfer is which.
-            return { id: b._ai, camp: shownCamp && shownCamp.name,
-                     arrive: b.arrive_date, depart: b.depart_date,
-                     text: [b.guest_details || "", b.special_requests || ""].join("\n\n") };
-          })
-        }).then(function(res){
-          // A failure here is not an error: the rules already did their part,
-          // and an import must never depend on OpenRouter being reachable.
-          var r = (res && res.results) || {};
-          var filled = 0;
-          ask.forEach(function(b){ if (r[b._ai]){ mergeAi(b, r[b._ai]); filled++; } });
-          parsed.bookings.forEach(function(b){ delete b._ai; });
-          parsed.aiRead = ask.length;
-          parsed.aiFilled = filled;
-          parsed.aiOff = res && res.used === false;
-        });
-      }
-      return step.then(function(){
-      opsMsg("Checking against what is already here…");
-      // Always a dry run first. An import that quietly allocates thirty rooms
-      // is not something to discover afterwards.
-      return post("import_ops_chart", {
-        dry_run: true, person_id: personId(),
-        bookings: parsed.bookings.map(stripForApi)
-      }).then(function(res){
-        if (res.error){ opsMsg(res.error, "err"); return; }
-        opsPending = parsed;
-        showOpsReport(parsed, res);
-        el("opsimport").hidden = false;
-        el("opsimport").textContent = "Import " + parsed.bookings.length + " booking"
-          + (parsed.bookings.length===1?"":"s");
-        opsMsg("Nothing changed yet", "dirty");
-      });
-      });
-    });
-  }).catch(function(err){
-    opsMsg(String(err.message || err), "err");
-  });
-});
-
-// Everything parsed is sent now, guest_details included: it is the original
-// block the extracted dietary and medical values came from, and keeping it is
-// the safeguard against a mis-read (see the migration's own note).
-function stripForApi(b){ return b; }
-
 document.addEventListener("click", function(e){
   var src = e.target.getAttribute && e.target.getAttribute("data-src");
   if (src) return openSource(src);
-});
-
-document.addEventListener("click", function(e){
-  if (e.target.id !== "opsimport") return;
-  if (!opsPending) return;
-  e.target.disabled = true;
-  opsMsg("Importing…");
-  post("import_ops_chart", {
-    dry_run: false, person_id: personId(),
-    bookings: opsPending.bookings.map(stripForApi)
-  }).then(function(res){
-    e.target.disabled = false;
-    if (res.error){ opsMsg(res.error, "err"); return; }
-    opsMsg(res.created+" added, "+res.updated+" refreshed, "+res.allocated+" placed", "ok");
-    el("opsimport").hidden = true;
-    opsPending = null;
-    load();
-  });
 });
 
 fetch(FN + (shownCamp ? "?location_id=" + encodeURIComponent(shownCamp.id) : "")).then(function(r){return r.json();}).then(function(b){
