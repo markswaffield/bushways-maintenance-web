@@ -72,7 +72,12 @@
   .day.today{background:var(--today);font-weight:700}
   .day.m1{border-top:2px solid var(--head)}
   .cell{border-bottom:1px solid #F0ECE3;border-right:1px solid #F0ECE3}
-  .cell.slotend{border-right:1px solid var(--line)}
+  /* A dark rule between vehicle slots, a faint one between a slot's two
+     columns (Mark, 2026-10-05: "darker lines dividing the vehicle slots"). */
+  .cell.slotend{border-right:2px solid #43594A}
+  .hd.slot{border-right:2px solid #5E7A80}
+  /* The weekend runs across the whole row, under the safaris. */
+  .cell.we{background:var(--weekend)}
   .cell.today{background:#FFFBEA}
   .cell.m1{border-top:2px solid var(--head)}
 
@@ -103,7 +108,7 @@
      shopping. Lighter, and never a block that holds the slot (Mark, 2026-10-04). */
   .blk.night{border-style:dotted;z-index:1;justify-content:center;padding:0 5px;flex-direction:row;align-items:center;gap:5px;
              white-space:nowrap;background-image:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.55))}
-  .blk.night b{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+  .blk.night b{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;letter-spacing:-.01em}
   .blk.night .s{flex:none}
   .blk.night .pn{font-size:10px;color:#8A8270;font-style:italic}
   .blk.night .s{font-size:11px}
@@ -198,7 +203,7 @@
 <div class="legend">
   <span id="legendSafaris" style="display:contents"></span>
   <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>Open, no guests yet</span>
-  <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with code and seats</span>
+  <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with seats</span>
   <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
   <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
 </div>
@@ -322,7 +327,7 @@ function draw(r){
 
   h.push('<div class="hd corner" style="grid-row:1;grid-column:1">' + MON[parse(r.from).getMonth()] + " " + parse(r.from).getFullYear() + '</div>');
   slots.forEach(function(s, i){
-    h.push('<div class="hd" style="grid-row:1;grid-column:' + (2 + i * 2) + ' / span 2">' + esc(s.label) + '</div>');
+    h.push('<div class="hd slot" style="grid-row:1;grid-column:' + (2 + i * 2) + ' / span 2">' + esc(s.label) + '</div>');
   });
   h.push('<div class="hd open" style="grid-row:1;grid-column:' + (2 + slots.length * 2) + ' / span ' + nOpen + '">Open — no guests yet</div>');
 
@@ -332,7 +337,7 @@ function draw(r){
     var cls = (dt.getDay() === 0 || dt.getDay() === 6 ? " we" : "") + (day === today ? " today" : "") + (dt.getDate() === 1 ? " m1" : "");
     h.push('<div class="day' + cls + '" style="grid-row:' + row + ';grid-column:1">' + nice(day) + '</div>');
     for (var c = 0; c < slots.length * 2 + nOpen; c++) {
-      var cc = "cell" + (c % 2 === 1 && c < slots.length * 2 ? " slotend" : "") + (day === today ? " today" : "") + (dt.getDate() === 1 ? " m1" : "");
+      var cc = "cell" + (c % 2 === 1 && c < slots.length * 2 ? " slotend" : "") + (day === today ? " today" : (dt.getDay() === 0 || dt.getDay() === 6 ? " we" : "")) + (dt.getDate() === 1 ? " m1" : "");
       h.push('<div class="' + cc + '" style="grid-row:' + row + ';grid-column:' + (c + 2) + '"></div>');
     }
   }
@@ -386,9 +391,9 @@ function draw(r){
       var names = d.crew.filter(function(c){ return c.role === k[0]; }).map(function(c){ return k[0] === "translator" ? c.name : first(c.name); });
       if (names.length) lines.push(k[1] + " - " + names.join(", "));
     });
-    var stack = lines.length
-      ? [{ code: true }].concat(lines.map(function(t){ return { text: t }; })).concat([{ pre: true }])
-      : [{ code: true, pre: true }];
+    // The code has its own line so it is never cut short; the seats go on
+    // the pre night line (Mark, 2026-10-05).
+    var stack = [{ code: true }].concat(lines.map(function(t){ return { text: t }; })).concat([{ pre: true }]);
     // A line is drawn only where nothing else in this column is on that day.
     var busy = function(day){
       return deps.some(function(o){
@@ -401,10 +406,11 @@ function draw(r){
       if (day < r.from || day > r.to || (d.slot_id && i < stack.length - 1 && busy(day))) return;
       var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
       if (ln.code) {
-        h.push('<button class="blk night ' + fam + (ln.pre && lines.length ? "" : " head") + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
-          + '<b>' + esc(label(d)) + '</b><span class="s' + seatsCls + '">' + seatsTxt + '</span></button>');
+        h.push('<button class="blk night ' + fam + ' head" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
+          + '<b>' + esc(label(d)) + '</b></button>');
       } else if (ln.pre) {
-        h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '"><span class="pn">pre night</span></button>');
+        h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
+          + '<span class="s' + seatsCls + '">' + seatsTxt + ' seats</span><span class="pn">pre night</span></button>');
       } else {
         h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + title + '" style="' + row + '">' + esc(ln.text) + '</div>');
       }
