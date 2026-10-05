@@ -382,6 +382,12 @@
        is no lodge to pick again. A real padded button, like every other
        navigation action in every tool (root CLAUDE.md). -->
   <div><button id="boardBtn" title="Who is in which room, and move them">🛏 Room Allocation</button></div>
+  <!-- The AI reader, on bookings that came from the API. Mark, 2026-10-05:
+       "is the AI tool working to translate all the notes onto the Day
+       Sheet?" The rules run on their own when the sheet loads; this adds the
+       AI sweep for notes with no headings, behind a button because it costs
+       money per booking. -->
+  <div><button class="ghost" id="readNotesBtn" title="Read dietaries, medical, bed type and movements out of the booking notes">Read the notes</button></div>
   <div><button id="importBtn" title="Choose a ResRequest Operations Chart export">Import Ops Chart</button></div>
   <div><button class="ghost" id="drawerBtn">Bookings &amp; notes</button></div>
   <div><label for="statusFilter">Show</label><select id="statusFilter">
@@ -423,6 +429,11 @@ if (shownCamp) {
 function campParam() {
   return shownCamp ? "&location_id=" + encodeURIComponent(shownCamp.id) : "";
 }
+document.getElementById("readNotesBtn").onclick = function () {
+  var btn = this; btn.disabled = true;
+  readNotes(true).then(function(){ btn.disabled = false; },
+                       function(){ btn.disabled = false; });
+};
 document.getElementById("boardBtn").onclick = function () {
   location.href = "./allocation-board.html";
 };
@@ -1201,6 +1212,15 @@ function load(){
     });
     placed.sort(function(a,b){ return a.label.localeCompare(b.label, undefined, {numeric:true}); });
     render();
+    // Read whatever sits under a heading in the booking notes, once per
+    // visit. Free, needs no model, and it is what puts the dietaries and
+    // movements on a sheet filled from the API rather than from an Ops
+    // Chart. Guarded so it cannot loop: readNotes() calls load() again
+    // when it saves something.
+    if (!notesRan){
+      notesRan = true;
+      setTimeout(function(){ readNotes(false); }, 0);
+    }
   }).catch(function(err){
     el("app").innerHTML = '<p class="loading">Could not load: '+esc(err)+"</p>";
   });
@@ -1871,6 +1891,165 @@ function mergeAi(b, got){
     x[k] = f;
     b[into[k]] = f.value;
   });
+}
+
+/* ── Reading the notes on bookings that came from the API ──────────────
+
+   Bookings pulled from ResRequest arrive with their notes stored verbatim in
+   guest_details and nothing read out of them. Mark, 2026-10-05, looking at
+   Khwai: "very little information is landing on the Day Sheet. Medical,
+   Dietaries, Pax, Bed type, FI, Self Drive, any departure or arrival
+   details. is the AI tool working to translate all the notes onto the Day
+   Sheet?" It was not — it only ever ran on an Ops Chart import.
+
+   This runs the SAME pipeline on bookings already in the database:
+   extract() for anything under a heading, movement() for arrival and
+   departure lines, then the AI layer for prose with no headings at all. No
+   second copy of the rules, which is the point.
+
+   Two passes, deliberately:
+     readNotes(false)  rules only. Free, instant, no network beyond the save,
+                       and it runs by itself when the sheet loads. Khwai's
+                       notes are well labelled ("Dietary:", "Medical
+                       Requirements:", "Movement Details: / Arrival:"), so
+                       the rules alone fill most of them.
+     readNotes(true)   adds the AI sweep for the rest. Behind a button,
+                       because it costs money per booking and should be a
+                       decision rather than a side effect of opening a page.
+
+   save_extraction only ever fills a blank, so both passes are safe to repeat. */
+
+var notesRan = false;
+
+// Party size out of the booking name, which is where it actually lives:
+// "Becker x2", "Michael x 14", "F------- X3". Agents write it by hand and it
+// is the only structured count we have — ResRequest's RS2/RS3 look like the
+// occupants of a room but are NOT confirmed (docs/resrequest-api.md), so
+// nothing here depends on them. "26OKA43 xc+10" deliberately does not match:
+// a number nobody can read is better left blank than guessed.
+function paxFromName(name){
+  var m = String(name || "").match(/\bx\s*(\d{1,2})\b/i);
+  if (!m) return null;
+  var n = +m[1];
+  return n > 0 && n < 60 ? n : null;
+}
+
+function noteGaps(b){
+  if (!b.guest_details) return false;
+  return !b.bed_type || !b.booking_basis || !b.dietary || !b.medical
+      || !b.special_occasion || !b.arrival_details || !b.departure_details
+      || !b.adults;
+}
+
+function readNotes(useAi){
+  var from = el("date").value || today();
+  var to = addDaysISO(from, 30);
+  if (useAi) setStatus("Reading the notes…");
+
+  return fetch(FN + "?action=bookings&from=" + from + "&to=" + to + campParam())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var all = (d && d.bookings) || [];
+      var todo = all.filter(noteGaps);
+      if (!todo.length){
+        if (useAi) setStatus("Every booking in the next 30 days has already been read.", "good");
+        return;
+      }
+
+      var campNames = (shownCamp && shownCamp.resrequest_names) || [shownCamp && shownCamp.name];
+      var campCount = campNames.filter(Boolean).length;
+
+      // The rules, exactly as the Ops Chart import runs them.
+      todo.forEach(function(b){
+        b.extraction = b.extraction || {};
+        // Every rule returns {value, source, confident} — the source being
+        // the sentence the value was copied from, which is what the AI
+        // layer's invention guard is checked against. Only ever store the
+        // string in the column; the object goes in extraction.
+        var got = extract(b.guest_details, b.special_requests);
+        var intoCol = { bed:"bed_type", basis:"booking_basis", dietary:"dietary",
+                        medical:"medical", occasion:"special_occasion" };
+        Object.keys(intoCol).forEach(function(k){
+          var f = got[k];
+          if (!f || !f.value) return;
+          if (b[intoCol[k]]) return;             // already answered
+          b[intoCol[k]] = f.value;
+          b.extraction[k] = f;
+        });
+
+        var mv = movement(b.guest_details, b.special_requests,
+                          b.arrive_date, b.depart_date, campCount, campNames);
+        if (mv.arrival   && !b.arrival_details)   { b.arrival_details = mv.arrival.value; b.extraction.arrival = mv.arrival; }
+        if (mv.departure && !b.departure_details) { b.departure_details = mv.departure.value; b.extraction.departure = mv.departure; }
+
+        if (!b.adults){ var p = paxFromName(b.guest_name); if (p) b.adults = p; }
+      });
+
+      var step = Promise.resolve();
+      var asked = 0, aiOff = false;
+      if (useAi){
+        var ask = todo.filter(needsAi).slice(0, 80);
+        if (ask.length){
+          asked = ask.length;
+          setStatus("Reading " + ask.length + " booking" + (ask.length===1?"":"s")
+                    + " whose notes carry no headings…");
+          step = post("ai_extract", {
+            items: ask.map(function(b, i){
+              b._ai = "n" + i;
+              // The camp and this leg's own dates go with the text. Movement
+              // notes cover a whole itinerary, and without them the model
+              // cannot tell which lodge's transfer is which.
+              return { id: b._ai, camp: shownCamp && shownCamp.name,
+                       arrive: b.arrive_date, depart: b.depart_date,
+                       text: [b.guest_details || "", b.special_requests || ""].join("\n\n") };
+            })
+          }).then(function(res){
+            // A failure here is not an error — the rules have already done
+            // their part and the sheet must not depend on OpenRouter.
+            var r = (res && res.results) || {};
+            todo.forEach(function(b){ if (b._ai && r[b._ai]) mergeAi(b, r[b._ai]); delete b._ai; });
+            aiOff = res && res.used === false;
+          }).catch(function(){ /* keep the rules' work */ });
+        }
+      }
+
+      return step.then(function(){
+        return post("save_extraction", {
+          items: todo.map(function(b){
+            return {
+              booking_id: b.id,
+              bed_type: b.bed_type, booking_basis: b.booking_basis,
+              dietary: b.dietary, medical: b.medical,
+              special_occasion: b.special_occasion,
+              arrival_details: b.arrival_details, departure_details: b.departure_details,
+              adults: b.adults, extraction: b.extraction,
+            };
+          })
+        });
+      }).then(function(res){
+        if (!res || res.error) { if (useAi) setStatus((res && res.error) || "Could not save what was read", "bad"); return; }
+        var f = res.filled || {};
+        var bits = Object.keys(f).map(function(k){
+          return f[k] + " " + k.replace(/_/g, " ");
+        });
+        if (useAi){
+          setStatus(
+            "Read " + todo.length + " booking" + (todo.length===1?"":"s") + " over 30 days"
+            + (asked ? ", " + asked + " of them with the AI reader" : "")
+            + (aiOff ? " (the AI reader is not configured)" : "")
+            + (bits.length ? " — filled " + bits.join(", ") + "." : " — nothing new found."),
+            "good");
+        }
+        return load();
+      });
+    })
+    .catch(function(e){ if (useAi) setStatus("Could not read the notes: " + e.message, "bad"); });
+}
+
+function addDaysISO(iso, n){
+  var d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 var opsPending = null;
