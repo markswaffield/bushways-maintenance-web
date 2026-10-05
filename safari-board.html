@@ -799,29 +799,20 @@ function openPanel(id){
 }
 document.addEventListener("keydown", function(e){ if (e.key === "Escape") el("panel").className = ""; });
 
-// Update from ResRequest: one month per call, so each stays well inside the
-// function's time limit. Only changed bookings are read again, so a repeat
-// is quick.
+// Update from ResRequest: the same small read the nightly job makes, only
+// what was edited since the last clean run (D-015; ResRequest's fair-usage
+// rules, daily-operations D-033). Not a month-by-month pull.
 el("sync").onclick = function(){
-  var r = range(), btn = el("sync");
-  var months = [], m = r.from.slice(0, 7);
-  while (m <= r.to.slice(0, 7)) {
-    months.push(m);
-    var y = +m.slice(0, 4), mo = +m.slice(5, 7) + 1;
-    if (mo > 12) { y++; mo = 1; }
-    m = y + "-" + String(mo).padStart(2, "0");
-  }
+  var btn = el("sync");
   btn.disabled = true;
-  var i = 0, placed = 0;
-  (function next(){
-    if (i >= months.length) { btn.disabled = false; setStatus("Updated. " + placed + " new departure" + (placed === 1 ? "" : "s") + " placed."); load(); return; }
-    var mm = months[i++];
-    setStatus("Reading " + MON[+mm.slice(5, 7) - 1] + " " + mm.slice(0, 4) + " from ResRequest… (" + i + " of " + months.length + ")");
-    fetch(FN + "?action=sync&month=" + mm, { method: "POST" }).then(function(x){ return x.json(); }).then(function(res){
-      if (res.error) throw new Error(res.error);
-      placed += res.placed || 0; next();
-    }).catch(function(e){ btn.disabled = false; setStatus("ResRequest update stopped at " + mm + ": " + e.message, true); });
-  })();
+  setStatus("Reading changes from ResRequest…");
+  fetch(FN + "?action=sync_delta", { method: "POST" }).then(function(x){ return x.json(); }).then(function(res){
+    if (res.error) throw new Error(res.error);
+    btn.disabled = false;
+    setStatus("Updated: " + res.safari_bookings + " safari booking" + (res.safari_bookings === 1 ? "" : "s") + " changed, "
+      + res.placed + " new departure" + (res.placed === 1 ? "" : "s") + " placed.");
+    load();
+  }).catch(function(e){ btn.disabled = false; setStatus("ResRequest update failed: " + e.message, true); });
 };
 
 load();
