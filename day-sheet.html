@@ -1417,7 +1417,10 @@ function paxFromName(name){
 }
 
 function noteGaps(b){
-  if (!b.guest_details) return false;
+  // A booking with no notes at all still has a name, and pax lives in the
+  // name ("Vee x 1") rather than the notes — so it is not skipped outright,
+  // only when there is nothing the name-reading can find either.
+  if (!b.guest_details) return !b.adults && !!paxFromName(b.guest_name);
   return !b.bed_type || !b.booking_basis || !b.dietary || !b.medical
       || !b.special_occasion || !b.arrival_details || !b.departure_details
       || !b.adults;
