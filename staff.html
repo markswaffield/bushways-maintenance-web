@@ -28,6 +28,14 @@
   to all the sites" — a real permission (it decides who shows up in
   every lodge's own "Who am I" picker), set from his own marked-up
   sheet, shown here but not offered on the generic edit form.
+
+  is_general_manager, 2026-10-06, same reasoning again: Mark, "we would
+  like the Camp General Managers to be able to have edit function as
+  well" — Andy Andreck (Chobe), Max Thokabotshabelo (Khwai), Beauty
+  Kavindama (OAT and Mababe). Shown here (a tag, same as Administrator
+  and Base Manager), not offered on the form — this page's own edit/
+  retire buttons now gate on canEditHere() rather than is_administrator
+  alone, scoped server-side to whichever camp(s) a GM actually runs.
 -->
 <style>
   body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
@@ -118,6 +126,7 @@
   .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;background:#D9E6DC;color:#2F6B45;margin-left:6px}
   .tag.admin{background:#F4E3D3;color:#8C6A2F}
   .tag.basemgr{background:#DDE6F4;color:#2F5B8C}
+  .tag.genmgr{background:#E6E0D4;color:#6B5A2F}
   .acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
   .form{background:#FBFAF6;border:1px solid #C9C2AC;border-radius:8px;padding:12px;margin-top:8px}
   .form label{display:block;font-size:11.5px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:9px 0 4px}
@@ -180,6 +189,17 @@ var shownCamp = camp || (me && me.locations && me.locations[0]);
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function el(id){return document.getElementById(id);}
+
+// A Camp General Manager may edit Staff too, not only an Administrator
+// (Mark, 2026-10-06) — but only at the camp(s) they actually run. Same
+// helper and same reasoning as assets.html; me.locations already is
+// that set (home camp plus whatever dashboard_location_access grants).
+function canEditHere(){
+  if (!me) return false;
+  if (me.is_administrator) return true;
+  if (!me.is_general_manager || !shownCamp) return false;
+  return (me.locations || []).some(function(l){ return l.id === shownCamp.id; });
+}
 
 function post(action, body){
   return fetch(FN + "?action=" + action, {
@@ -283,16 +303,17 @@ function personRow(p){
     (p.department ? '<span class="tag">' + esc(p.department) + '</span>' : "") +
     (p.is_administrator ? '<span class="tag admin">Administrator</span>' : "") +
     (p.is_base_manager ? '<span class="tag basemgr">Base Manager — all sites</span>' : "") +
+    (p.is_general_manager ? '<span class="tag genmgr">General Manager</span>' : "") +
     (p.retired ? " · retired" : "") + '</p>' +
     '<p class="mt">' + (p.phone ? esc(p.phone) : "no number on file") + '</p>' +
     drivesLine(p) +
     (p.retired && p.retired_reason ? '<p class="mt">' + esc(p.retired_reason) + '</p>' : "");
-  // Visible to all management, editable only by administrators — per
-  // Mark, 2026-09-18: "Assets and Staff - visible to all management
-  // but not editable" and "visible and editable to all managers who
-  // are administrators." The server enforces the same split.
+  // Visible to all management, editable by administrators and by this
+  // camp's own General Manager — per Mark, 2026-09-18, extended
+  // 2026-10-06 (canEditHere() above). The server enforces the same
+  // split.
   if (editing && editing.id === p.id) { h += personForm(); }
-  else if (me && me.is_administrator) {
+  else if (canEditHere()) {
     h += '<div class="acts">';
     h += '<button onclick="startEdit(\'' + p.id + '\')">Edit</button>';
     h += p.retired
@@ -308,15 +329,34 @@ function render(){
   var all = data.people || [];
   var list = showRetired ? all : all.filter(function(p){ return !p.retired; });
   var retiredCount = all.filter(function(p){ return p.retired; }).length;
-  list.sort(function(a,b){ return a.name.localeCompare(b.name); });
 
-  if (me && me.is_administrator && !(editing && !editing.id)) {
+  if (canEditHere() && !(editing && !editing.id)) {
     h += '<div class="acts"><button onclick="startAdd()">+ Add</button></div>';
   }
   if (editing && !editing.id) h += personForm();
 
-  list.forEach(function(p){ h += personRow(p); });
-  if (!list.length) h += '<p class="note">None' + (retiredCount ? " showing" : "") + '.</p>';
+  // Ordered by department, not one flat name list — Mark, 2026-10-06:
+  // "I would like them ordered by department." Alphabetical, "No
+  // department" last since it is the absence of one rather than a real
+  // one to sort among the rest; people within a department still sort
+  // by name, same as the whole list did before this.
+  if (!list.length) {
+    h += '<p class="note">None' + (retiredCount ? " showing" : "") + '.</p>';
+  } else {
+    var byDept = {};
+    list.forEach(function(p){
+      var key = p.department || "";
+      (byDept[key] = byDept[key] || []).push(p);
+    });
+    var deptNames = Object.keys(byDept).filter(function(d){ return d; })
+      .sort(function(a,b){ return a.localeCompare(b); });
+    if (byDept[""]) deptNames.push("");
+    deptNames.forEach(function(dept){
+      var group = byDept[dept].slice().sort(function(a,b){ return a.name.localeCompare(b.name); });
+      h += '<h2>' + esc(dept || "No department") + ' <span class="count">' + group.length + '</span></h2>';
+      group.forEach(function(p){ h += personRow(p); });
+    });
+  }
 
   el("app").innerHTML = h;
 }

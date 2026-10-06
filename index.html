@@ -366,7 +366,7 @@
       body: JSON.stringify({ person_id: id, pin: pin }),
     }).then(function (r) { return r.json(); }).then(function (out) {
       if (out.error) { err.textContent = out.error; err.hidden = false; return; }
-      var me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator, locations: out.locations || [] };
+      var me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator, is_general_manager: out.is_general_manager, locations: out.locations || [] };
       sessionStorage.setItem("bw_signin", JSON.stringify(me));
       route(me);
     });

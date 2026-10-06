@@ -82,6 +82,7 @@
   /* One tab per section — real buttons, per the standing hard rule
      (root CLAUDE.md, D-057), the chosen one filled in. */
   .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
   .tabs button{padding:8px 14px;font-size:14px;border-color:#C9C2AC;color:#232019;border-radius:6px}
   .tabs button.on{background:#43594A;border-color:#43594A;color:#fff;font-weight:600}
   @media (max-width:700px){ .tabs button{padding:7px 11px;font-size:13.5px} }
@@ -679,12 +680,18 @@
   // Read-only here, deliberately — editing stays on assets.html /
   // staff.html, camp by camp, where the Administrator gate lives.
 
-  var ASSET_KIND_GROUPS = [["vehicle", "Vehicles"], ["trailer", "Trailers"], ["asset", "Other equipment"]];
+  // Vehicles, Trailers, Boats, Generators — the same four real,
+  // moveable kinds assets.html shows now (D-131-ish, 2026-10-06).
+  // "Other equipment" is gone: that bucket was really ~200 fixed
+  // maintenance-area rows (Kitchen, Boreholes, Main DB Board...) mixed
+  // in with a handful of real equipment, and the server no longer
+  // returns it at all — see assets.html's own header comment.
+  var ASSET_KIND_GROUPS = [["vehicle", "Vehicles"], ["trailer", "Trailers"], ["boat", "Boats"], ["generator", "Generators"]];
 
   function renderAssets() {
     var camp = F.assets.camp;
     setFilters("", [campBox("assets", assetsData.viewable_locations || assetsData.locations || [])]);
-    var html = "";
+    var html = '<div class="acts"><button onclick="exportAssetsToExcel(this)">Export to Excel</button></div>';
     ASSET_KIND_GROUPS.forEach(function (k) {
       var all = (assetsData[k[0]] || []).filter(function (a) { return a.movable !== false && !a.retired; });
       if (camp) all = all.filter(function (a) { return a.location_id === camp; });
@@ -727,18 +734,124 @@
         select("staff", "dept", [["", "All departments"]].concat(deptNames.map(function (d) { return [d, d]; })))),
     ]);
     if (F.staff.dept) all = all.filter(function (p) { return p.department === F.staff.dept; });
-    all = all.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
-    var html = '<h2>Staff <span class="count">' + all.length + '</span></h2>';
-    if (!all.length) html += '<p class="empty">None' + (camp || F.staff.dept ? " for this filter" : "") + '.</p>';
-    all.forEach(function (p) {
-      html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(p.home_location) + '</span>' + esc(p.name) +
-        (p.department ? ' — <span class="fault">' + esc(p.department) + '</span>' : "") +
-        (p.is_base_manager ? ' <span class="fault" style="background:#DDE6F4;color:#2F5B8C">Base Manager</span>' : "") +
-        '</p><p class="meta">' + (p.phone ? esc(p.phone) : "no number on file") +
-        drivesText(p) + '</p></div>';
-    });
+
+    var html = '<div class="acts"><button onclick="exportStaffToExcel(this)">Export to Excel</button></div>';
+    if (!all.length) {
+      html += '<p class="empty">None' + (camp || F.staff.dept ? " for this filter" : "") + '.</p>';
+    } else {
+      // Ordered by department, not one flat name list — Mark,
+      // 2026-10-06: "I would like them ordered by department." "No
+      // department" last, since it is the absence of one rather than a
+      // real one to sort among the rest.
+      var byDept = {};
+      all.forEach(function (p) { (byDept[p.department || ""] = byDept[p.department || ""] || []).push(p); });
+      var groupNames = Object.keys(byDept).filter(function (d) { return d; }).sort(function (a, b) { return a.localeCompare(b); });
+      if (byDept[""]) groupNames.push("");
+      groupNames.forEach(function (dept) {
+        var group = byDept[dept].slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+        html += '<div class="group"><p class="heading">' + esc(dept || "No department") +
+          ' <span style="font-weight:400;color:#8C6A2F">' + group.length + '</span></p>';
+        group.forEach(function (p) {
+          html += '<div class="card"><p class="fault-line"><span class="camp">' + esc(p.home_location) + '</span>' + esc(p.name) +
+            (p.is_base_manager ? ' <span class="fault" style="background:#DDE6F4;color:#2F5B8C">Base Manager</span>' : "") +
+            (p.is_general_manager ? ' <span class="fault" style="background:#E6E0D4;color:#6B5A2F">General Manager</span>' : "") +
+            '</p><p class="meta">' + (p.phone ? esc(p.phone) : "no number on file") +
+            drivesText(p) + '</p></div>';
+        });
+        html += '</div>';
+      });
+    }
     document.getElementById("app").innerHTML = html;
   }
+
+  // -- Export to Excel (D-132-ish, 2026-10-06) -----------------------
+  // Mark: "I would also like to be able to export the complete Asset
+  // List and Staff List as an excel spreadsheet." "Complete" is why
+  // this lives here rather than on assets.html/staff.html — those are
+  // deliberately single-camp (D-091), and this is the one screen that
+  // already holds the whole group. Respects the Camp filter already on
+  // screen: all camps with nothing picked, one camp once it is — same
+  // "export matches what's on screen" rule reports.html's own export
+  // already follows.
+  var xlsxLib = null;
+  function loadXlsx() {
+    if (xlsxLib) return xlsxLib;
+    xlsxLib = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = function () { resolve(window.XLSX); };
+      s.onerror = function () { xlsxLib = null; reject(new Error("could not load the spreadsheet writer — check the connection")); };
+      document.head.appendChild(s);
+    });
+    return xlsxLib;
+  }
+  function campLabel(t) {
+    if (!F[t].camp) return "All camps";
+    var locs = (t === "assets" ? assetsData : staffData).viewable_locations
+      || (t === "assets" ? assetsData : staffData).locations || [];
+    var l = locs.filter(function (x) { return x.id === F[t].camp; })[0];
+    return l ? l.name : "";
+  }
+  function exportFilename(label, t) {
+    var bits = ["Bush Ways", label, campLabel(t), new Date().toISOString().slice(0, 10)];
+    return bits.join(" - ").replace(/[\\\/:*?"<>|]/g, "") + ".xlsx";
+  }
+  function writeWorkbook(sheetRows, sheetName, filename, btn) {
+    loadXlsx().then(function (XLSX) {
+      var ws = XLSX.utils.json_to_sheet(sheetRows);
+      var headers = sheetRows.length ? Object.keys(sheetRows[0]) : [];
+      ws["!cols"] = headers.map(function (h) {
+        var longest = h.length;
+        sheetRows.forEach(function (r) {
+          var len = String(r[h] == null ? "" : r[h]).length;
+          if (len > longest) longest = len;
+        });
+        return { wch: Math.min(40, longest + 2) };
+      });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+      XLSX.writeFile(wb, filename);
+      btn.disabled = false; btn.textContent = "Export to Excel";
+    }).catch(function (e) {
+      alert(e.message);
+      btn.disabled = false; btn.textContent = "Export to Excel";
+    });
+  }
+  window.exportAssetsToExcel = function (btn) {
+    btn.disabled = true; btn.textContent = "Preparing…";
+    var camp = F.assets.camp;
+    var rows = [];
+    ASSET_KIND_GROUPS.forEach(function (k) {
+      var all = (assetsData[k[0]] || []).filter(function (a) { return a.movable !== false && !a.retired; });
+      if (camp) all = all.filter(function (a) { return a.location_id === camp; });
+      all.forEach(function (a) {
+        rows.push({
+          Kind: k[1], Camp: a.location, Name: a.name,
+          Description: a.description || "", Area: a.area || "",
+        });
+      });
+    });
+    writeWorkbook(rows, "Assets", exportFilename("Asset List", "assets"), btn);
+  };
+  window.exportStaffToExcel = function (btn) {
+    btn.disabled = true; btn.textContent = "Preparing…";
+    var camp = F.staff.camp;
+    var all = (staffData.people || []).filter(function (p) { return !p.retired; });
+    if (camp) all = all.filter(function (p) { return p.home_location_id === camp; });
+    if (F.staff.dept) all = all.filter(function (p) { return p.department === F.staff.dept; });
+    var rows = all.map(function (p) {
+      var drives = [];
+      if (p.can_drive_guests) drives.push("Guests");
+      if (p.can_drive_utility) drives.push("Utility");
+      if (p.can_operate_boats) drives.push("Boats");
+      return {
+        Department: p.department || "No department", Camp: p.home_location, Name: p.name,
+        Phone: p.phone || "", "Base Manager": p.is_base_manager ? "Yes" : "",
+        "General Manager": p.is_general_manager ? "Yes" : "", Drives: drives.join(", "),
+      };
+    });
+    writeWorkbook(rows, "Staff", exportFilename("Staff List", "staff"), btn);
+  };
 
   try { var saved = sessionStorage.getItem("bw_signin"); if (saved) me = JSON.parse(saved); } catch (e) {}
   if (!me) {

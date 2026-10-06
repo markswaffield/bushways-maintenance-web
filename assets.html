@@ -119,7 +119,7 @@
 </style></head><body>
 
 <h1>Assets<span id="campTitle"></span></h1>
-<p class="sub">Vehicles, rooms and equipment. Nothing here is ever deleted — retiring keeps the history.</p>
+<p class="sub">Vehicles, trailers, boats and generators — the real moveable equipment. Nothing here is ever deleted — retiring keeps the history.</p>
 <div id="whoRow">
   <div class="whobar" id="whoSignedIn">
     <span>👤 <b id="whoName"></b></span>
@@ -170,11 +170,37 @@ function el(id){return document.getElementById(id);}
 // still real data, managed elsewhere — this page is for moveable
 // equipment specifically, per the same day's own Backup Generator
 // conversation).
+//
+// "Other equipment" is gone outright, 2026-10-06 — Mark: "we only need
+// to display moveable assets - fixed assets like rooms etc cannot be
+// transferred. Here is a list of moveable assets: Vehicles / Trailers /
+// Boats / Generators / Batteries / Inverters." That catch-all bucket
+// was really ~200 fixed maintenance-area rows (Kitchen, Boreholes, Main
+// DB Board...) with a handful of real equipment mixed in — the server
+// now only ever returns the real kinds below (`ASSET_LIST_KINDS`), so
+// there is nothing left here to hide client-side. Batteries and
+// Inverters left out for now — no separately tracked equipment exists
+// for either yet, just one shared "Inverter, batteries and wiring" per
+// lodge that is itself an area description, not a specific item.
 var KINDS = [
   ["vehicle", "Vehicles", true],
   ["trailer", "Trailers", true],
-  ["asset", "Other equipment", true],
+  ["boat", "Boats", true],
+  ["generator", "Generators", true],
 ];
+
+// A Camp General Manager may edit Assets and Staff too, not only an
+// Administrator (Mark, 2026-10-06) — but only at the camp(s) they
+// actually run: their own home camp, plus whatever dashboard_location_
+// access already grants them (Beauty Kavindama: OAT and Mababe). That
+// set is exactly me.locations, already assembled the same way at
+// sign-in for the camp switcher — nothing new to compute here.
+function canEditHere(){
+  if (!me) return false;
+  if (me.is_administrator) return true;
+  if (!me.is_general_manager || !shownCamp) return false;
+  return (me.locations || []).some(function(l){ return l.id === shownCamp.id; });
+}
 
 function post(action, body){
   return fetch(FN + "?action=" + action, {
@@ -281,14 +307,17 @@ function render(){
     h += '<h2>' + esc(title) + ' <span style="color:#8C6A2F;font-weight:400">' + list.length +
       (retiredCount && !showRetired ? " · " + retiredCount + " retired" : "") + '</span></h2>';
 
-    // Visible to all management, editable only by administrators — per
-    // Mark, 2026-09-18: "Assets and Staff - visible to all management
-    // but not editable" and "visible and editable to all managers who
-    // are administrators." Edit/Transfer/Retire/Add all gate on
-    // is_administrator now; History stays open to any manager, since
-    // just looking at a transfer record isn't the thing being locked
-    // down. The server enforces the same split — not just this hiding.
-    if (me && me.is_administrator && !(editing && editing.kind === kind && !editing.id)) {
+    // Visible to all management, editable by administrators and by this
+    // camp's own General Manager — per Mark, 2026-09-18: "Assets and
+    // Staff - visible to all management but not editable" and "visible
+    // and editable to all managers who are administrators," extended
+    // 2026-10-06 to Camp General Managers at their own camp(s)
+    // (canEditHere() above). Edit/Transfer/Retire/Add all gate on it
+    // now; History stays open to any manager, since just looking at a
+    // transfer record isn't the thing being locked down. The server
+    // enforces the same split — not just this hiding.
+    var editable = canEditHere();
+    if (editable && !(editing && editing.kind === kind && !editing.id)) {
       h += '<div class="acts"><button onclick="startAdd(\'' + kind + '\')">+ Add</button></div>';
     }
     if (editing && editing.kind === kind && !editing.id) h += assetForm();
@@ -304,13 +333,13 @@ function render(){
       else if (transferring && transferring.id === a.id) { h += transferForm(); }
       else if (me && me.is_manager) {
         h += '<div class="acts">';
-        if (me.is_administrator) {
+        if (editable) {
           h += '<button onclick="startEdit(\'' + kind + '\',\'' + a.id + '\')">Edit</button>';
           if (movable && !a.retired) h += '<button onclick="startTransfer(\'' + kind + '\',\'' + a.id + '\')">Transfer</button>';
         }
         if (movable) h += '<button onclick="showHistory(\'' + kind + '\',\'' + a.id + '\')">' +
           (historyFor === a.id ? "Hide history" : "History") + '</button>';
-        if (me.is_administrator) {
+        if (editable) {
           h += a.retired
             ? '<button onclick="retire(\'' + kind + '\',\'' + a.id + '\',true)">Restore</button>'
             : '<button class="danger" onclick="retire(\'' + kind + '\',\'' + a.id + '\')">Retire</button>';
