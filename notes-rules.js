@@ -344,22 +344,35 @@ function composition(guestInfo, notes){
   var text = [guestInfo || "", notes || ""].join("\n")
     .replace(/^\s*\[[^\]]*\]\s*$/gm, "");
 
-  var counts = [];
+  // Counted once per distinct (type, count) pair, not once per line it
+  // appears on — ResRequest sometimes echoes the same "[note]" counts into
+  // special_requests as well as guest_details (WB31839, 2026-10-06), and
+  // scanning both naively doubled every room in the group.
+  var seenCount = {}, counts = [];
   text.split(/\r\n|\r|\n/).forEach(function(ln){
     var m = ln.match(/^\s*(\d{1,2})\s*([A-Za-z]+)\s*$/);
     var label = m && compositionLabel(m[2]);
-    if (label) counts.push({ label: label, rooms: +m[1] });
+    if (!label) return;
+    var key = label + ":" + m[1];
+    if (seenCount[key]) return;
+    seenCount[key] = true;
+    counts.push({ label: label, rooms: +m[1] });
   });
   if (!counts.length) return null;
 
   // A bare heading — just the type word, nothing else on the line — starts
-  // a block of names that runs to the next blank line.
-  var namesByLabel = {};
+  // a block of names that runs to the next blank line. Same duplicate-input
+  // guard as the counts above: an identical block seen twice is one group
+  // of names, not two.
+  var namesByLabel = {}, seenBlock = {};
   text.split(/\r?\n\s*\r?\n/).forEach(function(block){
     var bl = block.split(/\r\n|\r|\n/).map(function(s){ return s.trim(); }).filter(Boolean);
     if (!bl.length || !/^[A-Za-z]+$/.test(bl[0])) return;
     var label = compositionLabel(bl[0]);
     if (!label) return;
+    var key = bl.join("\n");
+    if (seenBlock[key]) return;
+    seenBlock[key] = true;
     namesByLabel[label] = (namesByLabel[label] || []).concat(bl.slice(1));
   });
 
