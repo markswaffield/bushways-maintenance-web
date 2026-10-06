@@ -331,12 +331,28 @@
             '<span class="when">' + when(i.raised_at) + '</span></span></div>';
 
           if (i.assigned_department) {
+            // Who did the assigning, and the person within the
+            // department if one was named — Mark, 2026-10-06: "i want
+            // who assigned the task recoreded... we could show this
+            // information in the completed tasks section."
             html += '<div class="step"><span class="dot"></span><span class="text">' +
-              'Assigned to <span class="who">' + esc(i.assigned_department) + '</span>' +
+              'Assigned to <span class="who">' + esc(i.assigned_department) +
+              (i.assigned_person ? ' — ' + esc(i.assigned_person) : '') + '</span>' +
+              (i.assigned_by ? ' by <span class="who">' + esc(i.assigned_by) + '</span>' : '') +
               (i.assigned_at ? '<span class="when">' + when(i.assigned_at) + '</span>' : '<span class="when">no date on record</span>') +
               '</span></div>';
           } else {
             html += '<div class="step pending"><span class="dot"></span><span class="text">Never formally assigned</span></div>';
+          }
+
+          // The full reassignment history, only when there actually is
+          // one — "any changes to this can also be recorded and
+          // reflected." One assignment is just the step above; more
+          // than one means it moved, and that's worth showing.
+          if (i.assignment_history && i.assignment_history.length > 1) {
+            html += '<div class="notes">' + i.assignment_history.map(function (c) {
+              return '<p class="note-line"><span class="note-who">' + when(c.at) + '</span> — ' + esc(c.summary) + '</p>';
+            }).join("") + '</div>';
           }
 
           html += '<div class="step"><span class="dot"></span><span class="text">' +

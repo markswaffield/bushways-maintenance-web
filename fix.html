@@ -500,7 +500,8 @@
     }
 
     if (i.assigned_department) {
-      html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_department.name) + '</p>';
+      html += '<p class="assigned-label">Assigned to ' + esc(i.assigned_department.name) +
+        (i.assigned_person ? ' — ' + esc(i.assigned_person.name) : '') + '</p>';
     }
 
     html += '<div class="fix-form">' +

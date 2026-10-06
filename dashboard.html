@@ -154,6 +154,21 @@
   var API = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
   var lastData = null;
   var departments = []; // set once data first loads — doAddNote/doAssign's own assign-row needs it too
+  // Person picker alongside the Department one (D-131-ish, 2026-10-06)
+  // — "i would like to also assign a person within the department if
+  // required." Fetched once, the same bootstrap() call schedule.html's
+  // own Department → Person filter already uses, not refetched on
+  // every reload.
+  var people = [];
+  fetch(API + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : "")).then(function (r) { return r.json(); })
+    .then(function (b) {
+      people = b.people || [];
+      // Render whichever response arrived first; most of the time this
+      // one is faster than loadIssues()'s own larger fetch, but either
+      // order has to leave the Person picker populated, not just
+      // whichever happened to resolve last by luck.
+      if (lastData) { renderFilters(lastData); renderIssues(applyFilters(lastData)); }
+    });
   // Rebuilt 2026-09-09, per Mark's own sketch: "Default Order" groups
   // by maintenance Area first (Guest Room, Main Area, Workshop...),
   // then by Target within it (Room 1's faults all together, then
@@ -394,7 +409,8 @@
             '<p class="fault-line">' + (f.urgent ? '<span class="fault" style="background:#F4CFC2;color:#A8502F">URGENT</span> ' : '') + esc(f.label) +
             (f.fault_type ? ' — <span class="fault">' + esc(f.fault_type) + '</span>' : '') +
             (f.action ? ' — ' + esc(f.action) : '') +
-            (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' + esc(f.assigned_department) + '</span>' : '') +
+            (f.assigned_department ? ' <span class="fault" style="background:#E3DFD3;color:#5B5344">→ ' +
+              esc(f.assigned_department) + (f.assigned_person ? ' — ' + esc(f.assigned_person) : '') + '</span>' : '') +
             '</p>' +
             '<p class="meta">' + esc(f.raised_by) + ', ' + timeAgo(f.raised_at) + '</p>';
 
@@ -413,12 +429,20 @@
           if (me && me.is_manager) {
             html += '<div class="note-add"><textarea id="note-' + f.id + '" rows="1" placeholder="Add detail for whoever picks this up (optional)"></textarea>' +
               '<button class="small secondary" onclick="doAddNote(\'' + f.id + '\')">Add note</button></div>';
-            html += '<div class="assign-row"><select id="assign-' + f.id + '">' +
+            // Department, then a person within it, optional — Mark,
+            // 2026-10-06: "At the moment we can only assign a
+            // department, i would like to also assign a person within
+            // the department if required." The person list is rebuilt
+            // live when the department changes (onAssignDeptChange),
+            // not re-rendered from scratch — a full render here would
+            // also wipe out whatever's mid-typed in the note box above.
+            html += '<div class="assign-row"><select id="assign-' + f.id + '" onchange="onAssignDeptChange(\'' + f.id + '\')">' +
               '<option value="">Unassigned</option>' +
               departments.map(function (d) {
                 return '<option value="' + d.id + '"' + (f.assigned_department_id === d.id ? " selected" : "") + '>' + esc(d.name) + '</option>';
               }).join("") +
-              '</select><button class="small secondary" onclick="doAssign(\'' + f.id + '\')">Assign</button></div>';
+              '</select><select id="assign-person-' + f.id + '">' + personOptions(f.assigned_department_id, f.assigned_person_id) + '</select>' +
+              '<button class="small secondary" onclick="doAssign(\'' + f.id + '\')">Assign</button></div>';
           }
 
           // Straight into Fix a Fault for this one, no re-finding it
@@ -466,8 +490,29 @@
   // along whatever's currently in that fault's own note box, so the
   // natural "type detail, then assign" motion actually saves both. Add
   // note by itself is unchanged, for adding one without assigning.
+  // The person list for one fault's own assign-row, scoped to the
+  // chosen department — matched on the department's NAME, the same way
+  // schedule.html's own Department → Person filter already does
+  // (bootstrap()'s own people carry a department name, not an id).
+  function personOptions(deptId, selectedPersonId) {
+    if (!deptId) return '<option value="">—</option>';
+    var dept = departments.filter(function (d) { return d.id === deptId; })[0];
+    var choices = people.filter(function (p) { return dept && p.department === dept.name; });
+    return '<option value="">Anyone in the department</option>' +
+      choices.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (selectedPersonId === p.id ? " selected" : "") + '>' + esc(p.name) + '</option>';
+      }).join("");
+  }
+  window.onAssignDeptChange = function (id) {
+    var deptSel = document.getElementById("assign-" + id);
+    var personSel = document.getElementById("assign-person-" + id);
+    if (personSel) personSel.innerHTML = personOptions(deptSel.value, null);
+  };
+
   window.doAssign = function (id) {
     var departmentId = document.getElementById("assign-" + id).value;
+    var personSel = document.getElementById("assign-person-" + id);
+    var personId = personSel ? personSel.value : "";
     var noteField = document.getElementById("note-" + id);
     var noteText = noteField ? noteField.value.trim() : "";
     var saveNote = noteText
@@ -480,7 +525,7 @@
       if (noteOut && noteOut.error) { alert(noteOut.error); return; }
       return fetch(API + "?action=assign", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, by_person_id: me.id }),
+        body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, assigned_person_id: personId, by_person_id: me.id }),
       }).then(function (r) { return r.json(); }).then(function (out) {
         if (out.error) { alert(out.error); return; }
         loadIssues();
