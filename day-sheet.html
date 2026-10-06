@@ -774,11 +774,37 @@ function cellNotes(row){
 //
 // Both come out of free prose, so both carry the sentence they came from —
 // hover to check without leaving the sheet.
-function cellType(b){
+// A group booking's own room-by-room breakdown (D-037) matched against
+// whichever name the camp has typed into THIS room's own Names box — so a
+// specific room of a multi-room group can show its own type and pax rather
+// than the whole group's. Matched on whole words of 3+ letters, so "Devin"
+// or "Mulford" alone is enough. A room with nothing typed yet, or a name
+// that matches no group, returns null and the booking's own blanket values
+// are shown unchanged — same as before this existed.
+function matchComposition(b, guestNames){
+  var groups = b && b.extraction && b.extraction.composition;
+  if (!groups || !groups.length || !guestNames) return null;
+  var typed = String(guestNames).toLowerCase().match(/[a-z]{3,}/g) || [];
+  if (!typed.length) return null;
+  var best = null, bestScore = 0;
+  groups.forEach(function(g){
+    if (!g.names || !g.names.length) return;
+    var pool = g.names.join(" ").toLowerCase();
+    var score = typed.filter(function(w){ return pool.indexOf(w) !== -1; }).length;
+    if (score > bestScore){ bestScore = score; best = g; }
+  });
+  return best;
+}
+
+function cellType(b, guestNames){
   if (!b) return '<td class="ro dim c-type"></td>';
   var x = b.extraction || {};
   var bits = [];
-  if (b.bed_type) bits.push('<span class="tag'+(x.bed && x.bed.confident === false ? " unsure" : "")
+  var match = matchComposition(b, guestNames);
+  if (match){
+    bits.push('<span class="tag" title="This room, from its own Names and the booking\'s notes: '
+      + esc(match.names.join(", ") || match.type) + '">' + esc(match.type) + "</span>");
+  } else if (b.bed_type) bits.push('<span class="tag'+(x.bed && x.bed.confident === false ? " unsure" : "")
     + '" title="'+esc((x.bed && x.bed.source) || "from the booking")+'">'+esc(b.bed_type)+"</span>");
   // Mark, 2026-09-29: "I only want to record the bed type (Double, Twin,
   // Triple) and if they are Fully Inclusive (FI). If you pick up that they are
@@ -813,8 +839,13 @@ function cellType(b){
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 
-function cellPax(b){
+function cellPax(b, guestNames){
   if (!b) return '<td class="ro dim c-pax"></td>';
+  var match = matchComposition(b, guestNames);
+  if (match){
+    return '<td class="ro c-pax" title="This room\'s own pax, from its Names and the booking\'s notes">'
+      + esc(match.pax) + "</td>";
+  }
   var p = [];
   if (b.adults) p.push(b.adults+"A");
   if (b.children) p.push(b.children+"C");
@@ -877,8 +908,8 @@ function rowHtml(row){
   h += "</td>";
 
   // ---- Sector 1: the stay ----
-  h += cellPax(b);
-  h += cellType(b);
+  h += cellPax(b, row.stay && row.stay.guest_names);
+  h += cellType(b, row.stay && row.stay.guest_names);
   h += cellNames(row);
   h += cellSelect(row,"housekeeper_id",people,"stay");
   h += cellSelect(row,"guide_id",people,"stay");
@@ -1241,9 +1272,29 @@ function load(){
   });
 }
 
+// Typing a name into a room's own Names box can change which part of a
+// group's composition (D-037) this specific room matches, so Pax and Type
+// update as you type — same as the rest of this page's live warnings,
+// rather than waiting for Save and a reload.
+function refreshRoomTypePax(roomId){
+  var row = (sheet.rows || []).filter(function(r){ return r.room_id === roomId; })[0];
+  if (!row || !row.stay) return;
+  var input = document.querySelector('[data-room="'+roomId+'"][data-key="guest_names"]');
+  var names = input ? input.value : row.stay.guest_names;
+  var tr = document.querySelector('tr[data-rowfor="'+roomId+'"]');
+  if (!tr) return;
+  var paxTd = tr.querySelector("td.c-pax"), typeTd = tr.querySelector("td.c-type");
+  if (paxTd) paxTd.outerHTML = cellPax(row.stay.booking, names);
+  if (typeTd) typeTd.outerHTML = cellType(row.stay.booking, names);
+}
+
 document.addEventListener("input", function(e){
   var room = e.target.getAttribute && e.target.getAttribute("data-room");
-  if (room) return markDirty(room);
+  if (room){
+    markDirty(room);
+    if (e.target.getAttribute("data-key") === "guest_names") refreshRoomTypePax(room);
+    return;
+  }
   if (e.target.id === "general"){ el("save").disabled = false; setStatus("Notes changed — not saved yet", "dirty"); }
 });
 document.addEventListener("change", function(e){
@@ -1423,7 +1474,7 @@ function noteGaps(b){
   if (!b.guest_details) return !b.adults && !!paxFromName(b.guest_name);
   return !b.bed_type || !b.booking_basis || !b.dietary || !b.medical
       || !b.special_occasion || !b.arrival_details || !b.departure_details
-      || !b.adults;
+      || !b.adults || !(b.extraction && b.extraction.composition);
 }
 
 function readNotes(useAi){
@@ -1468,6 +1519,14 @@ function readNotes(useAi){
         if (mv.departure && !b.departure_details) { b.departure_details = mv.departure.value; b.extraction.departure = mv.departure; }
 
         if (!b.adults){ var p = paxFromName(b.guest_name); if (p) b.adults = p; }
+
+        // The group's own room-by-room breakdown — Double/Twin/Single, who's
+        // in each — so a specific room can show its own type and pax instead
+        // of the whole group's (D-037). [] marks "looked, nothing there" so
+        // this booking stops being treated as a gap once checked.
+        if (!b.extraction.composition){
+          b.extraction.composition = composition(b.guest_details, b.special_requests) || [];
+        }
       });
 
       var step = Promise.resolve();

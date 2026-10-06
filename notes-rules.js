@@ -286,6 +286,97 @@ function extract(guestInfo, notes){
   return out;
 }
 
+// A group booking's own room-by-room breakdown — which rooms, which type,
+// how many people in each — read off a note written as counts with the
+// actual guests listed underneath:
+//
+//     [note]
+//     1 DOUBLE
+//     2 TWINS
+//     3 SINGLES
+//
+//     [memo]
+//     DOUBLE
+//     Devin Tyler Piersol
+//     Jennifer Perkins
+//
+//     TWINS
+//     Claudia Meier
+//     ...
+//
+// Mark, 2026-10-06, on a 9-pax group (BWAS2613 X9) showing "DBL, 9 pax"
+// against every one of its 6 rooms at Chobe: "We need the AI tool to look
+// in the notes and see how the group is made up... so the description of
+// Type should match this and the numbers of PAX should also match this."
+//
+// WHY THIS EXISTS SEPARATELY FROM bed(). ResRequest's own fields never carry
+// a per-room split — adults is one number for the whole group, repeated on
+// every physical room — so this is the only place a SPECIFIC room's own pax
+// and type can come from. It does not decide which real room gets which
+// group; day-sheet.html matches a room's own typed guest_names against the
+// names returned here, so pax and type only show up against a room once
+// somebody has actually written who is in it.
+//
+// Each type's own room count comes from the "[note]" counts line; how many
+// people per room of that type comes from dividing the matching "[memo]"
+// name list by that count — not a fixed guess, since a "Family Room" might
+// hold two or six. An uneven split still returns something (rounded) rather
+// than nothing, because the pax total still matters even when the exact
+// per-room count cannot be known.
+var ROOM_COMPOSITION_WORDS = [
+  { re:/DOUBLE/i, label:"Double" }, { re:/TWIN/i,   label:"Twin" },
+  { re:/SINGLE/i, label:"Single" }, { re:/TRIPLE/i, label:"Triple" },
+  { re:/FAMILY/i, label:"Family" }, { re:/QUAD/i,   label:"Quad" }
+];
+var COMPOSITION_DEFAULT_PAX = { Double:2, Twin:2, Single:1, Triple:3, Family:4, Quad:4 };
+
+function compositionLabel(word){
+  for (var i = 0; i < ROOM_COMPOSITION_WORDS.length; i++){
+    if (ROOM_COMPOSITION_WORDS[i].re.test(word)) return ROOM_COMPOSITION_WORDS[i].label;
+  }
+  return null;
+}
+
+function composition(guestInfo, notes){
+  // "[note]" and "[memo]" are plain section markers, not content — stripped
+  // so the heading that actually matters ("DOUBLE", "TWINS") lands as the
+  // first line of its own paragraph rather than second to a marker line.
+  var text = [guestInfo || "", notes || ""].join("\n")
+    .replace(/^\s*\[[^\]]*\]\s*$/gm, "");
+
+  var counts = [];
+  text.split(/\r\n|\r|\n/).forEach(function(ln){
+    var m = ln.match(/^\s*(\d{1,2})\s*([A-Za-z]+)\s*$/);
+    var label = m && compositionLabel(m[2]);
+    if (label) counts.push({ label: label, rooms: +m[1] });
+  });
+  if (!counts.length) return null;
+
+  // A bare heading — just the type word, nothing else on the line — starts
+  // a block of names that runs to the next blank line.
+  var namesByLabel = {};
+  text.split(/\r?\n\s*\r?\n/).forEach(function(block){
+    var bl = block.split(/\r\n|\r|\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+    if (!bl.length || !/^[A-Za-z]+$/.test(bl[0])) return;
+    var label = compositionLabel(bl[0]);
+    if (!label) return;
+    namesByLabel[label] = (namesByLabel[label] || []).concat(bl.slice(1));
+  });
+
+  var groups = [];
+  counts.forEach(function(c){
+    var names = namesByLabel[c.label] || [];
+    var perRoom = names.length
+      ? (names.length % c.rooms === 0 ? names.length / c.rooms : Math.round(names.length / c.rooms))
+      : COMPOSITION_DEFAULT_PAX[c.label];
+    for (var i = 0; i < c.rooms; i++){
+      var slice = names.length ? names.slice(i * perRoom, (i + 1) * perRoom) : [];
+      groups.push({ type: c.label, pax: slice.length || perRoom, names: slice });
+    }
+  });
+  return groups.length ? groups : null;
+}
+
 /* Which line of a booking's movement notes belongs to THIS camp on THIS date.
 
    The hard part is not finding movement text — nearly every booking has some.
