@@ -774,58 +774,81 @@ function cellNotes(row){
 //
 // Both come out of free prose, so both carry the sentence they came from —
 // hover to check without leaving the sheet.
-// A group booking's own room-by-room breakdown (D-037) matched against
-// whichever name the camp has typed into THIS room's own Names box — so a
-// specific room of a multi-room group can show its own type and pax rather
-// than the whole group's. Matched on whole words of 3+ letters, so "Devin"
-// or "Mulford" alone is enough. A room with nothing typed yet, or a name
-// that matches no group, returns null and the booking's own blanket values
-// are shown unchanged — same as before this existed.
-//
-// NAMELESS GROUPS (D-038). Plenty of real notes give the count but never
-// name who is in which room — "2 x Double rooms" (Matter x4, 2026-10-06)
-// — so there is nothing a typed name could ever match against. Mark: "why
-// can the tool then not assign 2 pax per room from the start." When EVERY
-// group in the composition is nameless, typing cannot help regardless, so
-// each of the booking's own rooms is given the next group in order instead
-// — sorted by room id so it is stable across a reload, not by allocation
-// order, which can change. Left alone the moment even one group in the
-// composition DOES carry names (BWAS2612: doubles named, singles not) —
-// guessing the rest by position then risks handing a named person's room
-// to somebody else.
-function matchComposition(b, guestNames, roomId){
-  var groups = b && b.extraction && b.extraction.composition;
-  if (!groups || !groups.length) return null;
-
-  if (guestNames){
-    var typed = String(guestNames).toLowerCase().match(/[a-z]{3,}/g) || [];
-    if (typed.length){
-      var best = null, bestScore = 0;
-      groups.forEach(function(g){
-        if (!g.names || !g.names.length) return;
-        var pool = g.names.join(" ").toLowerCase();
-        var score = typed.filter(function(w){ return pool.indexOf(w) !== -1; }).length;
-        if (score > bestScore){ bestScore = score; best = g; }
-      });
-      if (best) return best;
-    }
-  }
-
-  var allNameless = groups.every(function(g){ return !g.names || !g.names.length; });
-  if (!allNameless || !roomId) return null;
-  var siblingIds = (sheet.rows || [])
-    .filter(function(r){ return r.stay && r.stay.booking && r.stay.booking.id === b.id; })
-    .map(function(r){ return r.room_id; })
-    .sort();
-  var idx = siblingIds.indexOf(roomId);
-  return idx >= 0 && idx < groups.length ? groups[idx] : null;
+// The live typed value of a room's own Names box where that box already
+// exists in the DOM (a sibling row, or this one mid-edit), falling back to
+// the last-loaded value otherwise — during the very first render nothing
+// is in the DOM yet, so every room reads its own loaded value, which is
+// exactly what is wanted then.
+function liveGuestNames(roomId, loaded){
+  var input = document.querySelector('[data-room="'+roomId+'"][data-key="guest_names"]');
+  return input ? input.value : loaded;
 }
 
-function cellType(b, guestNames, roomId){
+// Which of a booking's own rooms gets which part of its room-by-room
+// breakdown (D-037/D-038). Worked out for every sibling room at once, not
+// looked up independently per cell, so two rooms can never both claim the
+// same group:
+//
+//   1. a room whose typed name matches a named group claims that group —
+//      Mark typing "Devin" into a specific room should show THAT room's
+//      own Double, not just move the blanket total there.
+//   2. whichever groups are left — nameless ones, and named ones nobody
+//      has typed a matching name into yet — go to the remaining rooms in a
+//      fixed order (sorted by room id, so it is stable across a reload),
+//      so a sensible answer shows up the moment the rooms exist, not only
+//      once every name has been typed in.
+//
+// Mark, 2026-10-06, on BWAS2613's 6 Chobe rooms (1 Double, 2 Twin, 3
+// Single) still showing the group's blanket "DBL, 9 pax" with nothing
+// typed into any of them yet: "why does the day sheet not reflect the room
+// allocations... 3 x 2pax and 3 x 1 pax?" Right — a named composition
+// should not sit blank until someone types a name any more than a
+// nameless one should (D-038's "assign from the start" for Matter x4
+// applies here too); typing a name only improves on the guess, it should
+// not be required to get one at all.
+function assignCompositionRooms(b){
+  var groups = b && b.extraction && b.extraction.composition;
+  if (!groups || !groups.length) return {};
+  var sibs = (sheet.rows || [])
+    .filter(function(r){ return r.stay && r.stay.booking && r.stay.booking.id === b.id; })
+    .map(function(r){ return { roomId: r.room_id, names: liveGuestNames(r.room_id, r.stay.guest_names) }; })
+    .sort(function(a,c){ return a.roomId < c.roomId ? -1 : a.roomId > c.roomId ? 1 : 0; });
+
+  var claimed = groups.map(function(){ return false; });
+  var out = {};
+  sibs.forEach(function(s){
+    if (!s.names) return;
+    var typed = String(s.names).toLowerCase().match(/[a-z]{3,}/g) || [];
+    if (!typed.length) return;
+    var best = -1, bestScore = 0;
+    groups.forEach(function(g, i){
+      if (claimed[i] || !g.names || !g.names.length) return;
+      var pool = g.names.join(" ").toLowerCase();
+      var score = typed.filter(function(w){ return pool.indexOf(w) !== -1; }).length;
+      if (score > bestScore){ bestScore = score; best = i; }
+    });
+    if (best >= 0){ claimed[best] = true; out[s.roomId] = groups[best]; }
+  });
+
+  var leftover = groups.filter(function(g, i){ return !claimed[i]; });
+  var li = 0;
+  sibs.forEach(function(s){
+    if (out[s.roomId]) return;
+    if (li < leftover.length) out[s.roomId] = leftover[li++];
+  });
+  return out;
+}
+
+function matchComposition(b, roomId){
+  if (!b || !roomId) return null;
+  return assignCompositionRooms(b)[roomId] || null;
+}
+
+function cellType(b, roomId){
   if (!b) return '<td class="ro dim c-type"></td>';
   var x = b.extraction || {};
   var bits = [];
-  var match = matchComposition(b, guestNames, roomId);
+  var match = matchComposition(b, roomId);
   if (match){
     var matchTitle = match.names.length
       ? "This room, matched from its Names box: " + match.names.join(", ")
@@ -866,9 +889,9 @@ function cellType(b, guestNames, roomId){
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 
-function cellPax(b, guestNames, roomId){
+function cellPax(b, roomId){
   if (!b) return '<td class="ro dim c-pax"></td>';
-  var match = matchComposition(b, guestNames, roomId);
+  var match = matchComposition(b, roomId);
   if (match){
     return '<td class="ro c-pax" title="This room\'s own pax, from the group\'s own booking notes">'
       + esc(match.pax) + "</td>";
@@ -935,8 +958,8 @@ function rowHtml(row){
   h += "</td>";
 
   // ---- Sector 1: the stay ----
-  h += cellPax(b, row.stay && row.stay.guest_names, row.room_id);
-  h += cellType(b, row.stay && row.stay.guest_names, row.room_id);
+  h += cellPax(b, row.room_id);
+  h += cellType(b, row.room_id);
   h += cellNames(row);
   h += cellSelect(row,"housekeeper_id",people,"stay");
   h += cellSelect(row,"guide_id",people,"stay");
@@ -1300,19 +1323,24 @@ function load(){
 }
 
 // Typing a name into a room's own Names box can change which part of a
-// group's composition (D-037) this specific room matches, so Pax and Type
-// update as you type — same as the rest of this page's live warnings,
-// rather than waiting for Save and a reload.
+// group's composition (D-037/D-039) this specific room matches, so Pax and
+// Type update as you type — same as the rest of this page's live warnings,
+// rather than waiting for Save and a reload. A typed name can also bump a
+// SIBLING room's own guess (assignCompositionRooms reassigns the leftover
+// groups once one room claims its own by name), so every room of the same
+// booking is refreshed, not only the one being typed into.
 function refreshRoomTypePax(roomId){
   var row = (sheet.rows || []).filter(function(r){ return r.room_id === roomId; })[0];
-  if (!row || !row.stay) return;
-  var input = document.querySelector('[data-room="'+roomId+'"][data-key="guest_names"]');
-  var names = input ? input.value : row.stay.guest_names;
-  var tr = document.querySelector('tr[data-rowfor="'+roomId+'"]');
-  if (!tr) return;
-  var paxTd = tr.querySelector("td.c-pax"), typeTd = tr.querySelector("td.c-type");
-  if (paxTd) paxTd.outerHTML = cellPax(row.stay.booking, names, roomId);
-  if (typeTd) typeTd.outerHTML = cellType(row.stay.booking, names, roomId);
+  if (!row || !row.stay || !row.stay.booking) return;
+  var bookingId = row.stay.booking.id;
+  (sheet.rows || []).forEach(function(r){
+    if (!r.stay || !r.stay.booking || r.stay.booking.id !== bookingId) return;
+    var tr = document.querySelector('tr[data-rowfor="'+r.room_id+'"]');
+    if (!tr) return;
+    var paxTd = tr.querySelector("td.c-pax"), typeTd = tr.querySelector("td.c-type");
+    if (paxTd) paxTd.outerHTML = cellPax(r.stay.booking, r.room_id);
+    if (typeTd) typeTd.outerHTML = cellType(r.stay.booking, r.room_id);
+  });
 }
 
 document.addEventListener("input", function(e){
