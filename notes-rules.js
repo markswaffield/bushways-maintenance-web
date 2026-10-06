@@ -344,20 +344,29 @@ function composition(guestInfo, notes){
   var text = [guestInfo || "", notes || ""].join("\n")
     .replace(/^\s*\[[^\]]*\]\s*$/gm, "");
 
+  // A count can sit on a bare line of its own ("1 DOUBLE"), or inline with
+  // other words either side — "2 x Double rooms" (Matter x4, 2026-10-06),
+  // "5 doubles & 1 twin" (BWAS2612, same day), "4 \tx Double" (tab-separated,
+  // Fesca x8). Scanned anywhere a digit sits right before one of the six
+  // words, not just on a line of its own — real agents write this too many
+  // ways to anchor on one of them. Matched narrowly enough that it still
+  // will not fire on a date or a phone number: nothing in this file's real
+  // exports has put one of these six words directly after an unrelated
+  // number.
+  //
   // Counted once per distinct (type, count) pair, not once per line it
   // appears on — ResRequest sometimes echoes the same "[note]" counts into
   // special_requests as well as guest_details (WB31839, 2026-10-06), and
   // scanning both naively doubled every room in the group.
-  var seenCount = {}, counts = [];
-  text.split(/\r\n|\r|\n/).forEach(function(ln){
-    var m = ln.match(/^\s*(\d{1,2})\s*([A-Za-z]+)\s*$/);
-    var label = m && compositionLabel(m[2]);
-    if (!label) return;
-    var key = label + ":" + m[1];
-    if (seenCount[key]) return;
+  var seenCount = {}, counts = [], countRe = /\b(\d{1,2})\s*(?:x\s*)?([A-Za-z]+)\b/g, cm;
+  while ((cm = countRe.exec(text))){
+    var label = compositionLabel(cm[2]);
+    if (!label) continue;
+    var key = label + ":" + cm[1];
+    if (seenCount[key]) continue;
     seenCount[key] = true;
-    counts.push({ label: label, rooms: +m[1] });
-  });
+    counts.push({ label: label, rooms: +cm[1] });
+  }
   if (!counts.length) return null;
 
   // A bare heading — just the type word, nothing else on the line — starts

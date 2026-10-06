@@ -781,29 +781,56 @@ function cellNotes(row){
 // or "Mulford" alone is enough. A room with nothing typed yet, or a name
 // that matches no group, returns null and the booking's own blanket values
 // are shown unchanged — same as before this existed.
-function matchComposition(b, guestNames){
+//
+// NAMELESS GROUPS (D-038). Plenty of real notes give the count but never
+// name who is in which room — "2 x Double rooms" (Matter x4, 2026-10-06)
+// — so there is nothing a typed name could ever match against. Mark: "why
+// can the tool then not assign 2 pax per room from the start." When EVERY
+// group in the composition is nameless, typing cannot help regardless, so
+// each of the booking's own rooms is given the next group in order instead
+// — sorted by room id so it is stable across a reload, not by allocation
+// order, which can change. Left alone the moment even one group in the
+// composition DOES carry names (BWAS2612: doubles named, singles not) —
+// guessing the rest by position then risks handing a named person's room
+// to somebody else.
+function matchComposition(b, guestNames, roomId){
   var groups = b && b.extraction && b.extraction.composition;
-  if (!groups || !groups.length || !guestNames) return null;
-  var typed = String(guestNames).toLowerCase().match(/[a-z]{3,}/g) || [];
-  if (!typed.length) return null;
-  var best = null, bestScore = 0;
-  groups.forEach(function(g){
-    if (!g.names || !g.names.length) return;
-    var pool = g.names.join(" ").toLowerCase();
-    var score = typed.filter(function(w){ return pool.indexOf(w) !== -1; }).length;
-    if (score > bestScore){ bestScore = score; best = g; }
-  });
-  return best;
+  if (!groups || !groups.length) return null;
+
+  if (guestNames){
+    var typed = String(guestNames).toLowerCase().match(/[a-z]{3,}/g) || [];
+    if (typed.length){
+      var best = null, bestScore = 0;
+      groups.forEach(function(g){
+        if (!g.names || !g.names.length) return;
+        var pool = g.names.join(" ").toLowerCase();
+        var score = typed.filter(function(w){ return pool.indexOf(w) !== -1; }).length;
+        if (score > bestScore){ bestScore = score; best = g; }
+      });
+      if (best) return best;
+    }
+  }
+
+  var allNameless = groups.every(function(g){ return !g.names || !g.names.length; });
+  if (!allNameless || !roomId) return null;
+  var siblingIds = (sheet.rows || [])
+    .filter(function(r){ return r.stay && r.stay.booking && r.stay.booking.id === b.id; })
+    .map(function(r){ return r.room_id; })
+    .sort();
+  var idx = siblingIds.indexOf(roomId);
+  return idx >= 0 && idx < groups.length ? groups[idx] : null;
 }
 
-function cellType(b, guestNames){
+function cellType(b, guestNames, roomId){
   if (!b) return '<td class="ro dim c-type"></td>';
   var x = b.extraction || {};
   var bits = [];
-  var match = matchComposition(b, guestNames);
+  var match = matchComposition(b, guestNames, roomId);
   if (match){
-    bits.push('<span class="tag" title="This room, from its own Names and the booking\'s notes: '
-      + esc(match.names.join(", ") || match.type) + '">' + esc(match.type) + "</span>");
+    var matchTitle = match.names.length
+      ? "This room, matched from its Names box: " + match.names.join(", ")
+      : "This room's share of the group's own booking notes";
+    bits.push('<span class="tag" title="'+esc(matchTitle)+'">' + esc(match.type) + "</span>");
   } else if (b.bed_type) bits.push('<span class="tag'+(x.bed && x.bed.confident === false ? " unsure" : "")
     + '" title="'+esc((x.bed && x.bed.source) || "from the booking")+'">'+esc(b.bed_type)+"</span>");
   // Mark, 2026-09-29: "I only want to record the bed type (Double, Twin,
@@ -839,11 +866,11 @@ function cellType(b, guestNames){
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 
-function cellPax(b, guestNames){
+function cellPax(b, guestNames, roomId){
   if (!b) return '<td class="ro dim c-pax"></td>';
-  var match = matchComposition(b, guestNames);
+  var match = matchComposition(b, guestNames, roomId);
   if (match){
-    return '<td class="ro c-pax" title="This room\'s own pax, from its Names and the booking\'s notes">'
+    return '<td class="ro c-pax" title="This room\'s own pax, from the group\'s own booking notes">'
       + esc(match.pax) + "</td>";
   }
   var p = [];
@@ -908,8 +935,8 @@ function rowHtml(row){
   h += "</td>";
 
   // ---- Sector 1: the stay ----
-  h += cellPax(b, row.stay && row.stay.guest_names);
-  h += cellType(b, row.stay && row.stay.guest_names);
+  h += cellPax(b, row.stay && row.stay.guest_names, row.room_id);
+  h += cellType(b, row.stay && row.stay.guest_names, row.room_id);
   h += cellNames(row);
   h += cellSelect(row,"housekeeper_id",people,"stay");
   h += cellSelect(row,"guide_id",people,"stay");
@@ -1284,8 +1311,8 @@ function refreshRoomTypePax(roomId){
   var tr = document.querySelector('tr[data-rowfor="'+roomId+'"]');
   if (!tr) return;
   var paxTd = tr.querySelector("td.c-pax"), typeTd = tr.querySelector("td.c-type");
-  if (paxTd) paxTd.outerHTML = cellPax(row.stay.booking, names);
-  if (typeTd) typeTd.outerHTML = cellType(row.stay.booking, names);
+  if (paxTd) paxTd.outerHTML = cellPax(row.stay.booking, names, roomId);
+  if (typeTd) typeTd.outerHTML = cellType(row.stay.booking, names, roomId);
 }
 
 document.addEventListener("input", function(e){
