@@ -55,6 +55,11 @@
      inviting the same broken toilet to be flagged as if new, every
      single visit, was the actual bug. */
   .reopen-banner{background:#F4CFC2;color:#A8502F;font-size:12.5px;font-weight:600;padding:7px 10px;border-radius:6px;margin:0 0 8px}
+  /* Two or more open faults on the same line, each named and dated — D-139,
+     2026-10-08 — sits inside the banner itself, one block, rather than
+     stitching a list onto the outside of it. */
+  .reopen-banner ol{margin:4px 0 0;padding:0 0 0 18px;font-weight:400}
+  .reopen-banner li{margin:2px 0}
   /* Photos, one capture at a time (D-138, revised). A plain <input
      multiple> relies on the phone's gallery multi-select, but Mark takes
      these live with the camera — on most phones "capture" hands off to
@@ -988,9 +993,20 @@
               '<input type="file" accept="image/*" capture="environment" style="display:none" data-photo="' + item.id + '">' +
               '</div></div>';
           } else if (openIssues.length > 1) {
+            // Mark, 2026-10-08: "will show fault 1 - varnish needed, 2 -
+            // not closing properly?" Each one named (falling back plainly
+            // for a free-text-only fault with no catalogued type) and
+            // dated, the same "logged X ago" the single-fault banner
+            // above already gives — not just a count.
+            var faultList = openIssues.map(function (oi) {
+              var oiF = (item.faults || []).find(function (f) { return f.id === oi.fault_type_id; });
+              return '<li>' + (oiF ? esc(oiF.name) : 'A reported problem')
+                + ' — logged ' + esc(timeAgo(oi.created_at)) + '</li>';
+            }).join('');
             html2 = '<div class="item" data-item="' + item.id + '">' +
               '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
-              '<p class="reopen-banner">⚠ ' + openIssues.length + ' faults already reported here, not yet fixed — resolve them from Fix a Fault.</p>' +
+              '<div class="reopen-banner">⚠ ' + openIssues.length + ' faults already reported here, not yet fixed:' +
+              '<ol>' + faultList + '</ol>Resolve them from Fix a Fault.</div>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
               '<label>Photos (optional)</label>' +
