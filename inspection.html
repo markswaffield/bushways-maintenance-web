@@ -1003,10 +1003,20 @@
               return '<li>' + (oiF ? esc(oiF.name) : 'A reported problem')
                 + ' — logged ' + esc(timeAgo(oi.created_at)) + '</li>';
             }).join('');
+            // A real gap Mark caught, 2026-10-08: this branch built the
+            // list above but never marked the item force_new the way the
+            // exactly-one-open-fault branch above already does — so a
+            // third genuinely different fault reported from here would
+            // have silently re-confirmed one of the existing ones instead
+            // of ever becoming its own issue. There is no limit on how
+            // many faults one line can carry; only the single-issue case
+            // had ever been wired to add another.
+            forceNewItemIds[item.id] = true;
             html2 = '<div class="item" data-item="' + item.id + '">' +
-              '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
+              '<label class="main"><input type="checkbox" checked disabled> ' + esc(item.text) + '</label>' +
               '<div class="reopen-banner">⚠ ' + openIssues.length + ' faults already reported here, not yet fixed:' +
               '<ol>' + faultList + '</ol>Resolve them from Fix a Fault.</div>' +
+              '<label class="main" style="margin-top:8px"><input type="checkbox" data-failed="' + item.id + '"> Another different problem with this too</label>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
               '<label>Photos (optional)</label>' +
