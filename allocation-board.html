@@ -555,19 +555,33 @@ document.addEventListener("click", function(){
 });
 
 // ── the two buttons that do work ─────────────────────────────────────
+// Same call the nightly job makes (sync_delta, tool-local D-040, reusing
+// the delta mechanism D-033 built for the cron) — only reservations
+// ResRequest says changed since the last clean run, not a full re-read of
+// this camp's window. Mark, 2026-10-07: worried that a button doing real
+// work would get pressed by everyone, every time, which defeats the point
+// of the nightly read being light. It now IS the light read, so pressing
+// it often costs ResRequest nothing extra; the old per-camp full read
+// (sync_resrequest, one call per live booking in the window) is still
+// there server-side for a first load or a rebuild, just not behind this
+// button any more.
 el("syncBtn").onclick = function(){
-  var w = windowDates();
   var btn = this; btn.disabled = true;
-  setStatus("Reading ResRequest — this takes up to a minute…");
-  post("sync_resrequest", { location_id: shownCamp && shownCamp.id, from: w.from, to: w.to })
+  setStatus("Checking ResRequest for what's changed…");
+  post("sync_delta", {})
     .then(function(d){
       btn.disabled = false;
       if (d.error) { setStatus(d.error, "bad"); return; }
-      var bits = [d.legs_here + " bookings read"];
-      if (d.created) bits.push(d.created + " new");
-      if (d.adopted) bits.push(d.adopted + " matched to rows already here");
-      if (d.cancelled) bits.push(d.cancelled + " now cancelled");
-      if (d.unmapped_types) bits.push(d.unmapped_types.count + " on a room type we do not know");
+      var mine = (d.lodges || []).filter(function(l){
+        return l.lodge === (shownCamp && (shownCamp.abbreviation || shownCamp.name));
+      })[0];
+      if (!mine || mine.quiet) { setStatus("Nothing changed for this camp since the last update.", "good"); load(); return; }
+      var bits = [mine.legs_here + " bookings read"];
+      if (mine.created) bits.push(mine.created + " new");
+      if (mine.updated) bits.push(mine.updated + " updated");
+      if (mine.adopted) bits.push(mine.adopted + " matched to rows already here");
+      if (mine.cancelled) bits.push(mine.cancelled + " now cancelled");
+      if (mine.unmapped_types) bits.push(mine.unmapped_types.count + " on a room type we do not know");
       setStatus(bits.join(", ") + ".", "good");
       load();
     })
