@@ -66,13 +66,20 @@
   #grid{display:grid;position:relative}
   .hd{position:sticky;top:0;z-index:5;background:var(--head);color:#fff;font-weight:600;font-size:12px;
       padding:6px 4px;text-align:center;border-right:1px solid #2E4B4F;white-space:nowrap;height:30px}
-  .hd.corner{left:0;z-index:7}
+  /* The corner and the date column freeze horizontally by JS (syncFrozenCol),
+     not CSS "position:sticky;left:0" — below about 500px wide, Chromium and
+     Safari both stop honouring sticky's left offset inside this two-axis-
+     scrolling grid (confirmed directly: scroll right at a phone width and the
+     date column drifts most of the way off screen), while the exact same
+     sticky still works correctly for the header row's top:0. Verified with a
+     narrowed browser window rather than assumed from the CSS alone. */
+  .hd.corner{z-index:7}
   .hd.open{background:#5B5344}
   .hd.cxl{background:#6E6E6E}
   .cell.cxlcol{background:#F4F4F4}
   .nmark{font-size:11px;margin-left:3px}
   #notesBox textarea{width:100%;min-height:90px;font:inherit;font-size:13px;padding:7px;border:1px solid var(--line);border-radius:6px}
-  .day{position:sticky;left:0;z-index:4;background:#fff;border-bottom:1px solid #ECE8DE;border-right:1px solid var(--line);
+  .day{position:relative;z-index:4;background:#fff;border-bottom:1px solid #ECE8DE;border-right:1px solid var(--line);
        padding:0 6px;font-size:11.5px;white-space:nowrap;display:flex;align-items:center;gap:4px}
   .day.we{background:var(--weekend)}
   .day.today{background:var(--today);font-weight:700}
@@ -191,6 +198,21 @@
   .tag.c{background:#DFF0E3;color:#2F6B45}.tag.p{background:#FFF0CC;color:#8C6A2F}.tag.x{background:#F6DADA;color:#8A2A23}
   .loading{color:var(--muted);padding:20px}
   @media (max-width:700px){ body{padding:10px 10px 0} .status{margin-left:0;width:100%} }
+
+  /* "Expand" — the chart gets the whole screen; the header, who-bar,
+     toolbar and key all go. Mark, 2026-10-07: "there is very limited
+     viewing on the screen as it is dominated by the header, key etc...
+     is it possible to put a button in like we have for the day sheet
+     that allows us to expand the chart - this will then hide the key
+     and headers etc - and just have one exit key." Same idea as the Day
+     Sheet's "More grid" (tools/daily-operations); simpler here since
+     nothing needs to stay but the grid and the one way back. */
+  body.expanded h1, body.expanded .sub, body.expanded .whobar,
+  body.expanded .toolbar, body.expanded .legend{display:none}
+  body.expanded #wrap{margin-top:0}
+  #exitExpand{display:none;position:fixed;top:10px;right:10px;z-index:50;
+    box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  body.expanded #exitExpand{display:block}
 </style>
 </head><body>
 
@@ -212,6 +234,7 @@
   <button class="ghost" id="today">Today</button>
   <button class="ghost" id="later">Later ▶</button>
   <button id="sync">Update from ResRequest</button>
+  <button class="ghost" id="expandBtn" title="Give the chart the whole screen">⤢ Expand</button>
   <span class="status" id="status"></span>
 </div>
 <div class="legend">
@@ -223,6 +246,7 @@
   <span><i style="background:#E9E9E9;border-color:#9A9A9A"></i>Cancelled on the board</span>
 </div>
 
+<button id="exitExpand">✕ Exit full view</button>
 <div id="wrap"><div id="grid"><p class="loading">Loading…</p></div></div>
 <div id="panel"></div>
 
@@ -261,6 +285,37 @@ el("from").onchange = load; el("weeks").onchange = load;
 el("earlier").onclick = function(){ shift(-(+el("weeks").value * 7) / 2); };
 el("later").onclick = function(){ shift((+el("weeks").value * 7) / 2); };
 el("today").onclick = function(){ el("from").value = add(iso(new Date()), -7); load(); };
+
+// Freezes the date column and the corner by hand, with a transform kept in
+// step with horizontal scroll — CSS "position:sticky;left:0" stopped
+// working for them below about 500px wide (see the .day/.hd.corner comments
+// above), so this is what actually holds them in place on a phone.
+var frozenRAF = null;
+function syncFrozenCol(){
+  var t = el("wrap").scrollLeft ? "translateX(" + el("wrap").scrollLeft + "px)" : "";
+  el("grid").querySelectorAll(".day, .hd.corner").forEach(function(n){ n.style.transform = t; });
+  frozenRAF = null;
+}
+el("wrap").addEventListener("scroll", function(){
+  if (frozenRAF === null) frozenRAF = requestAnimationFrame(syncFrozenCol);
+}, { passive: true });
+
+// Remembered per browser, same reasoning as the Day Sheet's "More grid":
+// whoever's on a phone wants it on every time, whoever's on a laptop never
+// wants it at all.
+try {
+  if (localStorage.getItem("bw_safariboard_expanded") === "1") document.body.classList.add("expanded");
+} catch (e) {}
+el("expandBtn").addEventListener("click", function(){
+  document.body.classList.add("expanded");
+  syncFrozenCol();
+  try { localStorage.setItem("bw_safariboard_expanded", "1"); } catch (e) {}
+});
+el("exitExpand").addEventListener("click", function(){
+  document.body.classList.remove("expanded");
+  syncFrozenCol();
+  try { localStorage.setItem("bw_safariboard_expanded", "0"); } catch (e) {}
+});
 
 var data = null;
 function load(){
@@ -497,6 +552,7 @@ function draw(r){
     };
     b.ondragend = function(){ endDrag(); };
   });
+  syncFrozenCol();
 }
 
 // Drag a safari to another column. The column under the pointer decides
