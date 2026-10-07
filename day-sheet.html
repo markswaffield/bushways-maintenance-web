@@ -889,6 +889,16 @@ function cellType(b, roomId){
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
 
+// The same resolution cellPax renders, as a plain number — so the top-of-
+// sheet guest total (render(), below) counts exactly what each room's own
+// Pax cell shows, never a second guess at the same question.
+function rowPax(b, roomId){
+  if (!b) return 0;
+  var match = matchComposition(b, roomId);
+  if (match) return match.pax || 0;
+  return (b.adults || 0) + (b.children || 0);
+}
+
 function cellPax(b, roomId){
   if (!b) return '<td class="ro dim c-pax"></td>';
   var match = matchComposition(b, roomId);
@@ -1139,8 +1149,19 @@ function markClashes(){
 
 function render(){
   var c = sheet.counts;
+  // Mark, 2026-10-07: "on the top of the day sheet we would also like a
+  // total of guests that will be in camp that night." Summed from every
+  // occupied room's own Pax cell (rowPax — the same resolution cellPax
+  // itself renders), not a second count off the raw bookings, and always
+  // off the full sheet rather than whatever the status filter is showing —
+  // the filter narrows the list below, not the fact of how many people are
+  // actually in camp.
+  var guests = sheet.rows.reduce(function(sum, r){
+    return sum + rowPax((r.stay && r.stay.booking) || null, r.room_id);
+  }, 0);
   var h = '<p class="summary"><b>'+c.arriving+"</b> arriving · <b>"+c.departing+"</b> departing · <b>"
         + c.in_house+"</b> rooms in house · <b>"+c.empty+"</b> empty of "+c.rooms
+        + " · <b>"+guests+"</b> guests in camp tonight"
         + (statusFilter ? ' · <span class="filtered">showing '+FILTER_LABEL[statusFilter]+" only</span>" : "")
         + "</p>";
   h += '<div class="scroll"><table>'+HEAD+"<tbody>";

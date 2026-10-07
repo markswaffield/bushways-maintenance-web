@@ -971,7 +971,7 @@
               '<label class="main" style="margin-top:8px"><input type="checkbox" data-failed="' + item.id + '"> A different problem with this too</label>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
-              '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
+              '<label>Photos (optional)</label><input type="file" accept="image/*" capture="environment" multiple data-photo="' + item.id + '">' +
               '</div></div>';
           } else if (openIssues.length > 1) {
             html2 = '<div class="item" data-item="' + item.id + '">' +
@@ -979,14 +979,14 @@
               '<p class="reopen-banner">⚠ ' + openIssues.length + ' faults already reported here, not yet fixed — resolve them from Fix a Fault.</p>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
-              '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
+              '<label>Photos (optional)</label><input type="file" accept="image/*" capture="environment" multiple data-photo="' + item.id + '">' +
               '</div></div>';
           } else {
             html2 = '<div class="item" data-item="' + item.id + '">' +
               '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
-              '<label>Photo (optional)</label><input type="file" accept="image/*" capture="environment" data-photo="' + item.id + '">' +
+              '<label>Photos (optional)</label><input type="file" accept="image/*" capture="environment" multiple data-photo="' + item.id + '">' +
               '</div></div>';
           }
           html += html2;
@@ -1085,7 +1085,12 @@
                 fault_type_id: faultEl ? faultEl.value : null,
                 action_if_failed: c.querySelector('[data-action="' + item.id + '"]').value,
                 label: shortLabel(item.text), fault_type_label: faultLabel,
-                photoFile: photoInput && photoInput.files[0] ? photoInput.files[0] : null,
+                // One checkpoint can carry more than one photo — Mark,
+                // 2026-10-07: "is it possible to accept multiple photos for
+                // a single check point?" Each uploads as its own real
+                // attachment against the same issue (below), same as a
+                // single photo always has.
+                photoFiles: photoInput && photoInput.files.length ? Array.from(photoInput.files) : [],
                 force_new: !!forceNewItemIds[item.id],
                 target: item.target,
               });
@@ -1163,7 +1168,7 @@
           html += '<p class="review-line">' + esc(x.label) +
             (x.fault_type_label ? ' — <span class="fault">' + esc(x.fault_type_label) + '</span>' : '') +
             (x.action_if_failed ? ' — ' + esc(x.action_if_failed) : '') +
-            (x.photoFile ? ' 📷' : '') + '</p>';
+            (x.photoFiles && x.photoFiles.length ? ' 📷' + (x.photoFiles.length > 1 ? ' ×' + x.photoFiles.length : '') : '') + '</p>';
         });
         readings.forEach(function (x) {
           html += '<p class="review-line">' + esc(x.label) + ': ' + esc(x.value) + '</p>';
@@ -1221,7 +1226,16 @@
           // The issue this item's photo belongs to doesn't exist until
           // the line above returns — issue_ids maps item_id -> the real
           // issue, created moments ago, specifically so this can happen.
-          var withPhotos = flagged.filter(function (x) { return x.photoFile && out.issue_ids[x.item_id]; });
+          // Flattened to one entry per photo, not per item, since an item
+          // can now carry several.
+          var photoUploads = [];
+          flagged.forEach(function (x) {
+            var issueId = out.issue_ids[x.item_id];
+            if (!issueId) return;
+            (x.photoFiles || []).forEach(function (file) {
+              photoUploads.push({ issueId: issueId, file: file });
+            });
+          });
           var uploaded = 0, failed = 0;
           function finish() {
             document.getElementById("doneTitle").textContent =
@@ -1251,14 +1265,14 @@
               '<p class="note">inspection id: ' + esc(out.inspection_id) + "</p>";
             show("done");
           }
-          if (!withPhotos.length) { finish(); return; }
+          if (!photoUploads.length) { finish(); return; }
           btn.textContent = "Uploading photos…";
-          var remaining = withPhotos.length;
-          withPhotos.forEach(function (x) {
-            compressImage(x.photoFile).then(function (dataUrl) {
+          var remaining = photoUploads.length;
+          photoUploads.forEach(function (u) {
+            compressImage(u.file).then(function (dataUrl) {
               return fetch(FN + "?action=attach", {
                 method: "POST", headers: { "content-type": "application/json" },
-                body: JSON.stringify({ issue_id: out.issue_ids[x.item_id], added_by: personId, image_data_url: dataUrl }),
+                body: JSON.stringify({ issue_id: u.issueId, added_by: personId, image_data_url: dataUrl }),
               });
             }).then(function (r2) { return r2.json(); }).then(function (a) {
               if (a.error) failed++; else uploaded++;
