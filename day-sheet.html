@@ -874,17 +874,26 @@ function cellType(b, roomId){
     bits.push('<span class="tag basis'+(x.basis && x.basis.confident === false ? " unsure" : "")
       + '" title="'+esc((x.basis && x.basis.source) || "from the booking")+'">'+code+'</span>');
   });
-  // The structured room type ResRequest actually holds the booking against
-  // (room_type_needed) — not a free-text guess, so no extraction needed —
-  // shown only when it's one worth a manager noticing. Mark, 2026-10-05:
-  // "Also if a FAM or Interleading room has been specifically been asked
-  // for." Standard/Meru Tent/Pilot-Guide say nothing a manager doesn't
-  // already expect, so they stay out of this column.
-  if (/family/i.test(b.room_type_needed || "")) {
-    bits.push('<span class="tag" title="Room type requested: '+esc(b.room_type_needed)+'">FAM</span>');
+  // Whether the GUESTS actually asked for a family or inter-leading room —
+  // not whichever room ResRequest happened to sell them against. Mark,
+  // 2026-10-07: "When we take a booking on ResReq - it will place a normal
+  // booking into an interleading room if this is the only room available.
+  // The same goes for Family rooms at Boteti and Interleading in Khwai...
+  // I would like to ignore the type of room they have landed in according
+  // to ResReq but rather refer to the notes - these will say if an
+  // interleading room was specifically requested, or a family room etc."
+  // Originally read off room_type_needed (D-039-era) — that field is a
+  // sales fact, not a guest request, and this tag is specifically about
+  // intent, so it moved to the same AI-read notes extraction dietary and
+  // medical already use (room_request, FAMILY or INTERLEADING only kept
+  // when the guest's own words said so).
+  if (x.room_request && x.room_request.value === "FAMILY") {
+    bits.push('<span class="tag'+(x.room_request.confident === false ? " unsure" : "")
+      + '" title="'+esc(x.room_request.source || "from the booking notes")+'">FAM</span>');
   }
-  if (/inter-?leading/i.test(b.room_type_needed || "")) {
-    bits.push('<span class="tag" title="Room type requested: '+esc(b.room_type_needed)+'">Interleading</span>');
+  if (x.room_request && x.room_request.value === "INTERLEADING") {
+    bits.push('<span class="tag'+(x.room_request.confident === false ? " unsure" : "")
+      + '" title="'+esc(x.room_request.source || "from the booking notes")+'">Interleading</span>');
   }
   return '<td class="ro c-type">'+(bits.join("") || "")+"</td>";
 }
@@ -1474,7 +1483,7 @@ window.addEventListener("beforeunload", function(e){
 function needsAi(b){
   var x = b.extraction || {};
   var open = ["dietary","medical","occasion","arrival","departure"].some(function(k){ return !x[k]; })
-          || !x.bed || !x.basis;
+          || !x.bed || !x.basis || x.room_request === undefined;
   if (!open) return false;
   var text = [b.guest_details || "", b.special_requests || ""].join(" ").trim();
   return text.length > 25;            // nothing to read in a line or two
@@ -1500,6 +1509,11 @@ function mergeAi(b, got){
     x[k] = f;
     b[into[k]] = f.value;
   });
+  // No real column, same as composition — a sentinel object, not null, so
+  // "checked, nothing there" never looks like "never looked" again.
+  if (x.room_request === undefined) {
+    x.room_request = got.room_request && got.room_request.value ? got.room_request : { value: null };
+  }
 }
 
 /* ── Reading the notes on bookings that came from the API ──────────────
@@ -1548,9 +1562,15 @@ function noteGaps(b){
   // name ("Vee x 1") rather than the notes — so it is not skipped outright,
   // only when there is nothing the name-reading can find either.
   if (!b.guest_details) return !b.adults && !!paxFromName(b.guest_name);
+  // room_request (D-040-era, 2026-10-07) has no real column, same as
+  // composition — "undefined" means never looked, not "nothing there",
+  // the same sentinel the server-side sweep uses, so a booking already
+  // fully read before this field existed is not left stuck showing
+  // "already read" forever.
   return !b.bed_type || !b.booking_basis || !b.dietary || !b.medical
       || !b.special_occasion || !b.arrival_details || !b.departure_details
-      || !b.adults || !(b.extraction && b.extraction.composition);
+      || !b.adults || !(b.extraction && b.extraction.composition)
+      || (b.extraction || {}).room_request === undefined;
 }
 
 function readNotes(useAi){
