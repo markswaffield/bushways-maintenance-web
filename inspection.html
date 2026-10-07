@@ -1228,9 +1228,17 @@
           // issue, created moments ago, specifically so this can happen.
           // Flattened to one entry per photo, not per item, since an item
           // can now carry several.
+          //
+          // A pre-existing crash, caught while building multiple-photos
+          // support (D-138) rather than something it introduced: when this
+          // submission is a double-tap D-078's own guard already caught
+          // (two submits for the same schedule run), the server returns
+          // {ok:true, already_done:true} with no issue_ids at all — any
+          // photo attached to that attempt had nowhere to go and threw
+          // outright rather than being quietly dropped.
           var photoUploads = [];
           flagged.forEach(function (x) {
-            var issueId = out.issue_ids[x.item_id];
+            var issueId = out.issue_ids ? out.issue_ids[x.item_id] : null;
             if (!issueId) return;
             (x.photoFiles || []).forEach(function (file) {
               photoUploads.push({ issueId: issueId, file: file });
@@ -1238,6 +1246,21 @@
           });
           var uploaded = 0, failed = 0;
           function finish() {
+            // Same already_done short-circuit as above: D-078's own
+            // double-tap guard already recorded this run; nothing new was
+            // written this time, so none of the normal fields exist to
+            // report on. Any photo still uploaded fine (issue_ids was
+            // real on the FIRST, successful submit).
+            if (out.already_done) {
+              document.getElementById("doneTitle").textContent = "Already recorded";
+              document.getElementById("doneBox").innerHTML =
+                "<p>This was already checked, " + esc(campName()) + " — nothing new to record.</p>" +
+                (uploaded ? "<p>" + uploaded + " photo" + (uploaded === 1 ? "" : "s") + " attached to the existing report.</p>" : "") +
+                (failed ? "<p class='note'>" + failed + " photo" + (failed === 1 ? "" : "s") + " didn't upload.</p>" : "") +
+                '<p class="note">inspection id: ' + esc(out.inspection_id) + "</p>";
+              show("done");
+              return;
+            }
             document.getElementById("doneTitle").textContent =
               out.safari_check_stage === "pre" ? "Pre-safari check recorded"
               : out.safari_check_stage === "post" ? "Post-safari check recorded"
