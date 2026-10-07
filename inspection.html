@@ -55,6 +55,17 @@
      inviting the same broken toilet to be flagged as if new, every
      single visit, was the actual bug. */
   .reopen-banner{background:#F4CFC2;color:#A8502F;font-size:12.5px;font-weight:600;padding:7px 10px;border-radius:6px;margin:0 0 8px}
+  /* Photos, one capture at a time (D-138, revised). A plain <input
+     multiple> relies on the phone's gallery multi-select, but Mark takes
+     these live with the camera — on most phones "capture" hands off to
+     the camera app for one shot and never offers a second, so "multiple"
+     never had anything to apply to. Each tap on "Add a photo" re-opens
+     the camera for one more shot, appended to a running strip instead. */
+  .photo-thumbs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  .photo-thumb{position:relative;width:60px;height:60px}
+  .photo-thumb img{width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #E3DFD3;display:block}
+  .photo-remove{position:absolute;top:-6px;right:-6px;width:20px;height:20px;padding:0;border-radius:50%;
+    background:#A8502F;color:#fff;border:2px solid #fff;font-size:12px;line-height:1;cursor:pointer}
   .note{color:#8C6A2F;font-size:12px;margin-top:2px}
   .confirm{background:#EFECE3;border-radius:8px;padding:16px;margin-top:16px}
   .confirm .transcript{font-style:italic;margin-top:8px}
@@ -971,7 +982,10 @@
               '<label class="main" style="margin-top:8px"><input type="checkbox" data-failed="' + item.id + '"> A different problem with this too</label>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
-              '<label>Photos (optional)</label><input type="file" accept="image/*" capture="environment" multiple data-photo="' + item.id + '">' +
+              '<label>Photos (optional)</label>' +
+              '<div class="photo-thumbs" data-photothumbs="' + item.id + '"></div>' +
+              '<button type="button" class="ghost" data-photobtn="' + item.id + '">📷 Add a photo</button>' +
+              '<input type="file" accept="image/*" capture="environment" style="display:none" data-photo="' + item.id + '">' +
               '</div></div>';
           } else if (openIssues.length > 1) {
             html2 = '<div class="item" data-item="' + item.id + '">' +
@@ -979,14 +993,20 @@
               '<p class="reopen-banner">⚠ ' + openIssues.length + ' faults already reported here, not yet fixed — resolve them from Fix a Fault.</p>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
-              '<label>Photos (optional)</label><input type="file" accept="image/*" capture="environment" multiple data-photo="' + item.id + '">' +
+              '<label>Photos (optional)</label>' +
+              '<div class="photo-thumbs" data-photothumbs="' + item.id + '"></div>' +
+              '<button type="button" class="ghost" data-photobtn="' + item.id + '">📷 Add a photo</button>' +
+              '<input type="file" accept="image/*" capture="environment" style="display:none" data-photo="' + item.id + '">' +
               '</div></div>';
           } else {
             html2 = '<div class="item" data-item="' + item.id + '">' +
               '<label class="main"><input type="checkbox" data-failed="' + item.id + '"> ' + esc(item.text) + '</label>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
-              '<label>Photos (optional)</label><input type="file" accept="image/*" capture="environment" multiple data-photo="' + item.id + '">' +
+              '<label>Photos (optional)</label>' +
+              '<div class="photo-thumbs" data-photothumbs="' + item.id + '"></div>' +
+              '<button type="button" class="ghost" data-photobtn="' + item.id + '">📷 Add a photo</button>' +
+              '<input type="file" accept="image/*" capture="environment" style="display:none" data-photo="' + item.id + '">' +
               '</div></div>';
           }
           html += html2;
@@ -1019,6 +1039,46 @@
       cb.addEventListener("change", function () {
         cb.closest(".item").classList.toggle("open", cb.checked);
       });
+    });
+
+    // One photo per capture, accumulated — see the .photo-thumbs comment
+    // in the stylesheet for why. photoState holds the real Files, keyed
+    // by item id; the input itself is single-shot and gets reset after
+    // every capture so the same camera button can be tapped again.
+    var photoState = {};
+    function renderPhotoThumbs(itemId) {
+      var wrap = c.querySelector('[data-photothumbs="' + itemId + '"]');
+      if (!wrap) return;
+      var files = photoState[itemId] || [];
+      wrap.innerHTML = files.map(function (f, idx) {
+        return '<span class="photo-thumb"><img src="' + URL.createObjectURL(f) + '">' +
+          '<button type="button" class="photo-remove" data-photoremove="' + itemId + '" data-idx="' + idx + '">✕</button></span>';
+      }).join("");
+    }
+    c.querySelectorAll("[data-photobtn]").forEach(function (btn) {
+      btn.onclick = function () {
+        c.querySelector('[data-photo="' + btn.getAttribute("data-photobtn") + '"]').click();
+      };
+    });
+    c.querySelectorAll("[data-photo]").forEach(function (input) {
+      input.onchange = function () {
+        var itemId = input.getAttribute("data-photo");
+        if (input.files && input.files[0]) {
+          (photoState[itemId] = photoState[itemId] || []).push(input.files[0]);
+          renderPhotoThumbs(itemId);
+        }
+        input.value = ""; // so the same shot's filename can be captured again next time
+      };
+    });
+    // Thumbnails render after the initial wiring above, so their own
+    // remove buttons are caught by delegation rather than a direct
+    // querySelectorAll that would run too early to find them.
+    c.addEventListener("click", function (e) {
+      var rm = e.target.closest("[data-photoremove]");
+      if (!rm) return;
+      var itemId = rm.getAttribute("data-photoremove"), idx = +rm.getAttribute("data-idx");
+      photoState[itemId].splice(idx, 1);
+      renderPhotoThumbs(itemId);
     });
 
     // A short label per item, the same way the dashboard and completed-
@@ -1079,7 +1139,6 @@
             if (failed) {
               var faultEl = c.querySelector('[data-fault="' + item.id + '"]');
               var faultLabel = faultEl && faultEl.value ? faultEl.options[faultEl.selectedIndex].text.split(" — ")[0] : null;
-              var photoInput = c.querySelector('[data-photo="' + item.id + '"]');
               results.push({
                 item_id: item.id, failed: true,
                 fault_type_id: faultEl ? faultEl.value : null,
@@ -1089,8 +1148,10 @@
                 // 2026-10-07: "is it possible to accept multiple photos for
                 // a single check point?" Each uploads as its own real
                 // attachment against the same issue (below), same as a
-                // single photo always has.
-                photoFiles: photoInput && photoInput.files.length ? Array.from(photoInput.files) : [],
+                // single photo always has. Read from photoState, not the
+                // file input directly — each capture is its own single-shot
+                // onchange (see the wiring above), accumulated there.
+                photoFiles: (photoState[item.id] || []).slice(),
                 force_new: !!forceNewItemIds[item.id],
                 target: item.target,
               });
