@@ -131,12 +131,26 @@ function navMenuHtml(links, active, me) {
       : '<button class="navm-item" onclick="location.href=\'' + l.href + '\'">' + l.label + "</button>";
   }).join("");
 
-  var tail = "";
-  if (multiCamp) {
-    tail += '<button class="navm-item navm-sep" onclick="location.href=\'./base-dashboard.html\'">Change camp</button>';
+  // Change tool — Mark, 2026-10-08, working in Sango's Schedule: "for
+  // managers there was no option to change tool when in schedules - this
+  // is needed for all pages so they can go back to the day sheet tool."
+  // Day Sheet's own pages already had this (D-025/D-026's "Change camp /
+  // tool"); it had just never been added to this shared menu, so every
+  // page that carries this row was missing it, not only Schedule. Same
+  // gate landing.html's own picker uses: a person who would never
+  // actually see a choice there gets nothing new to tap.
+  var tailButtons = [];
+  if (me && (me.is_manager || me.is_administrator)) {
+    tailButtons.push('<button class="navm-item" onclick="location.href=\'./\'">Change tool</button>');
   }
-  tail += '<button class="navm-item navm-out' + (multiCamp ? "" : " navm-sep") +
-          '" onclick="navMenuClose(); if (window.signOut) window.signOut();">Sign out</button>';
+  if (multiCamp) {
+    tailButtons.push('<button class="navm-item" onclick="location.href=\'./base-dashboard.html\'">Change camp</button>');
+  }
+  tailButtons.push('<button class="navm-item navm-out" onclick="navMenuClose(); if (window.signOut) window.signOut();">Sign out</button>');
+  // The separator line marks where the account-level actions start,
+  // whichever of the three above happens to be first.
+  tailButtons[0] = tailButtons[0].replace('class="navm-item', 'class="navm-item navm-sep');
+  var tail = tailButtons.join("");
 
   return '<div class="navm" id="navm">' +
     // The app's own icon, not a hamburger — Mark, 2026-09-29: "can we change
