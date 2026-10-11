@@ -382,6 +382,10 @@
        is no lodge to pick again. A real padded button, like every other
        navigation action in every tool (root CLAUDE.md). -->
   <div><button id="boardBtn" title="Who is in which room, and move them">🛏 Room Allocation</button></div>
+  <!-- This camp's Staff and Assets pages, Mark 2026-10-11 (D-046). Same
+       sign-in and camp as this page, so they open on this lodge. -->
+  <div><button class="ghost" id="staffBtn" title="This camp's people: add, edit, transfer">👥 Staff</button></div>
+  <div><button class="ghost" id="assetsBtn" title="This camp's vehicles, trailers, boats and generators">🚙 Assets</button></div>
   <!-- The AI reader. Mark, 2026-10-05: "is the AI tool working to translate
        all the notes onto the Day Sheet?" The rules run on their own when the
        sheet loads and the nightly sweep does the lot at 23:45 (D-031); this
@@ -440,6 +444,8 @@ document.getElementById("readNotesBtn").onclick = function () {
 document.getElementById("boardBtn").onclick = function () {
   location.href = "./allocation-board.html";
 };
+document.getElementById("staffBtn").onclick = function () { location.href = "./staff.html"; };
+document.getElementById("assetsBtn").onclick = function () { location.href = "./assets.html"; };
 document.getElementById("signOut").onclick = function () {
   sessionStorage.removeItem("bw_signin");
   sessionStorage.removeItem("bw_camp");
