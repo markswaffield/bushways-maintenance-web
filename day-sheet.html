@@ -496,12 +496,15 @@ function peopleFor(key){
   var matching;
   if (GUEST_DRIVER_ROLES.indexOf(key) !== -1) {
     matching = boot.people.filter(function (p) { return p.can_drive_guests; });
-  } else {
-    var want = ROLE_DEPARTMENTS[key];
-    if (!want) return boot.people;
-    matching = boot.people.filter(function (p) { return want.indexOf(p.department) !== -1; });
+    return matching.length ? matching : boot.people;
   }
-  return matching.length ? matching : boot.people;
+  // Drivers lent by another camp (daily-operations D-043, D-044) belong in
+  // the two driver boxes only, never as a housekeeper or guide.
+  var own = boot.people.filter(function (p) { return !p.borrowed; });
+  var want = ROLE_DEPARTMENTS[key];
+  if (!want) return own;
+  matching = own.filter(function (p) { return want.indexOf(p.department) !== -1; });
+  return matching.length ? matching : own;
 }
 
 // Which self-drive flag, if any, stands in for this picker. One flag per
