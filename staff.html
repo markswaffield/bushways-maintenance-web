@@ -139,6 +139,7 @@
   .form .row2{display:flex;gap:8px}
   .form .row2 > *{flex:1}
   .note{font-size:12.5px;color:#6B6455;margin:6px 0 0}
+  .hist{margin-top:8px;border-top:1px solid #F1EDE4;padding-top:7px;font-size:12px;color:#6B6455}
   .loading{color:#6B6455;margin-top:18px}
   [hidden]{display:none!important}
 </style></head><body>
@@ -234,6 +235,114 @@ window.savePerson = function(){
   });
 };
 
+// Transfer (D-146): from camp, then the person, then to camp. Shown to
+// anyone who can transfer out of at least one camp; the server decides
+// which camps those are and refuses anything else.
+var transfer = null, history = {};
+function canTransfer(){ return !!(me && (me.is_administrator || me.is_general_manager)); }
+function today(){ return new Date().toISOString().slice(0, 10); }
+function getJSON(url){ return fetch(url).then(function(r){ return r.json(); }); }
+
+window.startTransfer = function(){
+  editing = null;
+  transfer = { loading: true, date: today(), reason: "" };
+  render();
+  getJSON(FN + "?action=transfer_options&kind=staff&person_id=" + encodeURIComponent(me.id)).then(function(d){
+    if (d.error) { alert(d.error); transfer = null; render(); return; }
+    transfer = Object.assign(transfer, d, { loading: false });
+    var here = shownCamp && d.from_locations.some(function(l){ return l.id === shownCamp.id; });
+    transferFrom(here ? shownCamp.id : (d.from_locations[0] || {}).id);
+  });
+};
+window.cancelTransfer = function(){ transfer = null; render(); };
+function transferFrom(id){
+  transfer.from = id; transfer.items = null; transfer.item = ""; transfer.to = ""; transfer.dept = "";
+  render();
+  if (!id) return;
+  getJSON(FN + "?action=transfer_options&kind=staff&person_id=" + encodeURIComponent(me.id) + "&from_location_id=" + encodeURIComponent(id)).then(function(d){
+    if (d.error) { alert(d.error); return; }
+    transfer.items = d.items; render();
+  });
+}
+window.transferFrom = transferFrom;
+window.transferSet = function(key, value){ transfer[key] = value; if (key === "item" || key === "to") transfer.dept = ""; render(); };
+function transferPerson(){ return (transfer.items || []).filter(function(i){ return i.id === transfer.item; })[0] || null; }
+function transferNeedsDept(){
+  var p = transferPerson();
+  return !!(p && transfer.to && p.department_location_id && p.department_location_id !== transfer.to);
+}
+function locNameOf(id){ return ((transfer && transfer.to_locations || []).filter(function(l){ return l.id === id; })[0] || {}).name || ""; }
+
+window.confirmTransfer = function(){
+  var p = transferPerson();
+  if (!p || !transfer.to) { alert("Choose the person and the camp they are moving to."); return; }
+  if (transferNeedsDept() && !transfer.dept) { alert("Choose their department at " + locNameOf(transfer.to) + "."); return; }
+  if (!confirm("Move " + p.name + " from " + locNameOf(transfer.from) + " to " + locNameOf(transfer.to) + "?")) return;
+  post("transfer_person", {
+    id: p.id, to_location_id: transfer.to, department_id: transfer.dept || null,
+    transferred_on: transfer.date, reason: transfer.reason || null,
+  }).then(function(out){
+    if (out.error) { alert(out.error); return; }
+    var c = out.checks_unassigned || 0, f = out.faults_unassigned || 0, parts = [];
+    if (c) parts.push(c + " open check" + (c === 1 ? "" : "s"));
+    if (f) parts.push(f + " open fault" + (f === 1 ? "" : "s"));
+    alert(p.name + " is now at " + locNameOf(transfer.to) + "." +
+      (parts.length ? " " + parts.join(" and ") + " at " + locNameOf(transfer.from) +
+        " no longer have their name on them, and stay with the department there to reassign." : ""));
+    transfer = null; load();
+  });
+};
+
+function transferForm(){
+  if (transfer.loading) return '<div class="form"><p class="note">Loading…</p></div>';
+  function opt(v, label, sel){ return '<option value="' + esc(v) + '"' + (sel === v ? " selected" : "") + '>' + esc(label) + '</option>'; }
+  var h = '<div class="form"><h2 style="margin-top:0">Transfer a person</h2>';
+  h += '<label>From camp</label><select id="t_from" onchange="transferFrom(this.value)">' +
+    transfer.from_locations.map(function(l){ return opt(l.id, l.name, transfer.from); }).join("") + '</select>';
+  h += '<label>Person</label>';
+  if (!transfer.items) h += '<p class="note">Loading…</p>';
+  else if (!transfer.items.length) h += '<p class="note">No one at this camp.</p>';
+  else h += '<select id="t_item" onchange="transferSet(\'item\', this.value)">' + opt("", "Choose a person", transfer.item) +
+    transfer.items.map(function(i){ return opt(i.id, i.name + (i.department ? " — " + i.department : ""), transfer.item); }).join("") + '</select>';
+  h += '<label>To camp</label><select id="t_to" onchange="transferSet(\'to\', this.value)">' + opt("", "Choose a camp", transfer.to) +
+    transfer.to_locations.filter(function(l){ return l.id !== transfer.from; })
+      .map(function(l){ return opt(l.id, l.name, transfer.to); }).join("") + '</select>';
+  if (transferNeedsDept()) {
+    var p = transferPerson();
+    h += '<label>Department at ' + esc(locNameOf(transfer.to)) + '</label>' +
+      '<p class="note">' + esc(p.department) + ' only exists at ' + esc(locNameOf(transfer.from)) + '.</p>' +
+      '<select id="t_dept" onchange="transferSet(\'dept\', this.value)">' + opt("", "Choose a department", transfer.dept) +
+      transfer.departments.filter(function(d){ return !d.location_id || d.location_id === transfer.to; })
+        .map(function(d){ return opt(d.id, d.name, transfer.dept); }).join("") + '</select>';
+  }
+  h += '<div class="row2"><div><label>Date moved</label><input type="date" id="t_date" value="' + esc(transfer.date) +
+    '" onchange="transfer.date=this.value"></div>' +
+    '<div><label>Reason</label><input type="text" id="t_reason" value="' + esc(transfer.reason) +
+    '" placeholder="Optional" oninput="transfer.reason=this.value"></div></div>';
+  h += '<p class="note">Open checks and faults at the old camp lose their name and stay with the department there to reassign.</p>';
+  h += '<div class="acts"><button class="primary" onclick="confirmTransfer()">Transfer</button>' +
+    '<button onclick="cancelTransfer()">Cancel</button></div></div>';
+  return h;
+}
+
+window.toggleHistory = function(id){
+  if (history[id]) { delete history[id]; render(); return; }
+  history[id] = "loading"; render();
+  getJSON(FN + "?action=staff_history&id=" + encodeURIComponent(id)).then(function(d){
+    history[id] = d.transfers || []; render();
+  });
+};
+function historyHtml(id){
+  var t = history[id];
+  if (!t) return "";
+  if (t === "loading") return '<p class="note">Loading…</p>';
+  if (!t.length) return '<p class="note">No transfers recorded.</p>';
+  return '<ul class="hist">' + t.map(function(r){
+    return '<li><b>' + esc(r.on) + '</b> ' + esc(r.from) + ' → ' + esc(r.to) +
+      (r.by ? ' · by ' + esc(r.by) : "") + (r.reason ? ' · ' + esc(r.reason) : "") + '</li>';
+  }).join("") + '</ul>';
+}
+
 window.retire = function(id, restore){
   var reason = restore ? null : prompt("Why are they leaving? (resigned, contract ended, transferred…)");
   if (!restore && reason === null) return;
@@ -268,10 +377,12 @@ function personForm(){
     '<label>Name</label><input type="text" id="f_name" value="' + esc(editing.name || "") + '" placeholder="What colleagues actually call them">' +
     '<div class="row2">' +
     '<div><label>Phone</label><input type="text" id="f_phone" value="' + esc(editing.phone || "") + '" placeholder="+267 71234567"></div>' +
-    '<div><label>Home lodge</label><select id="f_loc" onchange="editing.home_location_id=this.value;render()">' +
+    // An existing person's camp changes only through Transfer, so the move
+    // is recorded (D-146); the server refuses a camp change through Edit.
+    '<div><label>Home lodge</label><select id="f_loc"' + (isNew ? ' onchange="editing.home_location_id=this.value;render()"' : " disabled") + '>' +
     data.locations.map(function(l){
       return '<option value="' + esc(l.id) + '"' + (editing.home_location_id === l.id ? " selected" : "") + '>' + esc(l.name) + '</option>';
-    }).join("") + '</select></div>' +
+    }).join("") + '</select>' + (isNew ? "" : '<p class="note">Use Transfer to move them to another camp.</p>') + '</div>' +
     '</div>' +
     '<label>Department</label><select id="f_dept">' + deptOptions(editing.home_location_id, editing.department_id) + '</select>' +
     '<label class="check" style="margin-top:10px">' +
@@ -313,13 +424,16 @@ function personRow(p){
   // 2026-10-06 (canEditHere() above). The server enforces the same
   // split.
   if (editing && editing.id === p.id) { h += personForm(); }
-  else if (canEditHere()) {
+  else {
     h += '<div class="acts">';
-    h += '<button onclick="startEdit(\'' + p.id + '\')">Edit</button>';
-    h += p.retired
-      ? '<button onclick="retire(\'' + p.id + '\',true)">Restore</button>'
-      : '<button class="danger" onclick="retire(\'' + p.id + '\')">Retire</button>';
-    h += '</div>';
+    if (canEditHere()) {
+      h += '<button onclick="startEdit(\'' + p.id + '\')">Edit</button>';
+      h += p.retired
+        ? '<button onclick="retire(\'' + p.id + '\',true)">Restore</button>'
+        : '<button class="danger" onclick="retire(\'' + p.id + '\')">Retire</button>';
+    }
+    h += '<button onclick="toggleHistory(\'' + p.id + '\')">' + (history[p.id] ? "Hide history" : "History") + '</button>';
+    h += '</div>' + historyHtml(p.id);
   }
   return h + '</div>';
 }
@@ -330,9 +444,12 @@ function render(){
   var list = showRetired ? all : all.filter(function(p){ return !p.retired; });
   var retiredCount = all.filter(function(p){ return p.retired; }).length;
 
-  if (canEditHere() && !(editing && !editing.id)) {
-    h += '<div class="acts"><button onclick="startAdd()">+ Add</button></div>';
+  if (!transfer && !(editing && !editing.id) && (canEditHere() || canTransfer())) {
+    h += '<div class="acts">' +
+      (canEditHere() ? '<button onclick="startAdd()">+ Add</button>' : "") +
+      (canTransfer() ? '<button onclick="startTransfer()">⇄ Transfer</button>' : "") + '</div>';
   }
+  if (transfer) h += transferForm();
   if (editing && !editing.id) h += personForm();
 
   // Ordered by department, not one flat name list — Mark, 2026-10-06:

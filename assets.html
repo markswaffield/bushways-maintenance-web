@@ -291,8 +291,85 @@ function transferForm(){
     '<button onclick="cancel()">Cancel</button></div></div>';
 }
 
+// The page-level Transfer (D-146): from camp, then the asset, then to
+// camp, without first switching to the camp it's at. The same move as
+// the Transfer button on each asset (transfer_asset); the server decides
+// which camps this person may move things out of.
+var xfer = null;
+var XFER_KIND = { vehicle: "Vehicles", trailer: "Trailers", boat: "Boats", generator: "Generators" };
+function canTransferAny(){ return !!(me && (me.is_administrator || me.is_general_manager)); }
+function xferGet(url){ return fetch(url).then(function(r){ return r.json(); }); }
+window.startXfer = function(){
+  editing = null; transferring = null;
+  xfer = { loading: true, date: new Date().toISOString().slice(0, 10), reason: "" };
+  render();
+  xferGet(FN + "?action=transfer_options&kind=asset&person_id=" + encodeURIComponent(me.id)).then(function(d){
+    if (d.error) { alert(d.error); xfer = null; render(); return; }
+    xfer = Object.assign(xfer, d, { loading: false });
+    var here = shownCamp && d.from_locations.some(function(l){ return l.id === shownCamp.id; });
+    xferFrom(here ? shownCamp.id : (d.from_locations[0] || {}).id);
+  });
+};
+window.cancelXfer = function(){ xfer = null; render(); };
+function xferFrom(id){
+  xfer.from = id; xfer.items = null; xfer.item = ""; xfer.to = "";
+  render();
+  if (!id) return;
+  xferGet(FN + "?action=transfer_options&kind=asset&person_id=" + encodeURIComponent(me.id) + "&from_location_id=" + encodeURIComponent(id)).then(function(d){
+    if (d.error) { alert(d.error); return; }
+    xfer.items = d.items; render();
+  });
+}
+window.xferFrom = xferFrom;
+window.xferSet = function(key, value){ xfer[key] = value; render(); };
+function xferLoc(id){ return ((xfer && xfer.to_locations || []).filter(function(l){ return l.id === id; })[0] || {}).name || ""; }
+window.confirmXfer = function(){
+  var parts = (xfer.item || "").split("|"), a = (xfer.items || []).filter(function(i){ return i.kind === parts[0] && i.id === parts[1]; })[0];
+  if (!a || !xfer.to) { alert("Choose the asset and the camp it is moving to."); return; }
+  if (!confirm("Move " + a.name + " from " + xferLoc(xfer.from) + " to " + xferLoc(xfer.to) + "?")) return;
+  post("transfer_asset", { kind: a.kind, id: a.id, to_location_id: xfer.to, transferred_on: xfer.date, reason: xfer.reason || null })
+    .then(function(out){
+      if (out.error) { alert(out.error); return; }
+      alert(a.name + " is now at " + xferLoc(xfer.to) + ". " + out.checks_moved + " open check(s), " + out.issues_moved +
+        " open fault(s) and " + out.schedules_moved + " schedule(s) went with it.");
+      xfer = null; load();
+    });
+};
+function xferForm(){
+  if (xfer.loading) return '<div class="form"><p class="note">Loading…</p></div>';
+  function opt(v, label, sel){ return '<option value="' + esc(v) + '"' + (sel === v ? " selected" : "") + '>' + esc(label) + '</option>'; }
+  var h = '<div class="form"><h2 style="margin-top:0">Transfer an asset</h2>';
+  h += '<label>From camp</label><select id="x_from" onchange="xferFrom(this.value)">' +
+    xfer.from_locations.map(function(l){ return opt(l.id, l.name, xfer.from); }).join("") + '</select>';
+  h += '<label>Asset</label>';
+  if (!xfer.items) h += '<p class="note">Loading…</p>';
+  else if (!xfer.items.length) h += '<p class="note">No moveable assets at this camp.</p>';
+  else {
+    h += '<select id="x_item" onchange="xferSet(\'item\', this.value)">' + opt("", "Choose an asset", xfer.item);
+    Object.keys(XFER_KIND).forEach(function(k){
+      var group = xfer.items.filter(function(i){ return i.kind === k; });
+      if (!group.length) return;
+      h += '<optgroup label="' + XFER_KIND[k] + '">' + group.map(function(i){
+        return opt(i.kind + "|" + i.id, i.name + (i.description ? " — " + i.description : ""), xfer.item);
+      }).join("") + '</optgroup>';
+    });
+    h += '</select>';
+  }
+  h += '<label>To camp</label><select id="x_to" onchange="xferSet(\'to\', this.value)">' + opt("", "Choose a camp", xfer.to) +
+    xfer.to_locations.filter(function(l){ return l.id !== xfer.from; }).map(function(l){ return opt(l.id, l.name, xfer.to); }).join("") + '</select>';
+  h += '<label>Moved on</label><input type="date" id="x_on" value="' + esc(xfer.date) + '" onchange="xfer.date=this.value">' +
+    '<label>Why</label><input type="text" id="x_reason" value="' + esc(xfer.reason) + '" placeholder="Optional" oninput="xfer.reason=this.value">';
+  h += '<p class="warn">Its open faults, open checks and schedules go with it. Everything already done stays on ' +
+    'the record at the lodge where it happened, and any check assigned to a named person there is unassigned.</p>';
+  h += '<div class="acts"><button class="primary" onclick="confirmXfer()">Transfer</button>' +
+    '<button onclick="cancelXfer()">Cancel</button></div></div>';
+  return h;
+}
+
 function render(){
   var h = "";
+  if (xfer) h += xferForm();
+  else if (canTransferAny()) h += '<div class="acts"><button onclick="startXfer()">⇄ Transfer</button></div>';
   KINDS.forEach(function(k){
     var kind = k[0], title = k[1], movable = k[2];
     // This page is for moveable equipment, not what's fixed to a
