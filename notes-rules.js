@@ -187,22 +187,28 @@ function shortBed(v){
   return found.length ? found.join("/") : null;
 }
 
+// A bed word that is really part of a place name. Mark, 2026-10-12, on Anne
+// Bell x3 at Chobe showing FAM: the only "family" in the notes was "ex
+// Zambezi Family Lodge in Zimbabwe" — where the guests came from, not how
+// they sleep. Same trap waits in "King's Pool", "Twin Rivers" and so on.
+var PLACE_NAME = /\b(?:double|twin|triple|single|family|king|queen)(?:'s)?\s+(?:lodge|camp|hotel|resort|guest\s*house|safaris?|tours?|pool|rivers?|island|villa)\b/gi;
+
 function bed(text){
   var lab = labelled(text, "bed");
   if (lab && lab.value){
-    var s = shortBed(lab.value);
+    var s = shortBed(lab.value.replace(PLACE_NAME, ""));
     if (s) return { value: s, source: lab.source, confident: true };
   }
   // Very commonly a bare line of its own: "Double", "Twin beds", "Double x 1".
   var all = lines(text);
   for (var i = 0; i < all.length; i++){
     if (all[i].length > 30) continue;                 // a sentence, not a label
-    var m = all[i].match(/^(double|twin|triple|single|family|king|queen)\b[\s\w]{0,14}$/i);
+    var m = all[i].replace(PLACE_NAME, "").match(/^(double|twin|triple|single|family|king|queen)\b[\s\w]{0,14}$/i);
     if (m) return { value: BED_SHORT[m[1].toLowerCase()], source: all[i], confident: true };
   }
   // Inside a longer sentence — real, but worth a manager's eye.
   for (var j = 0; j < all.length; j++){
-    var m2 = all[j].match(BEDWORDS);
+    var m2 = all[j].replace(PLACE_NAME, "").match(BEDWORDS);
     if (m2) return { value: BED_SHORT[m2[1].toLowerCase()], source: all[j], confident: false };
   }
   return null;
