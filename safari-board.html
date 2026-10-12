@@ -19,8 +19,9 @@
   never moves it again. Campsites are entered night by night in the panel
   (D-003). Crew and equipment come next.
 
-  Columns are SLOTS, not vehicles (D-006). Departures with no guests yet sit
-  in the "Open" columns at the right, as they do on the Tour Master (D-007).
+  Columns are SLOTS, not vehicles (D-006). Every departure goes on a vehicle,
+  with or without guests (D-021); one with no guests is drawn dashed. A
+  "No vehicle free" column appears only if a departure could not be placed.
   The pre night is drawn lighter and never blocks a slot.
 
   Sign-in is the group's own (root D-025/D-026): the same bw_signin the
@@ -239,7 +240,7 @@
 </div>
 <div class="legend">
   <span id="legendSafaris" style="display:contents"></span>
-  <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>Open, no guests yet</span>
+  <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>No guests yet</span>
   <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with seats</span>
   <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
   <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
@@ -397,7 +398,9 @@ function draw(r){
   var cslots = data.slots.filter(function(x){ return x.kind === "cancelled"; });
   var deps = data.departures;
 
-  // Open columns: departures with no slot, packed into as few lanes as fit.
+  // Departures with no slot: only when every vehicle was busy (D-021).
+  // Shown in a "No vehicle free" column, packed into as few lanes as fit,
+  // and the column is not drawn at all when there are none.
   var open = deps.filter(function(d){ return !d.slot_id && d.status !== "cancelled"; })
                  .sort(function(a,b){ return a.start_date < b.start_date ? -1 : 1; });
   var openLanes = [];
@@ -405,7 +408,7 @@ function draw(r){
     for (var i = 0; i < openLanes.length; i++) if (openLanes[i] < add(d.start_date, -1)) break;
     openLanes[i] = d.end_date; d._openLane = i;
   });
-  var nOpen = Math.max(openLanes.length, 1);
+  var nOpen = openLanes.length;
 
   layout = { v: slots.length, nOpen: nOpen, c: cslots };
   var nCols = slots.length * 2 + nOpen + cslots.length;
@@ -419,7 +422,7 @@ function draw(r){
   slots.forEach(function(s, i){
     h.push('<div class="hd slot" style="grid-row:1;grid-column:' + (2 + i * 2) + ' / span 2">' + esc(s.label) + '</div>');
   });
-  h.push('<div class="hd open" style="grid-row:1;grid-column:' + (2 + slots.length * 2) + ' / span ' + nOpen + '">Open — no guests yet</div>');
+  if (nOpen) h.push('<div class="hd open" style="grid-row:1;grid-column:' + (2 + slots.length * 2) + ' / span ' + nOpen + '">No vehicle free</div>');
   cslots.forEach(function(x, i){
     h.push('<div class="hd cxl" style="grid-row:1;grid-column:' + (2 + slots.length * 2 + nOpen + i) + '">Cancelled</div>');
   });
@@ -831,7 +834,7 @@ function openPanel(id){
     + mixBox(d)
     + '<table><tr><th>Dates</th><td>Pre night ' + nice(add(d.start_date, -1)) + '<br>' + nice(d.start_date) + " → " + nice(d.end_date) + " (" + diff(d.start_date, d.end_date) + " nights)"
     + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : '') + '</td></tr>'
-    + '<tr><th>Vehicle</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? ' <span class="pin">· placed by hand</span>' : " · placed automatically") : (d.has_guests ? '<span class="tag x">No slot free</span>' : "Open — no guests yet"))
+    + '<tr><th>Vehicle</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? ' <span class="pin">· placed by hand</span>' : " · placed automatically") : '<span class="tag x">No vehicle free</span>')
     + (allowed ? '<div class="edit"><select id="mvSlot">' + data.slots.map(function(x){ return '<option value="' + x.id + '"' + (x.id === d.slot_id ? " selected" : "") + '>' + esc(x.label) + '</option>'; }).join("")
       + '</select><select id="mvLane"><option value="1"' + ((d.lane || 1) === 1 ? " selected" : "") + '>column 1</option><option value="2"' + (d.lane === 2 ? " selected" : "") + '>column 2</option></select>'
       + '<button id="mvGo">Move</button>'
