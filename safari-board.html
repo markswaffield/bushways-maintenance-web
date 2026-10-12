@@ -113,6 +113,7 @@
   .blk.night.sx.head{background:var(--hb);color:var(--hf);border-color:var(--bd)}
   .blk.night.sx.head .s{color:inherit}
   .blk.open{background:var(--open-bg);border-color:var(--open-bd);border-style:dashed}
+  .blk.sx.ng{border-style:dashed;border-width:2px}
   .blk.prov{border-style:dashed}
   .blk.cxl{background:#EEE;border-color:#999;color:#777;text-decoration:line-through}
   .blk.est{border-bottom-style:dotted}
@@ -240,7 +241,7 @@
 </div>
 <div class="legend">
   <span id="legendSafaris" style="display:contents"></span>
-  <span><i style="background:var(--open-bg);border-color:var(--open-bd);border-style:dashed"></i>No guests yet</span>
+  <span><i style="background:#fff;border:2px dashed var(--open-bd)"></i>No guests yet (dashed)</span>
   <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with seats</span>
   <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
   <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
@@ -458,11 +459,13 @@ function draw(r){
     else if (d.slot_id && cIdx[d.slot_id] != null) col = 2 + slots.length * 2 + nOpen + cIdx[d.slot_id];
     else if (d._openLane != null) col = 2 + slots.length * 2 + d._openLane;
     else return;
-    var live = d.has_guests && d.status !== "cancelled";
-    // Moved to the Cancelled columns: everything kept, drawn grey.
+    // Every safari not cancelled carries its colour (D-021), guests or not;
+    // one with no guests yet is also dashed ("ng"). Moved to the Cancelled
+    // columns: everything kept, drawn grey.
+    var live = d.status !== "cancelled";
     var lk = d.shelved ? GREY : live ? lookOf(d) : null;
     if (d.shelved) live = true;
-    var fam = live ? "sx" : "open";
+    var fam = live ? "sx" + (d.has_guests || d.shelved ? "" : " ng") : "open";
     var sv = lk ? vars(lk) : "";
 
     var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
