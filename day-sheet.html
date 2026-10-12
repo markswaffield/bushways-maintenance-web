@@ -1182,6 +1182,15 @@ function render(){
         + " · <b>"+guests+"</b> guests in camp tonight"
         + (statusFilter ? ' · <span class="filtered">showing '+FILTER_LABEL[statusFilter]+" only</span>" : "")
         + "</p>";
+  // Rooms freed overnight because ResRequest released the booking (D-048).
+  // Mark, 2026-10-12: cancelled bookings were sitting on the board holding
+  // rooms; now the nightly update frees them, and says so here.
+  var WHY = { "0":"released in ResRequest (back to quotation)", "90":"cancelled in ResRequest", "95":"deleted in ResRequest" };
+  (sheet.released || []).forEach(function(f){
+    h += '<p class="warn amber">'+esc(f.room || "A room")+" freed: "+esc(f.guest_name || "")
+      + (f.booking_ref ? " ("+esc(f.booking_ref)+")" : "")+", "+esc(f.from_date)+" → "+esc(f.to_date)
+      + " — "+esc(WHY[f.resrequest_status] || "no longer booked in ResRequest")+".</p>";
+  });
   h += '<div class="scroll"><table>'+HEAD+"<tbody>";
   // Mark, 2026-09-29: "a filter option to filter by status - Arr - which must
   // show Arrivals and Turnovers, Staying and Departures."
