@@ -118,7 +118,10 @@
   .blk.cxl{background:#EEE;border-color:#999;color:#777;text-decoration:line-through}
   .blk.est{border-bottom-style:dotted}
   /* A white ring then a red one, so a clash shows on a red Tailor Made too. */
-  .blk.clash{box-shadow:0 0 0 2px #fff,0 0 0 4.5px var(--clash);z-index:4}
+  /* z-index 3, not 4: above ordinary blocks so the ring shows, but level with
+     the night labels (.nt), which come later and so draw on top. At 4 a
+     clashing trip hid its own areas and campsites (Mark, 2026-10-14, BWF2611). */
+  .blk.clash{box-shadow:0 0 0 2px #fff,0 0 0 4.5px var(--clash);z-index:3}
   /* The pre night: the vehicle is being prepared, perhaps a meet and greet or
      shopping. Lighter, and never a block that holds the slot (Mark, 2026-10-04). */
   .blk.night{border-style:dotted;z-index:1;justify-content:center;padding:0 5px;flex-direction:row;align-items:center;gap:5px;
