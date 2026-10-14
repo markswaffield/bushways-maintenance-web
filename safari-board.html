@@ -55,6 +55,7 @@
   .whobar-btns button:last-child{background:#F4E3D3;border-color:#8C6A2F;color:#4A3620;font-weight:600}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:10px 0 0;padding:10px 12px;
            border:1px solid var(--line);border-radius:8px;background:#fff}
+  [hidden]{display:none!important}
   .toolbar label{display:block;font-size:11px;color:#5B5344;text-transform:uppercase;letter-spacing:.03em;margin:0 0 3px}
   .status{font-size:12.5px;color:var(--muted);margin-left:auto;align-self:center}
   .status.err{color:var(--clash)}
@@ -240,6 +241,8 @@
   <button class="ghost" id="later">Later ▶</button>
   <button id="sync">Update from ResRequest</button>
   <button class="ghost" id="expandBtn" title="Give the chart the whole screen">⤢ Expand</button>
+  <button class="ghost" id="staffBtn" hidden title="Bush Ways Safaris people: add, edit, transfer">👥 Staff</button>
+  <button class="ghost" id="assetsBtn" hidden title="Bush Ways Safaris vehicles and trailers">🚙 Assets</button>
   <span class="status" id="status"></span>
 </div>
 <div class="legend">
@@ -271,6 +274,23 @@ document.getElementById("whoami").textContent = me ? me.name : "";
 document.getElementById("signOut").onclick = function () {
   sessionStorage.removeItem("bw_signin"); sessionStorage.removeItem("bw_camp"); location.href = "./";
 };
+// Staff and Assets for Bush Ways Safaris, the crew, vehicles and trailers
+// this board uses (safari-ops D-024). Mark, 2026-10-14: "the Safari Ops
+// Manager - Gabs needs to be able to access this, along with all Admin".
+// So: administrators, and a General Manager whose camps include Bush Ways
+// Safaris. Shown only to them; the Staff and Assets pages and their server
+// make the real check.
+var BWS_ID = "2c94c415-3947-4f06-a42c-5291d3cb6597";
+(function(){
+  var ok = me && (me.is_administrator || (me.is_general_manager
+    && (me.locations || []).some(function(l){ return l.id === BWS_ID; })));
+  if (!ok) return;
+  var q = "?camp=" + BWS_ID + "&name=" + encodeURIComponent("Bush Ways Safaris");
+  var s = document.getElementById("staffBtn"), a = document.getElementById("assetsBtn");
+  s.hidden = a.hidden = false;
+  s.onclick = function(){ location.href = "./staff.html" + q; };
+  a.onclick = function(){ location.href = "./assets.html" + q; };
+})();
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function el(id){return document.getElementById(id);}

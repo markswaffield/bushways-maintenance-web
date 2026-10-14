@@ -125,6 +125,7 @@
     <span>👤 <b id="whoName"></b></span>
     <span class="whobar-btns">
       <button id="backDaySheet" hidden onclick="location.href='./day-sheet.html'">← Day Sheet</button>
+      <button id="backTourMaster" hidden onclick="location.href='./safari-board.html'">← Tour Master</button>
       <button id="changeCampBtn" hidden onclick="location.href='./base-dashboard.html'">Change camp</button>
       <button onclick="signOut()">Sign out</button>
     </span>
@@ -160,6 +161,15 @@ if (!me) { location.href = "./"; }
 var camp = null;
 try { var savedCamp = sessionStorage.getItem("bw_camp"); if (savedCamp) camp = JSON.parse(savedCamp); } catch (e) {}
 var shownCamp = camp || (me && me.locations && me.locations[0]);
+// Opened from the Tour Master's Staff / Assets buttons (safari-ops D-024):
+// ?camp= names the lodge to show, Bush Ways Safaris, whatever camp the
+// session was on. Not saved to bw_camp, so the other pages keep theirs.
+(function(){
+  var q = new URLSearchParams(location.search), id = q.get("camp");
+  if (!id || !me) return;
+  shownCamp = (me.locations || []).filter(function(l){ return l.id === id; })[0]
+    || { id: id, name: q.get("name") || "" };
+})();
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -475,6 +485,7 @@ if (camp && me.locations && me.locations.length > 1) {
 // Reached from the Day Sheet's Staff / Assets buttons (daily-operations
 // D-046): offer the way straight back there.
 if (/day-sheet\.html/.test(document.referrer || "")) document.getElementById("backDaySheet").hidden = false;
+if (/safari-board\.html/.test(document.referrer || "")) document.getElementById("backTourMaster").hidden = false;
 el("showRetired").parentElement.hidden = !me.is_manager;
 load();
 </script>
