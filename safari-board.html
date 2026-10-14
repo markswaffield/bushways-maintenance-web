@@ -272,7 +272,7 @@ var allowed = false, canView = false, level = null;
 function who(){ return "&person_id=" + encodeURIComponent(me && me.id || ""); }
 document.getElementById("whoami").textContent = me ? me.name : "";
 document.getElementById("signOut").onclick = function () {
-  sessionStorage.removeItem("bw_signin"); sessionStorage.removeItem("bw_camp"); location.href = "./";
+  sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {} sessionStorage.removeItem("bw_camp"); location.href = "./";
 };
 // Staff and Assets for Bush Ways Safaris, the crew, vehicles and trailers
 // this board uses (safari-ops D-024). Mark, 2026-10-14: "the Safari Ops

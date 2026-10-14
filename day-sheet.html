@@ -447,7 +447,7 @@ document.getElementById("boardBtn").onclick = function () {
 document.getElementById("staffBtn").onclick = function () { location.href = "./staff.html"; };
 document.getElementById("assetsBtn").onclick = function () { location.href = "./assets.html"; };
 document.getElementById("signOut").onclick = function () {
-  sessionStorage.removeItem("bw_signin");
+  sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
   sessionStorage.removeItem("bw_camp");
   location.href = "./";
 };

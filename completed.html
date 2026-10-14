@@ -127,7 +127,7 @@
   // actually is signed in, since this page still works with nobody
   // signed in at all (unchanged from before).
   window.signOut = function () {
-    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
     sessionStorage.removeItem("bw_camp");
     location.href = "./";
   };

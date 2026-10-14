@@ -473,7 +473,7 @@ el("showRetired").addEventListener("change", function(){ showRetired = this.chec
 // + Change Camp + Sign Out box must be the same across all sheets
 // when you are in a page").
 window.signOut = function(){
-  sessionStorage.removeItem("bw_signin");
+  sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
   sessionStorage.removeItem("bw_camp");
   location.href = "./";
 };

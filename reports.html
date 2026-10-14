@@ -135,7 +135,7 @@
   // Same sign-in bar as every other page now (Mark: "I want the same
   // layout as Schedule across all pages").
   window.signOut = function () {
-    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
     sessionStorage.removeItem("bw_camp");
     location.href = "./";
   };

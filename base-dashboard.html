@@ -201,7 +201,7 @@
   try { var saved = sessionStorage.getItem("bw_signin"); if (saved) me = JSON.parse(saved); } catch (e) {}
 
   window.signOut = function () {
-    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
     sessionStorage.removeItem("bw_camp");
     location.href = "./";
   };

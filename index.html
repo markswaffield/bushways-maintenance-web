@@ -237,7 +237,7 @@
 
   // Back to the sign-in screen, as every other page's Sign out does.
   window.signOutHere = function () {
-    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
     sessionStorage.removeItem("bw_camp");
     location.href = "./";
   };
@@ -279,8 +279,38 @@
     location.href = "./day-sheet.html";
   };
 
+  // A phone stays signed in (root D-017): "that phone stays signed in for
+  // an extended period (weeks to months)". sessionStorage alone is wiped
+  // every time the app is closed, which is what Mark's staff hit on
+  // 2026-10-14: "the app logs you out and does not keep you signed in".
+  // So on a phone the sign-in is ALSO kept in localStorage, for 60 days
+  // from signing in, and brought back here when the app is reopened. A
+  // computer keeps the old behaviour (closing the browser signs you out),
+  // because office computers are shared and the next person would work
+  // under your name. Every page's Sign out clears both.
+  var KEEP = "bw_keep", KEEP_DAYS = 60;
+  function onPhone() {
+    try {
+      if (window.matchMedia && matchMedia("(display-mode: standalone)").matches) return true;
+    } catch (e) {}
+    return !!navigator.standalone || /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || "");
+  }
+  function keepOnPhone(me) {
+    if (!onPhone()) return;
+    try { localStorage.setItem(KEEP, JSON.stringify({ me: me, until: Date.now() + KEEP_DAYS * 86400000 })); } catch (e) {}
+  }
+
   var resumed = null;
   try { var saved = sessionStorage.getItem("bw_signin"); if (saved) resumed = JSON.parse(saved); } catch (e) {}
+  if (!resumed) {
+    try {
+      var kept = JSON.parse(localStorage.getItem(KEEP) || "null");
+      if (kept && kept.me && kept.until > Date.now()) {
+        resumed = kept.me;
+        sessionStorage.setItem("bw_signin", JSON.stringify(resumed));
+      } else if (kept) localStorage.removeItem(KEEP);
+    } catch (e) {}
+  }
   if (resumed) { route(resumed); }
 
   // Lodge first, then department, then name — Mark, 2026-09-18: "at the
@@ -368,6 +398,7 @@
       if (out.error) { err.textContent = out.error; err.hidden = false; return; }
       var me = { id: out.person_id, name: out.name, department: out.department, is_manager: out.is_manager, is_administrator: out.is_administrator, is_general_manager: out.is_general_manager, locations: out.locations || [] };
       sessionStorage.setItem("bw_signin", JSON.stringify(me));
+      keepOnPhone(me);
       route(me);
     });
   };

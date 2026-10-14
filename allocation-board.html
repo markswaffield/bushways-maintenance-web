@@ -228,7 +228,7 @@ function personId(){return me && me.id;}
 
 el("whoami").textContent = (me && (me.nickname || me.name)) || "";
 el("signOut").onclick = function(){
-  sessionStorage.removeItem("bw_signin"); sessionStorage.removeItem("bw_camp");
+  sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {} sessionStorage.removeItem("bw_camp");
   location.href = "./";
 };
 if (shownCamp) {

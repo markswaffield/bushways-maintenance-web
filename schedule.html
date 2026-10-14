@@ -386,7 +386,7 @@
   window.onStatusFilter = function () { filterStatus = document.getElementById("statusFilterDue").value; render(); };
   window.clearRange = function () { from = ""; to = ""; render(); };
   window.signOut = function () {
-    sessionStorage.removeItem("bw_signin");
+    sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
     sessionStorage.removeItem("bw_camp");
     location.href = "./";
   };
