@@ -158,6 +158,13 @@
   <label>What would you like to do?</label>
   <select id="area"><option value="">Loading…</option></select>
   <button id="startBtn">Continue</button>
+  <!-- iPhone (and any phone that won't say whether it is on WiFi): the
+       checklists are saved only when the person confirms WiFi (maintenance
+       D-150, Mark: "option A"). Android saves them by itself on WiFi. -->
+  <div id="offlineSave" hidden style="margin-top:14px;padding:10px 12px;border:1px dashed #C9C2B0;border-radius:8px">
+    <button type="button" class="secondary" id="offlineSaveBtn">📥 Save checklists for this phone — I'm on WiFi</button>
+    <p class="note" id="offlineSaveMsg" style="margin:6px 0 0"></p>
+  </div>
 </div>
 
 <div id="unavailable" hidden>
@@ -343,7 +350,9 @@
       data.areas.filter(function (x) { return x.available; }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join("") +
       '<option value="__report__">Report a fault</option>';
 
+    lastBoot = data;
     saveForOffline(data);
+    showOfflineSave();
 
     if (deepLinkTarget) {
       targetType = deepLinkType;
@@ -356,22 +365,48 @@
         .catch(function (e) { alert("Couldn't load the checklist. " + e.message); });
     }
   }).catch(function (e) {
-    document.getElementById("start").innerHTML = "<p>Couldn't reach the checklist data. This is a fault in the page, not your connection or phone — please tell Mark/Claude. (" + esc(e.message) + ")</p>";
+    // With no signal and nothing saved yet, say so plainly — it is not a fault.
+    document.getElementById("start").innerHTML = navigator.onLine === false || /No signal/.test(e.message)
+      ? "<h1>No signal</h1><p>The checklists haven't been saved on this phone yet. Open Inspection once on WiFi first"
+        + (window.bwQueue && bwQueue.connectionKind() === "unknown" ? " and tap <b>Save checklists for this phone</b>" : "")
+        + ", then it works with no signal.</p>"
+      : "<p>Couldn't reach the checklist data. (" + esc(e.message) + ") Try again in a moment; if it keeps happening, tell Mark.</p>";
   });
   }
 
   // Every checklist at this lodge kept on the phone, so a check opens with
   // no signal even for a room or vehicle never opened on this phone
   // (maintenance D-150). On WiFi only, one at a time, at most every 12 hours.
-  function saveForOffline(data) {
-    if (!window.bwQueue || !bwQueue.mayAutoSend() || !myPersonId) return;
-    var key = "bw_offline_saved_" + (camp ? camp.id : "default") + "_" + myPersonId;
-    try { if (Date.now() - Number(localStorage.getItem(key) || 0) < 12 * 3600e3) return; } catch (e) { return; }
+  var lastBoot = null, savingOffline = false;
+  function offlineKey() { return "bw_offline_saved_" + (camp ? camp.id : "default") + "_" + myPersonId; }
+  // force: the person confirmed WiFi (the button, or Send now): saved now,
+  // whatever the phone says and however recently it was last done.
+  function saveForOffline(data, force, progress) {
+    if (!window.bwQueue || !myPersonId || !data || savingOffline) return Promise.resolve(false);
+    if (!force && !bwQueue.mayAutoSend()) return Promise.resolve(false);
+    var key = offlineKey();
+    if (!force) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < 12 * 3600e3) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
+    savingOffline = true;
     var urls = [];
     (data.rooms || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=room" + campParam()); });
     (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=vehicle" + campParam()); });
     var areas = (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; });
     var chain = Promise.resolve();
+    // The lodge's daily rounds too (consolidated.html asks for exactly this
+    // address), found on the same lists the Schedule page reads.
+    chain = chain.then(function () {
+      return Promise.all([bwApi.get(FN + "?action=dashboard" + campParam()), bwApi.get(FN + "?action=schedules_list" + campParam())])
+        .then(function (lists) {
+          var ids = {};
+          (function walk(x) {
+            if (!x || typeof x !== "object") return;
+            if (Array.isArray(x)) { x.forEach(walk); return; }
+            if (x.is_schedule && x.consolidated && x.id) ids[x.id] = true;
+            Object.keys(x).forEach(function (k) { if (x[k] && typeof x[k] === "object") walk(x[k]); });
+          })(lists);
+          Object.keys(ids).forEach(function (id) { urls.push(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(id) + campParam()); });
+        }).catch(function () {});
+    });
     areas.forEach(function (a) {
       chain = chain.then(function () {
         return bwApi.get(FN + "?action=area_targets&area=" + a.id + campParam()).then(function (t) {
@@ -381,17 +416,50 @@
         }).catch(function () {});
       });
     });
-    chain.then(function () {
-      var i = 0;
-      (function next() {
-        if (i >= urls.length || !bwQueue.mayAutoSend()) {
-          if (i >= urls.length) try { localStorage.setItem(key, String(Date.now())); } catch (e) {}
-          return;
-        }
-        bwApi.get(urls[i++]).catch(function () {}).then(function () { setTimeout(next, 250); });
-      })();
+    return chain.then(function () {
+      return new Promise(function (done) {
+        var i = 0, ok = 0;
+        (function next() {
+          if (progress) progress(i, urls.length);
+          if (i >= urls.length || (!force && !bwQueue.mayAutoSend())) {
+            if (i >= urls.length && ok) try { localStorage.setItem(key, String(Date.now())); } catch (e) {}
+            savingOffline = false; done(ok); return;
+          }
+          bwApi.get(urls[i++]).then(function () { ok++; }, function () {}).then(function () { setTimeout(next, 150); });
+        })();
+      });
     });
   }
+
+  // The button, on iPhone and any phone that won't say what it's on.
+  function showOfflineSave() {
+    var box = document.getElementById("offlineSave");
+    if (!box || !window.bwQueue || bwQueue.connectionKind() !== "unknown") return;
+    box.hidden = false;
+    var msg = document.getElementById("offlineSaveMsg"), last = 0;
+    try { last = Number(localStorage.getItem(offlineKey()) || 0); } catch (e) {}
+    msg.textContent = last
+      ? "Saved on this phone " + new Date(last).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ". Save again on WiFi to pick up changes."
+      : "Not saved yet. Tap this on WiFi so checks work with no signal.";
+  }
+  function saveNowConfirmed() {
+    var btn = document.getElementById("offlineSaveBtn"), msg = document.getElementById("offlineSaveMsg");
+    if (!lastBoot) return;
+    if (btn) btn.disabled = true;
+    saveForOffline(lastBoot, true, function (i, n) { if (msg) msg.textContent = "Saving… " + i + " of " + n; })
+      .then(function (ok) {
+        if (btn) btn.disabled = false;
+        if (ok === false) return;
+        showOfflineSave();
+        if (msg && !ok) msg.textContent = "Couldn't save — check the WiFi and try again.";
+      });
+  }
+  document.getElementById("offlineSaveBtn").onclick = function () {
+    if (!confirm("This downloads the checklists for this lodge. Only do it on WiFi, never on mobile data. Are you on WiFi now?")) return;
+    saveNowConfirmed();
+  };
+  // Tapping Send now — I'm on WiFi also refreshes the saved checklists.
+  document.addEventListener("bwqueue:wifi-confirmed", saveNowConfirmed);
 
   // The screen after a check or report is saved on the phone instead of sent.
   function showQueued(what) {

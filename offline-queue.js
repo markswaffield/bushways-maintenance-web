@@ -254,6 +254,8 @@
       var b = document.getElementById("bwSendNow");
       if (b) b.onclick = function () {
         if (!confirm("Only send on WiFi, never on mobile data. Are you on WiFi now?")) return;
+        // Pages that keep copies refresh them too, now WiFi is confirmed.
+        document.dispatchEvent(new CustomEvent("bwqueue:wifi-confirmed"));
         flush(true).then(function (r) { if (r.error) alert("Not everything sent: " + r.error + " It stays saved and will be tried again."); });
       };
     }).catch(function () {});
