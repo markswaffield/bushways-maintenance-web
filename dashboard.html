@@ -161,7 +161,7 @@
   // own Department → Person filter already uses, not refetched on
   // every reload.
   var people = [];
-  fetch(API + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : "")).then(function (r) { return r.json(); })
+  bwApi.get(API + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : ""))
     .then(function (b) {
       people = b.people || [];
       // Render whichever response arrived first; most of the time this
@@ -219,7 +219,7 @@
   }
 
   function loadIssues() {
-    fetch(FN).then(function (r) { return r.json(); }).then(function (data) {
+    bwApi.get(FN).then(function (data) {
       lastData = data;
       departments = data.departments || [];
       renderFilters(data);
@@ -468,15 +468,19 @@
     document.getElementById("app").innerHTML = html;
   }
 
+  function queuedNotice() {
+    alert("Saved on this phone. It sends on WiFi" + (bwQueue.connectionKind() === "unknown" ? " when you tap Send now at the bottom." : ".")
+      + " Until then this list still shows it as it was.");
+  }
+
   window.doAddNote = function (id) {
     var field = document.getElementById("note-" + id);
     var text = field.value.trim();
     if (!text) return;
-    fetch(API + "?action=attach", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ issue_id: id, added_by: me.id, note: text }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+    // Through the WiFi-only queue (maintenance D-150).
+    bwQueue.send(API + "?action=attach", { issue_id: id, added_by: me.id, note: text }, "Note on a fault").then(function (out) {
       if (out.error) { alert(out.error); return; }
+      if (out.queued) { field.value = ""; queuedNotice(); }
       loadIssues();
     }).catch(function (e) { alert("Couldn't add the note — a fault in the page. (" + e.message + ")"); });
   };
@@ -516,19 +520,16 @@
     var personId = personSel ? personSel.value : "";
     var noteField = document.getElementById("note-" + id);
     var noteText = noteField ? noteField.value.trim() : "";
+    // Both through the WiFi-only queue (maintenance D-150), note first.
     var saveNote = noteText
-      ? fetch(API + "?action=attach", {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ issue_id: id, added_by: me.id, note: noteText }),
-        }).then(function (r) { return r.json(); })
+      ? bwQueue.send(API + "?action=attach", { issue_id: id, added_by: me.id, note: noteText }, "Note on a fault")
       : Promise.resolve(null);
     saveNote.then(function (noteOut) {
       if (noteOut && noteOut.error) { alert(noteOut.error); return; }
-      return fetch(API + "?action=assign", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ issue_id: id, assigned_department_id: departmentId, assigned_person_id: personId, by_person_id: me.id }),
-      }).then(function (r) { return r.json(); }).then(function (out) {
+      return bwQueue.send(API + "?action=assign", { issue_id: id, assigned_department_id: departmentId, assigned_person_id: personId, by_person_id: me.id }, "Fault assigned")
+        .then(function (out) {
         if (out.error) { alert(out.error); return; }
+        if (out.queued || (noteOut && noteOut.queued)) queuedNotice();
         loadIssues();
       });
     }).catch(function (e) { alert("Couldn't assign — a fault in the page. (" + e.message + ")"); });

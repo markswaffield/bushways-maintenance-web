@@ -430,13 +430,35 @@
   window.onFilterPerson = function () {
     filterPerson = document.getElementById("fPerson").value; mine = false; render();
   };
+  // Each daily round's checklist kept on the phone, on WiFi, so a round can
+  // be done with no signal (maintenance D-150). The address matches the one
+  // consolidated.html asks for, so its copy is found there.
+  function saveRoundsForOffline(res) {
+    if (!window.bwQueue || !bwQueue.mayAutoSend()) return;
+    var ids = {};
+    (function walk(x) {
+      if (!x || typeof x !== "object") return;
+      if (Array.isArray(x)) { x.forEach(walk); return; }
+      if (x.is_schedule && x.consolidated && x.id) ids[x.id] = true;
+      Object.keys(x).forEach(function (k) { if (x[k] && typeof x[k] === "object") walk(x[k]); });
+    })(res);
+    Object.keys(ids).forEach(function (id, i) {
+      setTimeout(function () {
+        bwApi.get(BASE_FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(id) + CAMP_PARAM).catch(function () {});
+      }, 500 * i);
+    });
+  }
+
+  // A staff action saved on the phone instead of sent (maintenance D-150).
+  function queuedNotice() {
+    alert("Saved on this phone. It sends on WiFi" + (bwQueue.connectionKind() === "unknown" ? " when you tap Send now at the bottom." : ".")
+      + " Until then this page still shows it as it was.");
+  }
   window.clearWhoFilter = function () { filterDept = ""; filterPerson = ""; mine = false; render(); };
   window.doAssignTask = function (taskId) {
     var sel = document.getElementById("assign-" + taskId);
-    fetch(FN.replace("action=dashboard", "action=assign_task"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ task_id: taskId, assigned_department_id: sel.value || null, by_person_id: me && me.id }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+    bwQueue.send(FN.replace("action=dashboard", "action=assign_task"), { task_id: taskId, assigned_department_id: sel.value || null, by_person_id: me && me.id }, "Task assigned").then(function (out) {
+      if (out.queued) queuedNotice();
       if (out.error) { alert(out.error); return; }
       reload();
     });
@@ -671,8 +693,7 @@
 
   window.showHistory = function (id) {
     if (historyFor === id) { historyFor = null; render(); return; }
-    fetch(FN.replace("action=dashboard", "action=schedule_history") + "&schedule=" + id)
-      .then(function (r) { return r.json(); })
+    bwApi.get(FN.replace("action=dashboard", "action=schedule_history") + "&schedule=" + id)
       .then(function (out) { historyFor = id; historyRows = out.history || []; render(); });
   };
 
@@ -764,10 +785,8 @@
 
   window.archiveRule = function (id, restore) {
     if (!restore && !confirm("Remove this schedule? It stops raising anything, but it is kept with its full history and can be restored.")) return;
-    fetch(FN.replace("action=dashboard", "action=archive_schedule"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ schedule_id: id, restore: !!restore, by_person_id: me && me.id }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+    bwQueue.send(FN.replace("action=dashboard", "action=archive_schedule"), { schedule_id: id, restore: !!restore, by_person_id: me && me.id }, "Schedule removed or restored").then(function (out) {
+      if (out.queued) queuedNotice();
       if (out.error) { alert(out.error); return; }
       reload();
     });
@@ -782,14 +801,12 @@
     if (!notes.trim()) { alert("Say what was done — the note is the only record of this work."); return; }
     saving = true;
     if (btn) { btn.disabled = true; btn.textContent = "Recording…"; }
-    fetch(FN.replace("action=dashboard", "action=complete_schedule"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    bwQueue.send(FN.replace("action=dashboard", "action=complete_schedule"), {
         schedule_id: id, by_person_id: me && me.id,
         completed_on: document.getElementById("c_date").value,
         notes: notes,
-      }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+      }, "Schedule recorded as complete").then(function (out) {
+      if (out.queued) queuedNotice();
       saving = false;
       if (out.error) {
         alert(out.error);
@@ -1094,16 +1111,14 @@
   };
   window.doEditHandover = function (id, btn) {
     if (btn) btn.disabled = true;
-    fetch(FN.replace("action=dashboard", "action=edit_handover"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    bwQueue.send(FN.replace("action=dashboard", "action=edit_handover"), {
         by_person_id: me && me.id, handover_id: id,
         from_person_id: document.getElementById("ho_from") ? document.getElementById("ho_from").value : undefined,
         to_person_id: document.getElementById("ho_to").value,
         handover_on: document.getElementById("ho_on").value,
         to_location_id: document.getElementById("ho_end").value || null,
-      }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+      }, "Handover changed").then(function (out) {
+      if (out.queued) queuedNotice();
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
       editingHandoverId = null; reload();
     });
@@ -1115,8 +1130,7 @@
     var ho = handovers.filter(function (h) { return h.id === id; })[0];
     if (!ho || !ho.inspection_id) return;
     handoverHistoryLoading = true;
-    fetch(FN.replace("action=dashboard", "action=handover_checklist") + "&inspection=" + encodeURIComponent(ho.inspection_id))
-      .then(function (r) { return r.json(); })
+    bwApi.get(FN.replace("action=dashboard", "action=handover_checklist") + "&inspection=" + encodeURIComponent(ho.inspection_id))
       .then(function (out) {
         handoverHistoryLoading = false;
         if (!out.error) handoverHistoryChecklist = out.sections;
@@ -1126,17 +1140,15 @@
 
   window.doRaiseHandover = function (btn) {
     if (btn) btn.disabled = true;
-    fetch(FN.replace("action=dashboard", "action=raise_handover"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    bwQueue.send(FN.replace("action=dashboard", "action=raise_handover"), {
         by_person_id: me && me.id,
         vehicle_id: document.getElementById("ho_vehicle").value,
         from_person_id: document.getElementById("ho_from").value,
         to_person_id: document.getElementById("ho_to").value,
         handover_on: document.getElementById("ho_on").value,
         to_location_id: document.getElementById("ho_end").value || null,
-      }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+      }, "Handover raised").then(function (out) {
+      if (out.queued) queuedNotice();
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
       raisingHandover = false; justRaisedId = out.handover_id || null; reload();
     });
@@ -1496,33 +1508,29 @@
     if (btn) btn.disabled = true;
     var guideEl = document.getElementById("sce_guide");
     var trailerEl = document.getElementById("sce_trailer");
-    fetch(FN.replace("action=dashboard", "action=edit_safari_check"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    bwQueue.send(FN.replace("action=dashboard", "action=edit_safari_check"), {
         by_person_id: me && me.id, safari_check_id: id,
         guide_id: guideEl ? guideEl.value : undefined,
         trailer_id: trailerEl ? (trailerEl.value || null) : undefined,
         due_on: document.getElementById("sce_on").value,
         tour_code: document.getElementById("sce_tour").value || null,
-      }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+      }, "Safari check changed").then(function (out) {
+      if (out.queued) queuedNotice();
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
       editingSafariCheckId = null; reload();
     });
   };
   window.doRaiseSafariCheck = function (btn) {
     if (btn) btn.disabled = true;
-    fetch(FN.replace("action=dashboard", "action=raise_safari_check"), {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    bwQueue.send(FN.replace("action=dashboard", "action=raise_safari_check"), {
         by_person_id: me && me.id,
         vehicle_id: document.getElementById("sc_vehicle").value,
         guide_id: document.getElementById("sc_guide").value,
         trailer_id: document.getElementById("sc_trailer").value || null,
         due_on: document.getElementById("sc_on").value,
         tour_code: document.getElementById("sc_tour").value || null,
-      }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+      }, "Safari check raised").then(function (out) {
+      if (out.queued) queuedNotice();
       if (out.error) { alert(out.error); if (btn) btn.disabled = false; return; }
       raisingSafariCheck = false; justRaisedSafariCheckId = out.safari_check_id || null; reload();
     });
@@ -1828,12 +1836,13 @@
 
   function reload() {
     return Promise.all([
-      fetch(FN).then(function (r) { return r.json(); }),
-      fetch(FN.replace("action=dashboard", "action=schedules_list")).then(function (r) { return r.json(); }),
-      fetch(FN.replace("action=dashboard", "action=handovers")).then(function (r) { return r.json(); }),
-      fetch(FN.replace("action=dashboard", "action=all_area_targets")).then(function (r) { return r.json(); }),
-      fetch(FN.replace("action=dashboard", "action=safari_checks")).then(function (r) { return r.json(); }),
+      bwApi.get(FN),
+      bwApi.get(FN.replace("action=dashboard", "action=schedules_list")),
+      bwApi.get(FN.replace("action=dashboard", "action=handovers")),
+      bwApi.get(FN.replace("action=dashboard", "action=all_area_targets")),
+      bwApi.get(FN.replace("action=dashboard", "action=safari_checks")),
     ]).then(function (res) {
+      saveRoundsForOffline(res);
       handovers = res[2].handovers || [];
       handoverPeople = res[2].people || [];
       HERE = res[2].here || null;
@@ -1861,7 +1870,7 @@
   if (!me) { location.href = "./"; }
   else {
   var BOOT = BASE_FN + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : "");
-  fetch(BOOT).then(function (r) { return r.json(); }).then(function (b) {
+  bwApi.get(BOOT).then(function (b) {
     people = b.people || [];
     boot_vehicles = b.vehicles || [];
     showSignedIn();

@@ -26,7 +26,7 @@
    waiting to send" — because nobody else can see it (root D-023).
    Plain JavaScript, no build step; loaded with <script src="./offline-queue.js">. */
 (function () {
-  var DB = "bw-offline", VER = 1, db = null;
+  var DB = "bw-offline", VER = 2, db = null;
   function open() {
     if (db) return Promise.resolve(db);
     return new Promise(function (res, rej) {
@@ -35,6 +35,9 @@
         var d = r.result;
         if (!d.objectStoreNames.contains("copies")) d.createObjectStore("copies");
         if (!d.objectStoreNames.contains("queue")) d.createObjectStore("queue", { keyPath: "ref" });
+        // What the server turned down when it finally arrived, kept to be
+        // shown (with its reason) until the person dismisses it.
+        if (!d.objectStoreNames.contains("refused")) d.createObjectStore("refused", { keyPath: "ref" });
       };
       r.onsuccess = function () { db = r.result; res(db); };
       r.onerror = function () { rej(r.error); };
@@ -109,6 +112,19 @@
   // fault report. Each step that succeeds is saved back to the queue first,
   // so a dropped connection part-way never sends a step twice.
   function sendOne(item) {
+    if (item.kind === "post") {
+      var pb = Object.assign({}, item.body, { client_ref: item.ref, done_at: item.done_at });
+      return post(item.url, pb).then(function (res) {
+        if (res.status >= 500) throw new Error((res.body && res.body.error) || "The server had a problem; it will be tried again.");
+        if (res.body && res.body.error) {
+          // Turned down (not allowed, already done, no longer there): kept
+          // aside with the reason, not retried for ever.
+          return tx("refused", "readwrite", function (s) { s.put({ ref: item.ref, label: item.label, reason: res.body.error, at: Date.now() }); })
+            .then(function () { return remove(item.ref); }).then(function () { return res.body; });
+        }
+        return remove(item.ref).then(function () { return res.body; });
+      });
+    }
     if (item.kind === "report") {
       var rb = Object.assign({}, item.body, { client_ref: item.ref, done_at: item.done_at });
       return post(item.url, rb).then(function (res) {
@@ -130,7 +146,7 @@
           if (p.done) return;
           var issueId = out.issue_ids ? out.issue_ids[p.item_id] : null;
           if (!issueId) { p.done = true; return; } // nowhere to attach it (already recorded before)
-          return post(item.url + "?action=attach", { issue_id: issueId, added_by: item.body.person_id, image_data_url: p.data_url })
+          return post(item.url.split("?")[0] + "?action=attach", { issue_id: issueId, added_by: item.body.person_id, image_data_url: p.data_url })
             .then(function (res) { if (res.body && !res.body.error) { p.done = true; return put(item); } });
         });
       });
@@ -140,6 +156,23 @@
       });
     });
   }
+
+  // Any staff action (D-150, Stage 1): sent straight away on WiFi, otherwise
+  // queued. Resolves with the server's answer, or { queued: true }.
+  function send(url, body, label) {
+    var item = { kind: "post", url: url, body: body, label: label || "A change" };
+    if (!mayAutoSend()) return add(item).then(function () { return { queued: true }; });
+    item.ref = newRef(); item.done_at = new Date().toISOString();
+    return fetch(url, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(Object.assign({}, body, { client_ref: item.ref, done_at: item.done_at })) })
+      .then(function (r) { return r.json(); }, function () {
+        // No answer at all: no signal after all. Queued with the same
+        // reference, so if it did arrive it is not done twice.
+        return add(item).then(function () { return { queued: true }; });
+      });
+  }
+  function refused() { return tx("refused", "readonly", function (s) { return s.getAll(); }).then(function (x) { return x || []; }); }
+  function dismissRefused() { return tx("refused", "readwrite", function (s) { s.clear(); }).then(refreshBar); }
 
   var sending = false;
   // manual: the person tapped "Send now". Never sends on known mobile data.
@@ -157,6 +190,11 @@
         chain = chain.then(function () {
           return sendOne(it).then(function () { sent++; }, function (e) {
             failed++; lastError = e.message;
+            if (e.refused) {
+              // The server turned it down: shown with its reason, not retried.
+              return tx("refused", "readwrite", function (s) { s.put({ ref: it.ref, label: it.label, reason: e.message, at: Date.now() }); })
+                .then(function () { return remove(it.ref); }).catch(function () {});
+            }
             it.tries = (it.tries || 0) + 1; it.last_error = e.message;
             return put(it).catch(function () {});
           });
@@ -173,7 +211,8 @@
   // ── The bar: always there while anything is waiting ──
   var bar = null;
   function refreshBar() {
-    return all().then(function (items) {
+    return Promise.all([all(), refused().catch(function () { return []; })]).then(function (both) {
+      var items = both[0], turned = both[1];
       if (!document.body) return;
       if (!bar) {
         bar = document.createElement("div");
@@ -185,22 +224,33 @@
         document.body.appendChild(bar);
         document.body.style.paddingBottom = "64px";
       }
-      if (!items.length) { bar.hidden = true; bar.style.display = "none"; return; }
+      if (!items.length && !turned.length) { bar.hidden = true; bar.style.display = "none"; return; }
       bar.hidden = false; bar.style.display = "flex";
       var n = items.length, kind = connectionKind();
-      var what = n + " " + (items.every(function (i) { return i.kind === "report"; }) ? (n === 1 ? "fault report" : "fault reports")
-        : (n === 1 ? "check" : "checks")) + " waiting to send";
+      var what = !n ? "" : n + " " + (items.every(function (i) { return i.kind === "report"; }) ? (n === 1 ? "fault report" : "fault reports")
+        : items.every(function (i) { return i.kind === "check"; }) ? (n === 1 ? "check" : "checks")
+        : (n === 1 ? "item" : "items")) + " waiting to send";
       var why = sending ? "Sending…"
         : navigator.onLine === false ? "No signal. They send on WiFi."
         : kind === "data" ? "On mobile data. They send on WiFi."
         : kind === "wifi" ? "On WiFi, sending shortly."
         : "Send them when you are on WiFi.";
       var err = items.filter(function (i) { return i.last_error; }).map(function (i) { return i.last_error; })[0];
-      bar.innerHTML = '<span>📤 ' + what + '<br><span style="font-weight:400;font-size:12.5px;opacity:.85">' + why
-        + (err && !sending ? " Last try: " + esc(err) : "") + '</span></span>'
-        + (kind === "unknown" && !sending && navigator.onLine !== false
+      var turnedHtml = turned.length
+        ? '<span style="display:block;margin-top:4px;color:#F4C9A8">⚠ ' + turned.length + (turned.length === 1 ? " item was" : " items were")
+          + ' not accepted when sent. <button type="button" id="bwRefusedShow" style="font:inherit;font-size:12.5px;padding:3px 9px;'
+          + 'border-radius:6px;border:1px solid #F4C9A8;background:transparent;color:#F4C9A8;cursor:pointer">Show why</button></span>' : "";
+      bar.innerHTML = '<span>' + (n ? '📤 ' + what + '<br><span style="font-weight:400;font-size:12.5px;opacity:.85">' + why
+        + (err && !sending ? " Last try: " + esc(err) : "") + '</span>' : "") + turnedHtml + '</span>'
+        + (n && kind === "unknown" && !sending && navigator.onLine !== false
           ? '<button type="button" id="bwSendNow" style="font:inherit;font-size:13.5px;padding:9px 14px;border-radius:8px;border:0;'
             + 'background:#F4E3D3;color:#4A3620;cursor:pointer">Send now — I\'m on WiFi</button>' : "");
+      var rs = document.getElementById("bwRefusedShow");
+      if (rs) rs.onclick = function () {
+        alert(turned.map(function (t) { return "• " + (t.label || "An item") + ": " + t.reason; }).join("\n")
+          + "\n\nThese were not recorded. Do them again if they are still needed.");
+        dismissRefused();
+      };
       var b = document.getElementById("bwSendNow");
       if (b) b.onclick = function () {
         if (!confirm("Only send on WiFi, never on mobile data. Are you on WiFi now?")) return;
@@ -220,5 +270,5 @@
   setInterval(tick, 60000);
 
   window.bwApi = { get: get };
-  window.bwQueue = { add: add, all: all, flush: flush, mayAutoSend: mayAutoSend, connectionKind: connectionKind, refresh: refreshBar };
+  window.bwQueue = { add: add, all: all, send: send, flush: flush, mayAutoSend: mayAutoSend, connectionKind: connectionKind, refresh: refreshBar };
 })();

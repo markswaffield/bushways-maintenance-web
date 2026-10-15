@@ -94,6 +94,7 @@
   <button class="secondary" onclick="location.href='./schedule.html'">← Back to Schedule</button>
 </div>
 
+<script src="./offline-queue.js"></script>
 <script>
   var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
 
@@ -168,8 +169,7 @@
   function load() {
     show("loading");
     document.getElementById("loading").innerHTML = "<h1>Loading…</h1>";
-    fetch(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(scheduleId) + campParam())
-      .then(function (r) { return r.json(); })
+    bwApi.get(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(scheduleId) + campParam())
       .then(function (data) {
         if (data.error) {
           document.getElementById("loading").innerHTML = "<h1>Couldn't load this checklist</h1><p>" + esc(data.error) + "</p>";
@@ -367,15 +367,31 @@
     btn.disabled = true;
     btn.textContent = "Checking…";
 
-    fetch(FN + "?action=submit", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    var checkBody = {
         person_id: signedInAs.id, signed_in_id: signedInAs.id,
         location_id: camp ? camp.id : null, schedule_id: scheduleId,
         target_type: t.target_type, target_id: t.target_id, template_id: t.template_id,
-        results: results, odometer: odometer, hours: hours,
-      }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+        results: results.map(function (x) { var y = Object.assign({}, x); delete y.photoFile; return y; }),
+        odometer: odometer, hours: hours,
+    };
+    // Not on WiFi, or no answer: this target's check and its photos go into
+    // the queue on the phone (maintenance D-150), sent in order on WiFi.
+    var queueTarget = function () {
+      var photos = [], jobs = [];
+      results.filter(function (x) { return x.failed && x.photoFile; }).forEach(function (x) {
+        jobs.push(compressImage(x.photoFile).then(function (d) { photos.push({ item_id: x.item_id, data_url: d }); }));
+      });
+      return Promise.all(jobs).then(function () {
+        return bwQueue.add({ kind: "check", url: FN + "?action=submit", body: checkBody, photos: photos, label: t.target_label });
+      }).then(function () { return { queued: true, issue_ids: {} }; });
+    };
+    var ref = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "c-" + Date.now();
+    (bwQueue.mayAutoSend()
+      ? fetch(FN + "?action=submit", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify(Object.assign({ client_ref: ref, done_at: new Date().toISOString() }, checkBody)) })
+          .then(function (r) { return r.json(); }, function () { return queueTarget(); })
+      : queueTarget()
+    ).then(function (out) {
       if (out.error) {
         btn.disabled = false;
         btn.textContent = "✓ " + t.target_label + " checked";
@@ -388,23 +404,21 @@
         var doneCard = document.createElement("div");
         doneCard.className = "target-done";
         doneCard.id = "doneCard-" + ti;
-        doneCard.innerHTML = "✓ <b>" + esc(t.target_label) + "</b><span class=\"who\">checked by " + esc(signedInAs.name) + ", just now</span>";
+        doneCard.innerHTML = "✓ <b>" + esc(t.target_label) + "</b><span class=\"who\">checked by " + esc(signedInAs.name) + ", just now"
+          + (out.queued ? " · saved on this phone, sends on WiFi" : "") + "</span>";
         section.replaceWith(doneCard);
         t.done = true;
         data.done_count++;
         document.getElementById("progressCount").textContent = data.done_count + " of " + data.target_count;
         updateCloseOut(data);
       }
-      if (!withPhotos.length) { finishTarget(); return; }
+      if (!withPhotos.length || out.queued) { finishTarget(); return; }
       var remaining = withPhotos.length;
       withPhotos.forEach(function (x) {
         var issueId = (out.issue_ids || {})[x.item_id];
         if (!issueId) { if (--remaining === 0) finishTarget(); return; }
         compressImage(x.photoFile).then(function (dataUrl) {
-          return fetch(FN + "?action=attach", {
-            method: "POST", headers: { "content-type": "application/json" },
-            body: JSON.stringify({ issue_id: issueId, added_by: signedInAs.id, image_data_url: dataUrl }),
-          });
+          return bwQueue.send(FN + "?action=attach", { issue_id: issueId, added_by: signedInAs.id, image_data_url: dataUrl }, t.target_label + " (photo)");
         }).then(function () {}).catch(function () {})
           .then(function () { if (--remaining === 0) finishTarget(); });
       });
@@ -424,10 +438,15 @@
     var btn = document.getElementById("confirmRunBtn");
     btn.disabled = true;
     btn.textContent = "Closing out…";
-    fetch(FN + "?action=complete_schedule_run", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ schedule_id: scheduleId, person_id: signedInAs.id }),
-    }).then(function (r) { return r.json(); }).then(function (out) {
+    // Queued behind this round's own target checks, so they arrive first.
+    bwQueue.send(FN + "?action=complete_schedule_run", { schedule_id: scheduleId, person_id: signedInAs.id },
+      "Close out: " + document.getElementById("scheduleTitle").textContent).then(function (out) {
+      if (out.queued) {
+        document.getElementById("doneBox").innerHTML = "<p>Saved on this phone. The round closes when it sends on WiFi"
+          + (bwQueue.connectionKind() === "unknown" ? " — tap Send now at the bottom when you are on WiFi" : "") + ".</p>";
+        show("done");
+        return;
+      }
       if (out.error) {
         btn.disabled = false;
         btn.textContent = "Confirm — close out this schedule";
