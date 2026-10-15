@@ -142,6 +142,7 @@
   </div>
 </div>
 <script src="./nav.js"></script>
+<script src="./offline-queue.js"></script>
 <div id="navRow"></div>
 <script>
   (function () {
@@ -320,7 +321,7 @@
   })();
 
   if (signedInAs) {
-  fetch(FN + (campParam() ? "?" + campParam().slice(1) : "")).then(function (r) { return r.json(); }).then(function (data) {
+  bwApi.get(FN + (campParam() ? "?" + campParam().slice(1) : "")).then(function (data) {
     state.people = data.people; state.rooms = data.rooms; state.areas = data.areas;
     state.vehicles = data.vehicles || [];
     var r = document.getElementById("room");
@@ -342,20 +343,67 @@
       data.areas.filter(function (x) { return x.available; }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + '</option>'; }).join("") +
       '<option value="__report__">Report a fault</option>';
 
+    saveForOffline(data);
+
     if (deepLinkTarget) {
       targetType = deepLinkType;
       pendingRoomId = deepLinkTarget;
-      fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + deepLinkTarget + "&target_type=" + deepLinkType + campParam())
-        .then(function (resp) { return resp.json(); })
+      bwApi.get(FN + "?action=checklist&person=" + myPersonId + "&target=" + deepLinkTarget + "&target_type=" + deepLinkType + campParam())
         .then(function (checklistData) {
           if (checklistData.error) { alert(checklistData.error); return; }
           renderChecklist(checklistData, myPersonId, deepLinkTarget);
         })
-        .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+        .catch(function (e) { alert("Couldn't load the checklist. " + e.message); });
     }
   }).catch(function (e) {
     document.getElementById("start").innerHTML = "<p>Couldn't reach the checklist data. This is a fault in the page, not your connection or phone — please tell Mark/Claude. (" + esc(e.message) + ")</p>";
   });
+  }
+
+  // Every checklist at this lodge kept on the phone, so a check opens with
+  // no signal even for a room or vehicle never opened on this phone
+  // (maintenance D-150). On WiFi only, one at a time, at most every 12 hours.
+  function saveForOffline(data) {
+    if (!window.bwQueue || !bwQueue.mayAutoSend() || !myPersonId) return;
+    var key = "bw_offline_saved_" + (camp ? camp.id : "default") + "_" + myPersonId;
+    try { if (Date.now() - Number(localStorage.getItem(key) || 0) < 12 * 3600e3) return; } catch (e) { return; }
+    var urls = [];
+    (data.rooms || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=room" + campParam()); });
+    (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=vehicle" + campParam()); });
+    var areas = (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; });
+    var chain = Promise.resolve();
+    areas.forEach(function (a) {
+      chain = chain.then(function () {
+        return bwApi.get(FN + "?action=area_targets&area=" + a.id + campParam()).then(function (t) {
+          var list = t.targets || [];
+          if (!list.length) urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + a.id + "&target_type=area" + campParam());
+          list.forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=" + (x.type || "asset") + campParam()); });
+        }).catch(function () {});
+      });
+    });
+    chain.then(function () {
+      var i = 0;
+      (function next() {
+        if (i >= urls.length || !bwQueue.mayAutoSend()) {
+          if (i >= urls.length) try { localStorage.setItem(key, String(Date.now())); } catch (e) {}
+          return;
+        }
+        bwApi.get(urls[i++]).catch(function () {}).then(function () { setTimeout(next, 250); });
+      })();
+    });
+  }
+
+  // The screen after a check or report is saved on the phone instead of sent.
+  function showQueued(what) {
+    var kind = window.bwQueue ? bwQueue.connectionKind() : "unknown";
+    document.getElementById("doneTitle").textContent = "Saved on this phone";
+    document.getElementById("doneBox").innerHTML =
+      "<p>" + esc(what) + " is saved on this phone and waiting to send.</p>" +
+      (kind === "unknown"
+        ? "<p>When you are on WiFi, tap <b>Send now — I'm on WiFi</b> at the bottom of the screen. It never sends on mobile data.</p>"
+        : "<p>It sends by itself as soon as this phone is on WiFi. It never sends on mobile data.</p>") +
+      "<p class='note'>You can carry on with the next check. Each one keeps your name and the time you did it.</p>";
+    show("done");
   }
 
   document.getElementById("startBtn").onclick = function () {
@@ -408,8 +456,7 @@
         // one, exactly like Vehicles/Guest Rooms above; nothing there
         // means this area was genuinely never split, and stays a
         // single whole-area check same as before.
-        fetch(FN + "?action=area_targets&area=" + area.id + campParam())
-          .then(function (r) { return r.json(); })
+        bwApi.get(FN + "?action=area_targets&area=" + area.id + campParam())
           .then(function (data) {
             var targets = data.targets || [];
             if (targets.length) {
@@ -427,16 +474,15 @@
             } else {
               targetType = "area";
               pendingRoomId = area.id;
-              fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + area.id + "&target_type=area" + campParam())
-                .then(function (r2) { return r2.json(); })
+              bwApi.get(FN + "?action=checklist&person=" + myPersonId + "&target=" + area.id + "&target_type=area" + campParam())
                 .then(function (checklistData) {
                   if (checklistData.error) { alert(checklistData.error); return; }
                   renderChecklist(checklistData, myPersonId, area.id);
                 })
-                .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+                .catch(function (e) { alert("Couldn't load the checklist. " + e.message); });
             }
           })
-          .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+          .catch(function (e) { alert("Couldn't load the checklist. " + e.message); });
       }
     } else {
       document.getElementById("unavailableMsg").textContent =
@@ -460,10 +506,9 @@
     var roomId = document.getElementById("room").value;
     if (!roomId) { alert("Pick a " + (targetType === "vehicle" ? "vehicle" : "room") + " first."); return; }
     pendingRoomId = roomId;
-    fetch(FN + "?action=checklist&person=" + myPersonId + "&target=" + roomId + "&target_type=" + targetType + campParam())
-      .then(function (r) { return r.json(); })
+    bwApi.get(FN + "?action=checklist&person=" + myPersonId + "&target=" + roomId + "&target_type=" + targetType + campParam())
       .then(function (data) { renderChecklist(data, myPersonId, roomId); })
-      .catch(function (e) { alert("Couldn't load the checklist — a fault in the page, not your phone. (" + e.message + ")"); });
+      .catch(function (e) { alert("Couldn't load the checklist. " + e.message); });
   };
 
   // ------------------------------------------------------------------
@@ -610,6 +655,13 @@
   // silently after the fact.
   function transcribeAndFill() {
     var statusEl = document.getElementById("transcribeStatus");
+    if (window.bwQueue && !bwQueue.mayAutoSend()) {
+      // Turning speech into text means sending the recording: WiFi only.
+      // Otherwise the server does it when the report is sent.
+      statusEl.hidden = false;
+      statusEl.textContent = "Saved. It is turned into text when the report is sent on WiFi. You can also type a note below.";
+      return;
+    }
     statusEl.hidden = false;
     statusEl.textContent = "Transcribing…";
     blobToDataUrl(recordedBlob).then(function (dataUrl) {
@@ -654,6 +706,7 @@
 
   function structureAndFill(text) {
     var btn = document.getElementById("tidyBtn");
+    if (window.bwQueue && !bwQueue.mayAutoSend()) { alert("Tidy up needs WiFi. The report can still be submitted as it is."); return; }
     btn.disabled = true;
     fetch(FN + "?action=structure", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -704,9 +757,7 @@
       photoFile ? compressImage(photoFile) : Promise.resolve(null),
     ]).then(function (results) {
       var audioDataUrl = results[0], photoDataUrl = results[1];
-      return fetch(FN + "?action=report", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      var reportBody = {
           reported_by: myPersonId,
           priority: document.getElementById("reportUrgent").checked ? "urgent" : "normal",
           audio_data_url: audioDataUrl,
@@ -718,9 +769,20 @@
           structured: wasStructured,
           location_id: camp ? camp.id : null,
           signed_in_id: signedInAs ? signedInAs.id : null,
-        }),
-      });
-    }).then(function (r) { return r.json(); }).then(function (out) {
+      };
+      // Not on WiFi: into the queue on the phone (maintenance D-150).
+      var queueIt = function () {
+        return bwQueue.add({ kind: "report", url: FN + "?action=report", body: reportBody, label: "Fault report" })
+          .then(function () { showQueued("Your fault report"); return { queued: true }; });
+      };
+      if (!window.bwQueue) return fetch(FN + "?action=report", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reportBody) }).then(function (r) { return r.json(); });
+      if (!bwQueue.mayAutoSend()) return queueIt();
+      var ref = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "r-" + Date.now();
+      return fetch(FN + "?action=report", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify(Object.assign({ client_ref: ref, done_at: new Date().toISOString() }, reportBody)) })
+        .then(function (r) { return r.json(); }, function () { return queueIt(); });
+    }).then(function (out) {
+      if (out.queued) return;
       if (out.error) { alert(out.error); btn.disabled = false; btn.textContent = "Submit report"; return; }
       document.getElementById("doneTitle").textContent = "Report recorded";
       document.getElementById("doneBox").innerHTML =
@@ -1291,10 +1353,10 @@
         // this time).
         var vehicleResults = results.filter(function (x) { return x.target !== "trailer"; });
         var trailerResults = results.filter(function (x) { return x.target === "trailer"; });
-        fetch(FN, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+        // photoFiles are real Files: kept for the photo uploads, never sent
+        // in the check itself.
+        var strip = function (list) { return list.map(function (x) { var y = Object.assign({}, x); delete y.photoFiles; return y; }); };
+        var checkBody = {
             person_id: personId,
             // room_id is still sent for a room so nothing about the
             // existing Guest Rooms path changes; target_id/target_type
@@ -1304,12 +1366,34 @@
             odometer: pendingOdometer,
             hours: pendingHours,
             tour_code: pendingTourCode,
-            template_id: data.template_id, results: vehicleResults,
-            trailer_results: trailerResults,
+            template_id: data.template_id, results: strip(vehicleResults),
+            trailer_results: strip(trailerResults),
             location_id: camp ? camp.id : null,
             signed_in_id: signedInAs ? signedInAs.id : null,
-          }),
-        }).then(function (resp) { return resp.json(); }).then(function (out) {
+        };
+        var label = (data.target_label || data.room_label || "This check");
+        // Not on WiFi, or the send failed for want of signal: the check and
+        // its photos go into the queue on the phone (maintenance D-150).
+        var queueIt = function () {
+          var photos = [];
+          var jobs = [];
+          flagged.forEach(function (x) {
+            (x.photoFiles || []).forEach(function (f) {
+              jobs.push(compressImage(f).then(function (d) { photos.push({ item_id: x.item_id, data_url: d }); }));
+            });
+          });
+          return Promise.all(jobs).then(function () {
+            return bwQueue.add({ kind: "check", url: FN, body: checkBody, photos: photos, label: label });
+          }).then(function () { showQueued("The check for " + label); });
+        };
+        if (window.bwQueue && !bwQueue.mayAutoSend()) { queueIt(); return; }
+        var ref = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "c-" + Date.now();
+        var sentOk = false;
+        fetch(FN, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(Object.assign({ client_ref: ref, done_at: new Date().toISOString() }, checkBody)),
+        }).then(function (resp) { sentOk = true; return resp.json(); }).then(function (out) {
           // The issue this item's photo belongs to doesn't exist until
           // the line above returns — issue_ids maps item_id -> the real
           // issue, created moments ago, specifically so this can happen.
@@ -1390,6 +1474,8 @@
               .then(function () { if (--remaining === 0) finish(); });
           });
         }).catch(function (e) {
+          // No answer at all: no signal after all. Into the queue, nothing lost.
+          if (!sentOk && window.bwQueue) { queueIt(); return; }
           btn.disabled = false;
           btn.textContent = "Confirm — submit inspection";
           alert("Couldn't submit — a fault in the page, not your phone. Nothing was lost; try again. (" + e.message + ")");
