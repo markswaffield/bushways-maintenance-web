@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Weekly Vehicle Report</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap">
+<!--
+  One stored weekly lodge vehicle report (maintenance D-151), opened from the
+  Monday email's button. Reads the telematics function's `lodge_report`, which
+  is for management only (any manager or administrator); the group sign-in
+  (bw_signin) is needed, and the sign-in page brings the person back here.
+-->
+<style>
+  :root {
+    --bg:#f6f4ee; --panel:#ffffff; --line:#e2ddd0; --ink:#262420; --muted:#6b665a;
+    --accent:#2f4d3a; --accent-soft:#e4ebe2;
+    --warn-bg:#fbeadf; --warn-line:#e3a86b; --warn-ink:#7a4312;
+    --quiet-bg:#efede6;
+    --serif:"Fraunces", Georgia, serif; --sans:"Inter", -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#1b1a17; --panel:#242320; --line:#38362f; --ink:#ece8df; --muted:#a39d8d;
+    --accent:#8fb99c; --accent-soft:#2a332c; --warn-bg:#3a2c1c; --warn-line:#c98a42; --warn-ink:#f0c795; --quiet-bg:#2b2a26;
+    color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg:#1b1a17; --panel:#242320; --line:#38362f; --ink:#ece8df; --muted:#a39d8d;
+    --accent:#8fb99c; --accent-soft:#2a332c; --warn-bg:#3a2c1c; --warn-line:#c98a42; --warn-ink:#f0c795; --quiet-bg:#2b2a26;
+    color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; padding:clamp(20px,5vw,56px) 16px 64px; }
+  .page { max-width:920px; margin:0 auto; display:flex; flex-direction:column; gap:22px; }
+  .masthead { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 24px; border-bottom:2px solid var(--ink); padding-bottom:14px; }
+  .kicker { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  h1 { font-family:var(--serif); font-weight:600; font-size:clamp(28px,4.5vw,38px); margin:2px 0 0; text-wrap:balance; }
+  .stamp { font-size:12px; color:var(--muted); text-align:right; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px 22px; }
+  .verdict { border-left:4px solid var(--accent); }
+  .verdict h2 { font-family:var(--serif); font-size:21px; margin:0 0 8px; }
+  .verdict ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; }
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px 20px; margin:0; }
+  .fact dt { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+  .fact dd { margin:0; font-weight:600; }
+  .fact dd small { display:block; font-weight:400; color:var(--muted); font-size:13px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:16px; }
+  .stat .n { font-family:var(--serif); font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--accent); }
+  .stat .l { font-size:11.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+  .stat .s { font-size:12px; color:var(--muted); }
+  .section-title { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:4px 2px 12px; }
+  .section-title h2 { font-family:var(--serif); font-weight:600; font-size:20px; margin:0; }
+  .note { font-size:12.5px; color:var(--muted); }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:600; padding:0 10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td { padding:10px; border-bottom:1px solid var(--line); font-size:14px; vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  td.nowrap { white-space:nowrap; }
+  td.places { color:var(--muted); font-size:13px; }
+  tr.park td.num.max { color:var(--accent); font-weight:600; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .pill.check { background:var(--warn-bg); color:var(--warn-ink); border:1px solid var(--warn-line); }
+  .pill.ok { background:var(--accent-soft); color:var(--accent); }
+  .pill.quiet { background:var(--quiet-bg); color:var(--muted); }
+  .questions { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px; padding:18px 22px; color:var(--warn-ink); }
+  .questions h2 { font-family:var(--serif); font-size:18px; margin:0 0 8px; }
+  .questions ol { margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; }
+  .sources { font-size:12.5px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:4px; }
+  .sources b { color:var(--ink); }
+
+  td.none { color:var(--muted); font-style:italic; }
+  /* Pinned, so the way back is always in reach on a long report (Mark, 2026-10-15). */
+  .topbar { display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center;
+    position:sticky; top:0; z-index:10; background:var(--bg); padding:10px 0; margin:-10px 0 0;
+    border-bottom:1px solid var(--line); }
+  .topbar button { font:inherit; font-size:13.5px; font-weight:600; padding:9px 14px; border-radius:8px; cursor:pointer;
+    border:1.5px solid var(--line); background:var(--panel); color:var(--ink); }
+  .topbar button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .reason { font-size:13px; color:var(--muted); }
+  .loading { color:var(--muted); }
+  #app { display:flex; flex-direction:column; gap:22px; }
+  @media print { .topbar { display:none; } }
+
+  .vtab td.reg { font-weight:600; white-space:nowrap; }
+  .drv { white-space:nowrap; }
+  .drv small { display:block; color:var(--muted); font-size:12px; }
+  .dna { color:var(--warn-ink); font-weight:600; }
+  details.more summary { cursor:pointer; font-weight:600; font-size:14px; padding:4px 0; }
+</style></head><body>
+<div class="page">
+  <div class="topbar">
+    <button type="button" id="backBtn">← Menu</button>
+    <button type="button" id="printBtn">Print or save as PDF</button>
+  </div>
+  <div id="app"><p class="loading">Loading the report…</p></div>
+</div>
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/telematics";
+var me = null;
+try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
+var id = new URLSearchParams(location.search).get("id");
+if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
+document.getElementById("backBtn").onclick = function () { location.href = "./"; };
+document.getElementById("printBtn").onclick = function () { window.print(); };
+function e(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+function secs(n) { if (n < 90) return n + " s"; var m = n / 60, w = Math.floor(m), f = m - w; return f >= 0.75 ? (w + 1) + " minutes" : w + (f >= 0.25 ? "½" : "") + " minutes"; }
+function nice(d) { var x = new Date(d + "T00:00:00Z"); return x.getUTCDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][x.getUTCMonth()] + " " + x.getUTCFullYear(); }
+function driver(x) { return '<td class="drv' + (x.driver === "DNA" ? ' dna' : '') + '">' + e(x.driver) + (x.how && x.driver !== "DNA" ? '<small>' + e(x.how) + '</small>' : '') + '</td>'; }
+function table(head, rows, empty, cols) {
+  return '<section class="card"><div class="table-wrap"><table><thead><tr>' + head + '</tr></thead><tbody>'
+    + (rows || '<tr><td colspan="' + cols + '" class="none">' + empty + '</td></tr>') + '</tbody></table></div></section>';
+}
+
+function render(r) {
+  var d = r.data;
+  document.title = d.lodge + " · Weekly Vehicle Report";
+  var vs = d.vehicles.filter(function (v) { return !v.no_tracker && !v.tracker_error; });
+  var sp = [], hs = [], ro = [];
+  vs.forEach(function (v) {
+    v.speeding.forEach(function (x) { sp.push(Object.assign({ reg: v.registration }, x)); });
+    v.harsh.forEach(function (x) { hs.push(Object.assign({ reg: v.registration }, x)); });
+    (v.reported_only || []).forEach(function (x) { ro.push(Object.assign({ reg: v.registration }, x)); });
+  });
+  sp.sort(function (a, b) { return a.at < b.at ? -1 : 1; }); hs.sort(function (a, b) { return a.at < b.at ? -1 : 1; });
+  var dna = (d.by_driver.DNA ? d.by_driver.DNA.speeding + d.by_driver.DNA.harsh : 0);
+  var worst = sp.reduce(function (a, s) { return !a || s.max - s.limit > a.max - a.limit ? s : a; }, null);
+  var km = vs.reduce(function (n, v) { return n + (v.km || 0); }, 0);
+  var bullets = [sp.length + " stretch" + (sp.length === 1 ? "" : "es") + " of confirmed speeding and " + hs.length + " harsh driving event" + (hs.length === 1 ? "" : "s") + " across " + vs.length + " vehicles, " + km.toLocaleString() + " km."];
+  if (worst) bullets.push("Worst speeding: " + worst.max + " km/h in " + worst.zone + " (limit " + worst.limit + "), " + worst.reg + ", " + worst.when + ", driver " + worst.driver + ".");
+  if (dna) bullets.push(dna + " alert" + (dna === 1 ? "" : "s") + " with no driver on the Day Sheet (DNA).");
+  if (!d.harsh_complete) bullets.push("Harsh driving for this week is not complete: Telematics Guru's events were still being read when this was built.");
+  var missing = d.vehicles.filter(function (v) { return v.no_tracker || v.tracker_error; });
+  if (missing.length) bullets.push("Not covered: " + missing.map(function (v) { return v.registration + (v.no_tracker ? " (no tracker)" : " (tracker data unavailable)"); }).join(", ") + ".");
+  var drv = Object.keys(d.by_driver).sort(function (a, b) { var x = d.by_driver[a], y = d.by_driver[b]; return (y.speeding + y.harsh) - (x.speeding + x.harsh); })
+    .map(function (n) { var c = d.by_driver[n]; return '<tr><td class="' + (n === "DNA" ? "dna" : "") + '">' + e(n) + '</td><td class="num">' + c.speeding + '</td><td class="num">' + c.harsh + '</td></tr>'; }).join("");
+  var vrows = d.vehicles.map(function (v) {
+    if (v.no_tracker || v.tracker_error) return '<tr><td class="reg">' + e(v.registration) + '</td><td colspan="5" class="none">' + (v.no_tracker ? "No tracker" : "Tracker data unavailable this week") + '</td></tr>';
+    return '<tr><td class="reg">' + e(v.registration) + '</td><td class="num">' + (v.km || 0).toLocaleString() + ' km</td><td class="num">' + v.hours + ' h</td><td class="num">' + (v.top ? v.top.v + " km/h" : "—") + '</td><td class="num">' + v.speeding.length + '</td><td class="num">' + v.harsh.length + '</td></tr>';
+  }).join("");
+  var spRows = sp.map(function (s) { return '<tr><td class="reg">' + e(s.reg) + '</td><td class="nowrap">' + e(s.when) + '</td><td>' + e(s.zone) + '</td><td class="num"><b>' + s.max + ' km/h</b></td><td class="num">' + s.limit + ' km/h</td><td class="num">' + secs(s.secs) + '</td>' + driver(s) + '</tr>'; }).join("");
+  var hsRows = hs.map(function (h) { return '<tr><td class="reg">' + e(h.reg) + '</td><td class="nowrap">' + e(h.when) + '</td><td>' + e(h.what) + '</td><td class="num">' + (h.speed == null ? "—" : h.speed + " km/h") + '</td><td>' + e(h.place || "") + '</td>' + driver(h) + '</tr>'; }).join("");
+  var roRows = ro.map(function (s) { return '<tr><td class="reg">' + e(s.reg) + '</td><td class="nowrap">' + e(s.when) + '</td><td>' + e(s.zone) + '</td><td class="num">' + s.max + ' km/h</td><td class="num">' + (s.ground == null ? "—" : s.ground + " km/h") + '</td><td class="num">' + s.limit + ' km/h</td></tr>'; }).join("");
+  document.getElementById("app").innerHTML =
+    '<header class="masthead"><div><div class="kicker">Weekly Vehicle Report</div><h1>' + e(d.lodge) + '</h1></div>'
+    + '<div class="stamp">' + e(nice(d.week_start)) + ' – ' + e(nice(d.week_end)) + '<br>' + d.vehicles.length + ' vehicles</div></header>'
+    + '<section class="card verdict"><h2>' + (sp.length || hs.length ? sp.length + " speeding, " + hs.length + " harsh" : "No confirmed speeding or harsh driving") + '</h2><ul>'
+    + bullets.map(function (t) { return "<li>" + e(t) + "</li>"; }).join("") + '</ul></section>'
+    + '<div><div class="section-title"><h2>By driver</h2><span class="note">From the Day Sheet: a transfer near the time, else that day\'s game-drive guide; DNA when the Day Sheet shows no one</span></div>'
+    + table('<th>Driver</th><th class="num">Speeding</th><th class="num">Harsh</th>', drv, "No alerts this week.", 3) + '</div>'
+    + '<div><div class="section-title"><h2>Vehicles</h2></div>'
+    + table('<th>Vehicle</th><th class="num">Distance</th><th class="num">Driving</th><th class="num">Top speed</th><th class="num">Speeding</th><th class="num">Harsh</th>', vrows, "", 6) + '</div>'
+    + '<div><div class="section-title"><h2>Confirmed speeding</h2><span class="note">Over the lower of its zone limit and 80 km/h, the tracker speed and the ground covered agreeing</span></div>'
+    + table('<th>Vehicle</th><th>Peak at</th><th>Zone</th><th class="num">Speed</th><th class="num">Limit</th><th class="num">Time over</th><th>Driver</th>', spRows, "No confirmed speeding.", 7) + '</div>'
+    + '<div><div class="section-title"><h2>Harsh driving</h2><span class="note">Telematics Guru\'s harsh braking, acceleration and cornering</span></div>'
+    + table('<th>Vehicle</th><th>When</th><th>What</th><th class="num">Speed</th><th>Where</th><th>Driver</th>', hsRows, d.harsh_complete ? "No harsh driving." : "None read yet for this week.", 6) + '</div>'
+    + '<details class="more"><summary>Reported only, not confirmed (' + ro.length + ')</summary>'
+    + table('<th>Vehicle</th><th>Peak at</th><th>Zone</th><th class="num">Tracker</th><th class="num">Ground covered</th><th class="num">Limit</th>', roRows, "None.", 6) + '</details>'
+    + '<footer class="sources"><div><b>Driving and speeding</b>: Telematics Guru GPS readings, Bush Ways zone limits and the 80 km/h vehicle limit.</div>'
+    + '<div><b>Harsh driving</b>: Telematics Guru\'s own events.</div><div><b>Drivers</b>: the Day Sheet. DNA: driver not assigned.</div></footer>';
+}
+if (me) {
+  fetch(FN + "?action=lodge_report&id=" + encodeURIComponent(id || "") + "&person_id=" + encodeURIComponent(me.id))
+    .then(function (r) { return r.json(); })
+    .then(function (x) { if (x.error) { document.getElementById("app").innerHTML = '<p class="loading">' + e(x.error) + '</p>'; return; } render(x); })
+    .catch(function () { document.getElementById("app").innerHTML = '<p class="loading">Could not load the report. Check the connection and try again.</p>'; });
+}
+</script>
+</body></html>
