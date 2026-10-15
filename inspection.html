@@ -122,6 +122,9 @@
   .timer{font-size:28px;font-weight:700;margin:10px 0;text-align:center}
   audio{width:100%;margin-top:10px}
   [hidden]{display:none!important}
+  /* The Save checklists list (maintenance D-150). */
+  .pickrow{display:flex;align-items:center;gap:8px;font-weight:400;margin:6px 0}
+  .pickrow input{width:auto;margin:0}
 </style></head><body>
 
 <!-- The sign-in bar and the BW menu — moved out of #start and shown here,
@@ -162,7 +165,8 @@
        checklists are saved only when the person confirms WiFi (maintenance
        D-150, Mark: "option A"). Android saves them by itself on WiFi. -->
   <div id="offlineSave" hidden style="margin-top:14px;padding:10px 12px;border:1px dashed #C9C2B0;border-radius:8px">
-    <button type="button" class="secondary" id="offlineSaveBtn">📥 Save checklists for this phone — I'm on WiFi</button>
+    <button type="button" class="secondary" id="offlineSaveBtn">📥 Save checklists for this phone</button>
+    <div id="offlinePick" hidden style="margin:8px 0 0"></div>
     <p class="note" id="offlineSaveMsg" style="margin:6px 0 0"></p>
   </div>
 </div>
@@ -379,22 +383,43 @@
   // (maintenance D-150). On WiFi only, one at a time, at most every 12 hours.
   var lastBoot = null, savingOffline = false;
   function offlineKey() { return "bw_offline_saved_" + (camp ? camp.id : "default") + "_" + myPersonId; }
+  function groupsKey() { return "bw_offline_groups_" + (camp ? camp.id : "default"); }
+
+  // What can be saved, as groups the person can tick (Mark, 2026-10-15:
+  // "i would like the option to Select All"): Guest Rooms, Vehicles, each
+  // other area, and the daily rounds.
+  function offlineGroups(data) {
+    var g = [];
+    var rooms = (data.rooms || []).filter(function (x) { return !x.area_id; });
+    if (rooms.length) g.push({ key: "rooms", name: "Guest Rooms", count: rooms.length });
+    if ((data.vehicles || []).length) g.push({ key: "vehicles", name: "Vehicles", count: data.vehicles.length });
+    (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; })
+      .forEach(function (a) { g.push({ key: "area:" + a.id, name: a.name, area: a }); });
+    g.push({ key: "rounds", name: "Daily rounds" });
+    return g;
+  }
+  function chosenGroups() {
+    try { var x = JSON.parse(localStorage.getItem(groupsKey()) || "null"); if (Array.isArray(x)) return x; } catch (e) {}
+    return null; // never chosen: everything
+  }
+
   // force: the person confirmed WiFi (the button, or Send now): saved now,
   // whatever the phone says and however recently it was last done.
-  function saveForOffline(data, force, progress) {
+  // groups: the keys to save; null means everything (Android, by itself).
+  function saveForOffline(data, force, progress, groups) {
     if (!window.bwQueue || !myPersonId || !data || savingOffline) return Promise.resolve(false);
     if (!force && !bwQueue.mayAutoSend()) return Promise.resolve(false);
     var key = offlineKey();
     if (!force) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < 12 * 3600e3) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
+    var want = function (k) { return !groups || groups.indexOf(k) !== -1; };
     savingOffline = true;
     var urls = [];
-    (data.rooms || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=room" + campParam()); });
-    (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=vehicle" + campParam()); });
-    var areas = (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; });
+    if (want("rooms")) (data.rooms || []).filter(function (x) { return !x.area_id; }).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=room" + campParam()); });
+    if (want("vehicles")) (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=vehicle" + campParam()); });
     var chain = Promise.resolve();
-    // The lodge's daily rounds too (consolidated.html asks for exactly this
+    // The lodge's daily rounds (consolidated.html asks for exactly this
     // address), found on the same lists the Schedule page reads.
-    chain = chain.then(function () {
+    if (want("rounds")) chain = chain.then(function () {
       return Promise.all([bwApi.get(FN + "?action=dashboard" + campParam()), bwApi.get(FN + "?action=schedules_list" + campParam())])
         .then(function (lists) {
           var ids = {};
@@ -407,11 +432,11 @@
           Object.keys(ids).forEach(function (id) { urls.push(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(id) + campParam()); });
         }).catch(function () {});
     });
-    areas.forEach(function (a) {
+    offlineGroups(data).filter(function (g) { return g.area && want(g.key); }).forEach(function (g) {
       chain = chain.then(function () {
-        return bwApi.get(FN + "?action=area_targets&area=" + a.id + campParam()).then(function (t) {
+        return bwApi.get(FN + "?action=area_targets&area=" + g.area.id + campParam()).then(function (t) {
           var list = t.targets || [];
-          if (!list.length) urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + a.id + "&target_type=area" + campParam());
+          if (!list.length) urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + g.area.id + "&target_type=area" + campParam());
           list.forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=" + (x.type || "asset") + campParam()); });
         }).catch(function () {});
       });
@@ -438,15 +463,18 @@
     box.hidden = false;
     var msg = document.getElementById("offlineSaveMsg"), last = 0;
     try { last = Number(localStorage.getItem(offlineKey()) || 0); } catch (e) {}
+    var chosen = chosenGroups(), all = lastBoot ? offlineGroups(lastBoot) : [];
+    var which = chosen && all.length && chosen.length < all.length
+      ? " (" + all.filter(function (g) { return chosen.indexOf(g.key) !== -1; }).map(function (g) { return g.name; }).join(", ") + ")" : "";
     msg.textContent = last
-      ? "Saved on this phone " + new Date(last).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ". Save again on WiFi to pick up changes."
+      ? "Saved on this phone " + new Date(last).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + which + ". Save again on WiFi to pick up changes."
       : "Not saved yet. Tap this on WiFi so checks work with no signal.";
   }
   function saveNowConfirmed() {
     var btn = document.getElementById("offlineSaveBtn"), msg = document.getElementById("offlineSaveMsg");
     if (!lastBoot) return;
     if (btn) btn.disabled = true;
-    saveForOffline(lastBoot, true, function (i, n) { if (msg) msg.textContent = "Saving… " + i + " of " + n; })
+    saveForOffline(lastBoot, true, function (i, n) { if (msg) msg.textContent = "Saving… " + i + " of " + n; }, chosenGroups())
       .then(function (ok) {
         if (btn) btn.disabled = false;
         if (ok === false) return;
@@ -454,11 +482,38 @@
         if (msg && !ok) msg.textContent = "Couldn't save — check the WiFi and try again.";
       });
   }
+  // Tapping the button opens the list to choose from, with Select all.
   document.getElementById("offlineSaveBtn").onclick = function () {
-    if (!confirm("This downloads the checklists for this lodge. Only do it on WiFi, never on mobile data. Are you on WiFi now?")) return;
-    saveNowConfirmed();
+    var pick = document.getElementById("offlinePick");
+    if (!lastBoot) return;
+    if (!pick.hidden) { pick.hidden = true; return; }
+    var groups = offlineGroups(lastBoot), chosen = chosenGroups();
+    var on = function (k) { return !chosen || chosen.indexOf(k) !== -1; };
+    pick.innerHTML = '<label class="pickrow"><input type="checkbox" id="pickAll"> <b>Select all</b></label>'
+      + groups.map(function (g) {
+          return '<label class="pickrow"><input type="checkbox" data-pick="' + esc(g.key) + '"' + (on(g.key) ? " checked" : "") + '> '
+            + esc(g.name) + (g.count ? ' <span class="note" style="display:inline;margin:0">(' + g.count + ')</span>' : '') + '</label>';
+        }).join("")
+      + '<button type="button" id="pickSave">Save selected — I\'m on WiFi</button>'
+      + '<button type="button" class="secondary" id="pickCancel">Cancel</button>';
+    pick.hidden = false;
+    var boxes = [].slice.call(pick.querySelectorAll("[data-pick]")), all = document.getElementById("pickAll");
+    var sync = function () { var n = boxes.filter(function (x) { return x.checked; }).length; all.checked = n === boxes.length; all.indeterminate = n > 0 && n < boxes.length; };
+    sync();
+    all.onchange = function () { boxes.forEach(function (x) { x.checked = all.checked; }); sync(); };
+    boxes.forEach(function (x) { x.onchange = sync; });
+    document.getElementById("pickCancel").onclick = function () { pick.hidden = true; };
+    document.getElementById("pickSave").onclick = function () {
+      var keys = boxes.filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute("data-pick"); });
+      if (!keys.length) { alert("Tick at least one, or Select all."); return; }
+      if (!confirm("This downloads the ticked checklists for this lodge. Only do it on WiFi, never on mobile data. Are you on WiFi now?")) return;
+      try { localStorage.setItem(groupsKey(), JSON.stringify(keys)); } catch (e) {}
+      pick.hidden = true;
+      saveNowConfirmed();
+    };
   };
-  // Tapping Send now — I'm on WiFi also refreshes the saved checklists.
+  // Tapping Send now — I'm on WiFi also refreshes the saved checklists, the
+  // same ones as last chosen.
   document.addEventListener("bwqueue:wifi-confirmed", saveNowConfirmed);
 
   // The screen after a check or report is saved on the phone instead of sent.
