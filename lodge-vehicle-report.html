@@ -111,30 +111,33 @@ function table(head, rows, empty, cols) {
 }
 
 function render(r) {
+  // Harsh driving hidden while its parameters are reviewed (Mark, 2026-10-15).
+  var harshOn = r.show_harsh === true;
   var d = r.data;
   document.title = d.lodge + " · Weekly Vehicle Report";
   var vs = d.vehicles.filter(function (v) { return !v.no_tracker && !v.tracker_error; });
   var sp = [], hs = [], ro = [];
   vs.forEach(function (v) {
     v.speeding.forEach(function (x) { sp.push(Object.assign({ reg: v.registration }, x)); });
-    v.harsh.forEach(function (x) { hs.push(Object.assign({ reg: v.registration }, x)); });
+    if (harshOn) v.harsh.forEach(function (x) { hs.push(Object.assign({ reg: v.registration }, x)); });
     (v.reported_only || []).forEach(function (x) { ro.push(Object.assign({ reg: v.registration }, x)); });
   });
   sp.sort(function (a, b) { return a.at < b.at ? -1 : 1; }); hs.sort(function (a, b) { return a.at < b.at ? -1 : 1; });
-  var dna = (d.by_driver.DNA ? d.by_driver.DNA.speeding + d.by_driver.DNA.harsh : 0);
+  var dna = (d.by_driver.DNA ? d.by_driver.DNA.speeding + (harshOn ? d.by_driver.DNA.harsh : 0) : 0);
   var worst = sp.reduce(function (a, s) { return !a || s.max - s.limit > a.max - a.limit ? s : a; }, null);
   var km = vs.reduce(function (n, v) { return n + (v.km || 0); }, 0);
-  var bullets = [sp.length + " stretch" + (sp.length === 1 ? "" : "es") + " of confirmed speeding and " + hs.length + " harsh driving event" + (hs.length === 1 ? "" : "s") + " across " + vs.length + " vehicles, " + km.toLocaleString() + " km."];
+  var bullets = [sp.length + " stretch" + (sp.length === 1 ? "" : "es") + " of confirmed speeding" + (harshOn ? " and " + hs.length + " harsh driving event" + (hs.length === 1 ? "" : "s") : "") + " across " + vs.length + " vehicles, " + km.toLocaleString() + " km."];
   if (worst) bullets.push("Worst speeding: " + worst.max + " km/h in " + worst.zone + " (limit " + worst.limit + "), " + worst.reg + ", " + worst.when + ", driver " + worst.driver + ".");
   if (dna) bullets.push(dna + " alert" + (dna === 1 ? "" : "s") + " with no driver on the Day Sheet (DNA).");
-  if (!d.harsh_complete) bullets.push("Harsh driving for this week is not complete: Telematics Guru's events were still being read when this was built.");
+  if (harshOn && !d.harsh_complete) bullets.push("Harsh driving for this week is not complete: Telematics Guru's events were still being read when this was built.");
   var missing = d.vehicles.filter(function (v) { return v.no_tracker || v.tracker_error; });
   if (missing.length) bullets.push("Not covered: " + missing.map(function (v) { return v.registration + (v.no_tracker ? " (no tracker)" : " (tracker data unavailable)"); }).join(", ") + ".");
-  var drv = Object.keys(d.by_driver).sort(function (a, b) { var x = d.by_driver[a], y = d.by_driver[b]; return (y.speeding + y.harsh) - (x.speeding + x.harsh); })
-    .map(function (n) { var c = d.by_driver[n]; return '<tr><td class="' + (n === "DNA" ? "dna" : "") + '">' + e(n) + '</td><td class="num">' + c.speeding + '</td><td class="num">' + c.harsh + '</td></tr>'; }).join("");
+  var drv = Object.keys(d.by_driver).filter(function (n) { return harshOn || d.by_driver[n].speeding; })
+    .sort(function (a, b) { var x = d.by_driver[a], y = d.by_driver[b]; return (y.speeding + (harshOn ? y.harsh : 0)) - (x.speeding + (harshOn ? x.harsh : 0)); })
+    .map(function (n) { var c = d.by_driver[n]; return '<tr><td class="' + (n === "DNA" ? "dna" : "") + '">' + e(n) + '</td><td class="num">' + c.speeding + '</td>' + (harshOn ? '<td class="num">' + c.harsh + '</td>' : '') + '</tr>'; }).join("");
   var vrows = d.vehicles.map(function (v) {
-    if (v.no_tracker || v.tracker_error) return '<tr><td class="reg">' + e(v.registration) + '</td><td colspan="5" class="none">' + (v.no_tracker ? "No tracker" : "Tracker data unavailable this week") + '</td></tr>';
-    return '<tr><td class="reg">' + e(v.registration) + '</td><td class="num">' + (v.km || 0).toLocaleString() + ' km</td><td class="num">' + v.hours + ' h</td><td class="num">' + (v.top ? v.top.v + " km/h" : "—") + '</td><td class="num">' + v.speeding.length + '</td><td class="num">' + v.harsh.length + '</td></tr>';
+    if (v.no_tracker || v.tracker_error) return '<tr><td class="reg">' + e(v.registration) + '</td><td colspan="' + (harshOn ? 5 : 4) + '" class="none">' + (v.no_tracker ? "No tracker" : "Tracker data unavailable this week") + '</td></tr>';
+    return '<tr><td class="reg">' + e(v.registration) + '</td><td class="num">' + (v.km || 0).toLocaleString() + ' km</td><td class="num">' + v.hours + ' h</td><td class="num">' + (v.top ? v.top.v + " km/h" : "—") + '</td><td class="num">' + v.speeding.length + '</td>' + (harshOn ? '<td class="num">' + v.harsh.length + '</td>' : '') + '</tr>';
   }).join("");
   var spRows = sp.map(function (s) { return '<tr><td class="reg">' + e(s.reg) + '</td><td class="nowrap">' + e(s.when) + '</td><td>' + e(s.zone) + '</td><td class="num"><b>' + s.max + ' km/h</b></td><td class="num">' + s.limit + ' km/h</td><td class="num">' + secs(s.secs) + '</td>' + driver(s) + '</tr>'; }).join("");
   var hsRows = hs.map(function (h) { return '<tr><td class="reg">' + e(h.reg) + '</td><td class="nowrap">' + e(h.when) + '</td><td>' + e(h.what) + '</td><td class="num">' + (h.speed == null ? "—" : h.speed + " km/h") + '</td><td>' + e(h.place || "") + '</td>' + driver(h) + '</tr>'; }).join("");
@@ -142,20 +145,20 @@ function render(r) {
   document.getElementById("app").innerHTML =
     '<header class="masthead"><div><div class="kicker">Weekly Vehicle Report</div><h1>' + e(d.lodge) + '</h1></div>'
     + '<div class="stamp">' + e(nice(d.week_start)) + ' – ' + e(nice(d.week_end)) + '<br>' + d.vehicles.length + ' vehicles</div></header>'
-    + '<section class="card verdict"><h2>' + (sp.length || hs.length ? sp.length + " speeding, " + hs.length + " harsh" : "No confirmed speeding or harsh driving") + '</h2><ul>'
+    + '<section class="card verdict"><h2>' + (harshOn ? (sp.length || hs.length ? sp.length + " speeding, " + hs.length + " harsh" : "No confirmed speeding or harsh driving") : (sp.length ? sp.length + " stretch" + (sp.length === 1 ? "" : "es") + " of confirmed speeding" : "No confirmed speeding")) + '</h2><ul>'
     + bullets.map(function (t) { return "<li>" + e(t) + "</li>"; }).join("") + '</ul></section>'
     + '<div><div class="section-title"><h2>By driver</h2><span class="note">From the Day Sheet: a transfer near the time, else that day\'s game-drive guide; DNA when the Day Sheet shows no one</span></div>'
-    + table('<th>Driver</th><th class="num">Speeding</th><th class="num">Harsh</th>', drv, "No alerts this week.", 3) + '</div>'
+    + table('<th>Driver</th><th class="num">Speeding</th>' + (harshOn ? '<th class="num">Harsh</th>' : ''), drv, "No alerts this week.", harshOn ? 3 : 2) + '</div>'
     + '<div><div class="section-title"><h2>Vehicles</h2></div>'
-    + table('<th>Vehicle</th><th class="num">Distance</th><th class="num">Driving</th><th class="num">Top speed</th><th class="num">Speeding</th><th class="num">Harsh</th>', vrows, "", 6) + '</div>'
+    + table('<th>Vehicle</th><th class="num">Distance</th><th class="num">Driving</th><th class="num">Top speed</th><th class="num">Speeding</th>' + (harshOn ? '<th class="num">Harsh</th>' : ''), vrows, "", harshOn ? 6 : 5) + '</div>'
     + '<div><div class="section-title"><h2>Confirmed speeding</h2><span class="note">Over the lower of its zone limit and 80 km/h, the tracker speed and the ground covered agreeing</span></div>'
     + table('<th>Vehicle</th><th>Peak at</th><th>Zone</th><th class="num">Speed</th><th class="num">Limit</th><th class="num">Time over</th><th>Driver</th>', spRows, "No confirmed speeding.", 7) + '</div>'
-    + '<div><div class="section-title"><h2>Harsh driving</h2><span class="note">Telematics Guru\'s harsh braking, acceleration and cornering</span></div>'
-    + table('<th>Vehicle</th><th>When</th><th>What</th><th class="num">Speed</th><th>Where</th><th>Driver</th>', hsRows, d.harsh_complete ? "No harsh driving." : "None read yet for this week.", 6) + '</div>'
+    + (harshOn ? '<div><div class="section-title"><h2>Harsh driving</h2><span class="note">Telematics Guru\'s harsh braking, acceleration and cornering</span></div>'
+    + table('<th>Vehicle</th><th>When</th><th>What</th><th class="num">Speed</th><th>Where</th><th>Driver</th>', hsRows, d.harsh_complete ? "No harsh driving." : "None read yet for this week.", 6) + '</div>' : '')
     + '<details class="more"><summary>Reported only, not confirmed (' + ro.length + ')</summary>'
     + table('<th>Vehicle</th><th>Peak at</th><th>Zone</th><th class="num">Tracker</th><th class="num">Ground covered</th><th class="num">Limit</th>', roRows, "None.", 6) + '</details>'
     + '<footer class="sources"><div><b>Driving and speeding</b>: Telematics Guru GPS readings, Bush Ways zone limits and the 80 km/h vehicle limit.</div>'
-    + '<div><b>Harsh driving</b>: Telematics Guru\'s own events.</div><div><b>Drivers</b>: the Day Sheet. DNA: driver not assigned.</div></footer>';
+    + (harshOn ? '<div><b>Harsh driving</b>: Telematics Guru\'s own events.</div>' : '') + '<div><b>Drivers</b>: the Day Sheet. DNA: driver not assigned.</div></footer>';
 }
 if (me) {
   fetch(FN + "?action=lodge_report&id=" + encodeURIComponent(id || "") + "&person_id=" + encodeURIComponent(me.id))
