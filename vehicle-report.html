@@ -133,6 +133,18 @@ function verdict(d) {
   if (d.top) b.push("Top speed inside a 50 km/h park zone " + (d.top_park || "—") + " km/h; top overall " + d.top.v + " km/h (" + d.top.when + (d.top.zone ? ", " + d.top.zone : "") + ").");
   var share = d.readings ? d.frozen / d.readings : 0;
   if (share > 0.02) b.push("Tracker fault: " + d.frozen.toLocaleString() + " readings (" + Math.round(share * 100) + "%) repeat a speed while the vehicle stands still. Worth having the unit checked.");
+  if (d.harsh) {
+    var kinds = {}; d.harsh.forEach(function (h) { kinds[h.what] = (kinds[h.what] || 0) + 1; });
+    b.push(d.harsh.length ? plural(d.harsh.length, "harsh driving event", "harsh driving events") + ": "
+      + Object.keys(kinds).map(function (k) { return kinds[k] + " " + k.replace("Harsh ", "").toLowerCase(); }).join(", ") + "."
+      : "No harsh braking, acceleration or cornering.");
+  }
+  if (d.alerts && d.alerts.length) {
+    var asp = d.alerts.filter(function (a) { return a.speeding; }).length;
+    b.push(plural(d.alerts.length, "Telematics Guru alert", "Telematics Guru alerts") + ": " + asp + " speeding, " + (d.alerts.length - asp) + " geofence entr" + (d.alerts.length - asp === 1 ? "y" : "ies") + ".");
+  }
+  if (d.events_complete === false) b.push("Harsh driving and alerts are still being read from Telematics Guru; this report updates by itself when they are in.");
+  (d.swap || []).forEach(function (t) { b.push(t + "."); });
   b.push(d.km.toLocaleString() + " km and " + d.hours + " hours of driving.");
   return { head: head, bullets: b };
 }
@@ -163,7 +175,15 @@ function render(x) {
   var days = (d.days || []).map(function (y) {
     return '<tr><td class="nowrap">' + e(y.day) + '</td><td class="num">' + y.km.toFixed(1) + ' km</td><td class="num">' + y.max + ' km/h</td><td class="places">' + e(y.places || "Stationary") + '</td></tr>';
   }).join("");
-  var swaps = (d.swap || []).map(function (t) { return "<li>" + e(t) + "</li>"; }).join("");
+  var swaps = "";
+  var harshRows = (d.harsh || []).map(function (h) {
+    return '<tr><td class="nowrap">' + e(h.when) + '</td><td>' + e(h.what) + '</td><td class="num">' + (h.speed == null ? "—" : h.speed + " km/h") + '</td><td>' + e(h.place || "") + '</td></tr>';
+  }).join("");
+  var alertRows = (d.alerts || []).map(function (a) {
+    return '<tr><td class="nowrap">' + e(a.when) + '</td><td>' + e(a.where || a.zone || "") + '</td><td class="num">' + (a.speed == null ? "—" : a.speed + " km/h") + '</td><td>'
+      + (a.speeding ? '<span class="pill check">Speeding</span>' : '<span class="pill quiet">Geofence entry</span>') + '</td></tr>';
+  }).join("");
+  var pending = d.events_complete === false ? "Still being read from Telematics Guru." : null;
   document.getElementById("app").innerHTML =
     '<header class="masthead"><div><div class="kicker">Safari Vehicle Report</div><h1>' + e(title) + '</h1></div>'
     + '<div class="stamp">' + e(nice(sf.start_date)) + ' – ' + e(nice(sf.end_date)) + '<br>' + e(r.registration) + '</div></header>'
@@ -183,7 +203,7 @@ function render(x) {
     + '<div class="stat"><div class="n">' + d.hours + ' h</div><div class="l">driving time</div></div>'
     + '<div class="stat"><div class="n">' + (d.top_park ? d.top_park + " km/h" : "—") + '</div><div class="l">top speed in parks</div></div>'
     + '<div class="stat"><div class="n">' + (d.top ? d.top.v + " km/h" : "—") + '</div><div class="l">top speed overall</div></div>'
-    + '<div class="stat"><div class="n">—</div><div class="l">harsh events</div><div class="s">not read yet</div></div>'
+    + '<div class="stat"><div class="n">' + (d.harsh ? d.harsh.length : "—") + '</div><div class="l">harsh events</div>' + (d.harsh ? "" : '<div class="s">not read yet</div>') + '</div>'
     + '<div class="stat"><div class="n">' + (d.speeding || []).length + '</div><div class="l">confirmed speeding</div></div>'
     + '</div></section>'
     + '<div><div class="section-title"><h2>Day by day</h2><span class="note">Distance, top speed and where it went</span></div>'
@@ -194,10 +214,14 @@ function render(x) {
     + table(SPEED_HEAD, speedRows(d.speeding || []), "No confirmed speeding.", 6) + '</div>'
     + '<div><div class="section-title"><h2>Reported only, not confirmed</h2><span class="note">The tracker said over the limit, but the distance between its positions does not back it up: a GPS glitch, or a burst too short for the positions to show. Check before acting.</span></div>'
     + table(SPEED_HEAD, speedRows(d.reported_only || []), "None.", 6) + '</div>'
+    + '<div><div class="section-title"><h2>Harsh driving</h2><span class="note">Telematics Guru\'s harsh braking, acceleration and cornering</span></div>'
+    + table('<th>When</th><th>What</th><th class="num">Speed</th><th>Where</th>', harshRows, pending || (d.harsh ? "None." : "Not read for this report."), 4) + '</div>'
+    + '<div><div class="section-title"><h2>Telematics Guru alerts</h2><span class="note">Each checked against the GPS reading at that second: over its zone\'s limit is speeding, otherwise a geofence entry</span></div>'
+    + table('<th>When</th><th>Where</th><th class="num">Speed then</th><th>Type</th>', alertRows, pending || (d.alerts ? "None." : "Not read for this report."), 4) + '</div>'
     + '<footer class="sources"><div><b>Safari, crew and guests</b>: the Tour Master.</div>'
     + '<div><b>Driving</b>: rebuilt from Telematics Guru\'s GPS readings for ' + e(r.registration) + ', ' + e(d.left.when) + ' to ' + e(d.back.when) + ', ' + d.segments + ' trips.</div>'
     + '<div><b>Speeding</b>: ' + d.readings.toLocaleString() + ' GPS readings placed in the Telematics Guru zones and checked against Bush Ways\' limits and the 80 km/h vehicle limit.</div>'
-    + '<div><b>Not yet in reports</b>: harsh braking, acceleration and cornering, and Telematics Guru\'s own alerts.</div></footer>';
+    + '<div><b>Harsh driving and alerts</b>: Telematics Guru\'s own events.</div></footer>';
 }
 
 if (me) {
