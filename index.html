@@ -206,6 +206,16 @@
   // of the Tour Master's own server, which is the only judge of it.
   var TM_FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-board";
   function route(me) {
+    // A page that sent someone here to sign in (a vehicle report opened from
+    // its email, safari-ops D-025) gets them back once they are signed in.
+    // Same site only.
+    try {
+      var after = sessionStorage.getItem("bw_after_signin");
+      if (after) {
+        sessionStorage.removeItem("bw_after_signin");
+        if (after.indexOf(location.origin + "/") === 0) { location.href = after; return; }
+      }
+    } catch (e) {}
     fetch(TM_FN + "?action=access&person_id=" + encodeURIComponent(me.id))
       .then(function (r) { return r.json(); })
       .then(function (a) { me.tour_master = a.level || null; })

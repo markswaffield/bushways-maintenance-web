@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Safari Vehicle Report</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap">
+<!--
+  One stored safari vehicle report (safari-ops D-025), opened from the Tour
+  Master's "Vehicle report" button or the report email. Reads the
+  safari-board function's `report` action, which needs Tour Master access
+  (view or edit), so the group's own sign-in (bw_signin) is required. The
+  layout is the one Mark approved on the BWS2625 test, 2026-10-14.
+-->
+<style>
+  :root {
+    --bg:#f6f4ee; --panel:#ffffff; --line:#e2ddd0; --ink:#262420; --muted:#6b665a;
+    --accent:#2f4d3a; --accent-soft:#e4ebe2;
+    --warn-bg:#fbeadf; --warn-line:#e3a86b; --warn-ink:#7a4312;
+    --quiet-bg:#efede6;
+    --serif:"Fraunces", Georgia, serif; --sans:"Inter", -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#1b1a17; --panel:#242320; --line:#38362f; --ink:#ece8df; --muted:#a39d8d;
+    --accent:#8fb99c; --accent-soft:#2a332c; --warn-bg:#3a2c1c; --warn-line:#c98a42; --warn-ink:#f0c795; --quiet-bg:#2b2a26;
+    color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg:#1b1a17; --panel:#242320; --line:#38362f; --ink:#ece8df; --muted:#a39d8d;
+    --accent:#8fb99c; --accent-soft:#2a332c; --warn-bg:#3a2c1c; --warn-line:#c98a42; --warn-ink:#f0c795; --quiet-bg:#2b2a26;
+    color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; padding:clamp(20px,5vw,56px) 16px 64px; }
+  .page { max-width:920px; margin:0 auto; display:flex; flex-direction:column; gap:22px; }
+  .masthead { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 24px; border-bottom:2px solid var(--ink); padding-bottom:14px; }
+  .kicker { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  h1 { font-family:var(--serif); font-weight:600; font-size:clamp(28px,4.5vw,38px); margin:2px 0 0; text-wrap:balance; }
+  .stamp { font-size:12px; color:var(--muted); text-align:right; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px 22px; }
+  .verdict { border-left:4px solid var(--accent); }
+  .verdict h2 { font-family:var(--serif); font-size:21px; margin:0 0 8px; }
+  .verdict ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; }
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px 20px; margin:0; }
+  .fact dt { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+  .fact dd { margin:0; font-weight:600; }
+  .fact dd small { display:block; font-weight:400; color:var(--muted); font-size:13px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:16px; }
+  .stat .n { font-family:var(--serif); font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--accent); }
+  .stat .l { font-size:11.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+  .stat .s { font-size:12px; color:var(--muted); }
+  .section-title { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:4px 2px 12px; }
+  .section-title h2 { font-family:var(--serif); font-weight:600; font-size:20px; margin:0; }
+  .note { font-size:12.5px; color:var(--muted); }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:600; padding:0 10px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td { padding:10px; border-bottom:1px solid var(--line); font-size:14px; vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  td.nowrap { white-space:nowrap; }
+  td.places { color:var(--muted); font-size:13px; }
+  tr.park td.num.max { color:var(--accent); font-weight:600; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .pill.check { background:var(--warn-bg); color:var(--warn-ink); border:1px solid var(--warn-line); }
+  .pill.ok { background:var(--accent-soft); color:var(--accent); }
+  .pill.quiet { background:var(--quiet-bg); color:var(--muted); }
+  .questions { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px; padding:18px 22px; color:var(--warn-ink); }
+  .questions h2 { font-family:var(--serif); font-size:18px; margin:0 0 8px; }
+  .questions ol { margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; }
+  .sources { font-size:12.5px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:4px; }
+  .sources b { color:var(--ink); }
+
+  td.none { color:var(--muted); font-style:italic; }
+  .topbar { display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center; }
+  .topbar button { font:inherit; font-size:13.5px; font-weight:600; padding:9px 14px; border-radius:8px; cursor:pointer;
+    border:1.5px solid var(--line); background:var(--panel); color:var(--ink); }
+  .topbar button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .reason { font-size:13px; color:var(--muted); }
+  .loading { color:var(--muted); }
+  #app { display:flex; flex-direction:column; gap:22px; }
+  @media print { .topbar { display:none; } }
+</style></head><body>
+<div class="page">
+  <div class="topbar">
+    <button type="button" id="backBtn">← Tour Master</button>
+    <button type="button" id="printBtn">Print or save as PDF</button>
+  </div>
+  <div id="app"><p class="loading">Loading the report…</p></div>
+</div>
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-board";
+var me = null;
+try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
+var id = new URLSearchParams(location.search).get("id");
+// Arriving from the email with no sign-in: sign in first, then come back here.
+if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
+document.getElementById("backBtn").onclick = function () { location.href = "./safari-board.html"; };
+document.getElementById("printBtn").onclick = function () { window.print(); };
+
+function e(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+  return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+function secs(n) {
+  if (n < 90) return n + " s";
+  var m = n / 60, w = Math.floor(m), f = m - w;
+  if (f >= 0.75) return (w + 1) + " minutes";
+  return w + (f >= 0.25 ? "½" : "") + " minutes";
+}
+function mins(n) { var m = Math.max(1, Math.round(n / 60)); return m + " minute" + (m === 1 ? "" : "s"); }
+function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+function nice(d) { if (!d) return ""; var x = new Date(d + "T00:00:00Z");
+  return x.getUTCDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][x.getUTCMonth()] + " " + x.getUTCFullYear(); }
+
+// The headline and bullets: the same wording as the approved test (build.py).
+function verdict(d) {
+  var sp = d.speeding || [], ro = d.reported_only || [];
+  var park = sp.filter(function (s) { return s.limit === 50; });
+  var worst = sp.reduce(function (a, s) { return !a || s.max - s.limit > a.max - a.limit ? s : a; }, null);
+  var head = !sp.length ? "No confirmed speeding"
+    : plural(sp.length, "stretch", "stretches") + " of confirmed speeding" + (park.length ? ", " + park.length + " in park zones" : "");
+  var b = [];
+  if (worst) {
+    b.push("Worst confirmed: " + worst.max + " km/h in " + worst.zone + " (limit " + worst.limit + "), " + worst.when + ", " + secs(worst.secs) + ".");
+    b.push("Every confirmed stretch was " + secs(Math.max.apply(null, sp.map(function (s) { return s.secs; }))) + " or less.");
+  }
+  var v80 = sp.filter(function (s) { return s.limit === 80; });
+  if (v80.length) {
+    var t = v80.reduce(function (a, s) { return s.max > a.max ? s : a; });
+    b.push("Over the 80 km/h vehicle limit: " + plural(v80.length, "stretch", "stretches") + ", about " + mins(v80.reduce(function (n, s) { return n + s.secs; }, 0))
+      + " in all, peak " + t.max + " km/h (" + t.when + ", " + secs(t.secs) + ").");
+  }
+  if (ro.length) b.push(ro.length + " more where the tracker reported over the limit but its positions do not back it up; listed separately.");
+  if (d.top) b.push("Top speed inside a 50 km/h park zone " + (d.top_park || "—") + " km/h; top overall " + d.top.v + " km/h (" + d.top.when + (d.top.zone ? ", " + d.top.zone : "") + ").");
+  var share = d.readings ? d.frozen / d.readings : 0;
+  if (share > 0.02) b.push("Tracker fault: " + d.frozen.toLocaleString() + " readings (" + Math.round(share * 100) + "%) repeat a speed while the vehicle stands still. Worth having the unit checked.");
+  b.push(d.km.toLocaleString() + " km and " + d.hours + " hours of driving.");
+  return { head: head, bullets: b };
+}
+
+function table(head, rows, empty, cols) {
+  return '<section class="card"><div class="table-wrap"><table><thead><tr>' + head + '</tr></thead><tbody>'
+    + (rows || '<tr><td colspan="' + cols + '" class="none">' + empty + '</td></tr>') + '</tbody></table></div></section>';
+}
+function speedRows(list) {
+  return list.map(function (s) {
+    return '<tr><td class="nowrap">' + e(s.when) + '</td><td>' + e(s.zone) + '</td><td class="num"><b>' + s.max + ' km/h</b></td>'
+      + '<td class="num">' + (s.ground == null ? "—" : s.ground + " km/h") + '</td><td class="num">' + s.limit + ' km/h</td><td class="num">' + secs(s.secs) + '</td></tr>';
+  }).join("");
+}
+var SPEED_HEAD = '<th>Peak at</th><th>Zone</th><th class="num">Tracker</th><th class="num">Ground covered</th><th class="num">Limit</th><th class="num">Time over</th>';
+
+function render(x) {
+  var r = x.report, d = r.data, sf = x.safari, v = verdict(d);
+  var title = (sf.code || sf.type || "Safari") + (sf.code && sf.type ? " — " + sf.type : "");
+  document.title = (sf.code || "Safari") + " · " + r.registration + " · Vehicle Report";
+  var role = r.role === "backup" ? "Back-up" : "Game drive";
+  var prev = null;
+  var runs = (d.starts || []).map(function (s) {
+    var row = '<tr><td class="nowrap">' + (s.day !== prev ? e(s.day) : "") + '</td><td class="num"><b>' + e(s.time) + '</b></td><td class="num">' + e(s.back)
+      + '</td><td class="num"><b>' + e(s.out) + '</b></td><td>' + e(s.from) + '</td><td>' + e(s.to) + '</td></tr>';
+    prev = s.day; return row;
+  }).join("");
+  var days = (d.days || []).map(function (y) {
+    return '<tr><td class="nowrap">' + e(y.day) + '</td><td class="num">' + y.km.toFixed(1) + ' km</td><td class="num">' + y.max + ' km/h</td><td class="places">' + e(y.places || "Stationary") + '</td></tr>';
+  }).join("");
+  var swaps = (d.swap || []).map(function (t) { return "<li>" + e(t) + "</li>"; }).join("");
+  document.getElementById("app").innerHTML =
+    '<header class="masthead"><div><div class="kicker">Safari Vehicle Report</div><h1>' + e(title) + '</h1></div>'
+    + '<div class="stamp">' + e(nice(sf.start_date)) + ' – ' + e(nice(sf.end_date)) + '<br>' + e(r.registration) + '</div></header>'
+    + '<p class="reason">Built ' + e(new Date(r.built_at).toLocaleString("en-GB", { timeZone: "Africa/Gaborone", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))
+    + ' · ' + e(r.reason) + '</p>'
+    + '<section class="card verdict"><h2>' + e(v.head) + '</h2><ul>' + v.bullets.map(function (t) { return "<li>" + e(t) + "</li>"; }).join("") + swaps + '</ul></section>'
+    + '<section class="card"><dl class="facts">'
+    + '<div class="fact"><dt>Driver</dt><dd>' + e(r.driver_name || "—") + '</dd></div>'
+    + '<div class="fact"><dt>Vehicle</dt><dd>' + e(r.registration) + '<small>' + e((x.vehicle.description || "").replace(/\s*-\s*(GD|BU)\s*$/i, "")) + ', ' + role.toLowerCase() + '</small></dd></div>'
+    + '<div class="fact"><dt>Crew</dt><dd>' + x.crew.map(e).join("<br>") + '</dd></div>'
+    + '<div class="fact"><dt>Guests</dt><dd>' + e(x.guests.join(", ") || "—") + '</dd></div>'
+    + '<div class="fact"><dt>Left Base</dt><dd>' + e(d.left.when) + '<small>to ' + e(d.left.to) + '</small></dd></div>'
+    + '<div class="fact"><dt>' + (d.back.found ? "Back at Base" : "Last reading") + '</dt><dd>' + e(d.back.when) + '<small>' + (d.back.from ? "from " + e(d.back.from) : "") + '</small></dd></div>'
+    + '</dl></section>'
+    + '<section class="card"><div class="stats">'
+    + '<div class="stat"><div class="n">' + d.km.toLocaleString() + ' km</div><div class="l">driven</div></div>'
+    + '<div class="stat"><div class="n">' + d.hours + ' h</div><div class="l">driving time</div></div>'
+    + '<div class="stat"><div class="n">' + (d.top_park ? d.top_park + " km/h" : "—") + '</div><div class="l">top speed in parks</div></div>'
+    + '<div class="stat"><div class="n">' + (d.top ? d.top.v + " km/h" : "—") + '</div><div class="l">top speed overall</div></div>'
+    + '<div class="stat"><div class="n">—</div><div class="l">harsh events</div><div class="s">not read yet</div></div>'
+    + '<div class="stat"><div class="n">' + (d.speeding || []).length + '</div><div class="l">confirmed speeding</div></div>'
+    + '</div></section>'
+    + '<div><div class="section-title"><h2>Day by day</h2><span class="note">Distance, top speed and where it went</span></div>'
+    + table('<th>Day</th><th class="num">Distance</th><th class="num">Top speed</th><th>Where</th>', days, "No driving.", 4) + '</div>'
+    + '<div><div class="section-title"><h2>Game drives and transfers</h2><span class="note">Each starts after an hour parked and ends at the next hour-long stop. Moves under 500 m count as parked.</span></div>'
+    + table('<th>Day</th><th class="num">Out</th><th class="num">Back</th><th class="num">Time out</th><th>From</th><th>To</th>', runs, "No drives.", 6) + '</div>'
+    + '<div><div class="section-title"><h2>Confirmed speeding</h2><span class="note">Over the lowest of its zone limits and the 80 km/h vehicle limit, with the tracker speed and the ground covered between readings agreeing</span></div>'
+    + table(SPEED_HEAD, speedRows(d.speeding || []), "No confirmed speeding.", 6) + '</div>'
+    + '<div><div class="section-title"><h2>Reported only, not confirmed</h2><span class="note">The tracker said over the limit, but the distance between its positions does not back it up: a GPS glitch, or a burst too short for the positions to show. Check before acting.</span></div>'
+    + table(SPEED_HEAD, speedRows(d.reported_only || []), "None.", 6) + '</div>'
+    + '<footer class="sources"><div><b>Safari, crew and guests</b>: the Tour Master.</div>'
+    + '<div><b>Driving</b>: rebuilt from Telematics Guru\'s GPS readings for ' + e(r.registration) + ', ' + e(d.left.when) + ' to ' + e(d.back.when) + ', ' + d.segments + ' trips.</div>'
+    + '<div><b>Speeding</b>: ' + d.readings.toLocaleString() + ' GPS readings placed in the Telematics Guru zones and checked against Bush Ways\' limits and the 80 km/h vehicle limit.</div>'
+    + '<div><b>Not yet in reports</b>: harsh braking, acceleration and cornering, and Telematics Guru\'s own alerts.</div></footer>';
+}
+
+if (me) {
+  fetch(FN + "?action=report&id=" + encodeURIComponent(id || "") + "&person_id=" + encodeURIComponent(me.id))
+    .then(function (r) { return r.json(); })
+    .then(function (x) {
+      if (x.error) { document.getElementById("app").innerHTML = '<p class="loading">' + e(x.error) + '</p>'; return; }
+      render(x);
+    })
+    .catch(function () { document.getElementById("app").innerHTML = '<p class="loading">Could not load the report. Check the connection and try again.</p>'; });
+}
+</script>
+</body></html>
