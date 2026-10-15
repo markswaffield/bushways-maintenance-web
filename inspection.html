@@ -355,7 +355,7 @@
       '<option value="__report__">Report a fault</option>';
 
     lastBoot = data;
-    saveForOffline(data);
+    saveForOffline(data, false, null, chosenGroups());
     showOfflineSave();
 
     if (deepLinkTarget) {
@@ -459,7 +459,9 @@
   // The button, on iPhone and any phone that won't say what it's on.
   function showOfflineSave() {
     var box = document.getElementById("offlineSave");
-    if (!box || !window.bwQueue || bwQueue.connectionKind() !== "unknown") return;
+    // Every phone (Mark wants to choose what is saved, on Android too); not
+    // a computer, which keeps nothing for offline use.
+    if (!box || !window.bwQueue || !/Mobile|Android|iPhone|iPad/i.test(navigator.userAgent || "")) return;
     box.hidden = false;
     var msg = document.getElementById("offlineSaveMsg"), last = 0;
     try { last = Number(localStorage.getItem(offlineKey()) || 0); } catch (e) {}
@@ -468,7 +470,7 @@
       ? " (" + all.filter(function (g) { return chosen.indexOf(g.key) !== -1; }).map(function (g) { return g.name; }).join(", ") + ")" : "";
     msg.textContent = last
       ? "Saved on this phone " + new Date(last).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + which + ". Save again on WiFi to pick up changes."
-      : "Not saved yet. Tap this on WiFi so checks work with no signal.";
+      : (bwQueue.connectionKind() === "wifi" ? "Saving by itself now you are on WiFi; you can choose what is saved." : "Not saved yet. Tap this on WiFi so checks work with no signal.");
   }
   function saveNowConfirmed() {
     var btn = document.getElementById("offlineSaveBtn"), msg = document.getElementById("offlineSaveMsg");
@@ -506,7 +508,10 @@
     document.getElementById("pickSave").onclick = function () {
       var keys = boxes.filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute("data-pick"); });
       if (!keys.length) { alert("Tick at least one, or Select all."); return; }
-      if (!confirm("This downloads the ticked checklists for this lodge. Only do it on WiFi, never on mobile data. Are you on WiFi now?")) return;
+      var kind = bwQueue.connectionKind();
+      if (kind === "data") { alert("This phone is on mobile data. Connect to WiFi first, then save."); return; }
+      if (navigator.onLine === false) { alert("No signal. Connect to WiFi first, then save."); return; }
+      if (kind !== "wifi" && !confirm("This downloads the ticked checklists for this lodge. Only do it on WiFi, never on mobile data. Are you on WiFi now?")) return;
       try { localStorage.setItem(groupsKey(), JSON.stringify(keys)); } catch (e) {}
       pick.hidden = true;
       saveNowConfirmed();
