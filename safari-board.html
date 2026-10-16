@@ -587,7 +587,7 @@ function draw(r){
       // D-026: a supplier night is provisional until confirmed with a ref.
       // D-027: a lodge night (n.own) is confirmed only by ResRequest.
       var ncls = n.status === "confirmed" ? " conf" : " prov";
-      var tip = (n.area || "") + (n.campsite ? " · " + n.campsite : "") + (n.own ? " · " + rrText(n)
+      var tip = (n.area || "") + (n.campsite ? " · " + n.campsite : "") + (n.exclusive ? " · " + n.exclusive + ": confirmed, exclusive camping rights" : n.own ? " · " + rrText(n)
         : n.status === "confirmed" ? " · Confirmed" + (n.hatab ? " · HATAB" : n.supplier ? " · " + n.supplier : "") + (n.ref ? " · Ref " + n.ref : "")
                                    : " · Provisional" + (n.hatab ? " · HATAB" : ""));
       h.push('<div class="nt' + ncls + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">'
@@ -892,7 +892,7 @@ function nightsTable(d){
       : esc(n.campsite || "");
     // D-026: the supplier's reference confirms the night. D-027: a lodge
     // night's reference is its ResRequest booking, never typed.
-    var ref = n.own ? '<span class="meta" title="' + esc(rrText(n)) + '">' + (n.ref ? esc(n.ref) + ' (ResRequest)' : 'not in ResRequest') + '</span>' : (allowed
+    var ref = n.exclusive ? '<span class="meta">exclusive camping rights</span>' : n.own ? '<span class="meta" title="' + esc(rrText(n)) + '">' + (n.ref ? esc(n.ref) + ' (ResRequest)' : 'not in ResRequest') + '</span>' : (allowed
       ? '<input data-ref="' + n.date + '" value="' + esc(n.ref || "") + '" placeholder="ref no.">'
       : esc(n.ref || ""));
     var stat = (n.status === "confirmed"
