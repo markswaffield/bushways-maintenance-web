@@ -464,6 +464,11 @@
     try { var h = JSON.parse(localStorage.getItem(VKEY) || "null");
       if (h && Date.now() < h.until) return h; } catch (e) {} return null; }
   function setLocalHolding(h) { try { h ? localStorage.setItem(VKEY, JSON.stringify(h)) : localStorage.removeItem(VKEY); } catch (e) {} }
+  function nextMonday8(ms) {
+    var l = new Date(ms + 2 * 3600e3), d = (8 - l.getUTCDay()) % 7;
+    var end = Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate() + d, 6, 0, 0);
+    return end <= ms ? end + 7 * 86400e3 : end;
+  }
   function midnightAfter(ms) { var t = ms + 2 * 3600e3; return Math.floor(t / 86400e3) * 86400e3 + 86400e3 - 2 * 3600e3; }
   var vehicleInfo = null;
   function renderVehicleBar() {
@@ -472,9 +477,11 @@
     bar.hidden = false;
     var h = localHolding();
     if (h) {
-      var t = new Date(h.at);
+      var t = new Date(h.at), p2 = function (n) { return ("0" + n).slice(-2); };
+      var sameDay = t.toDateString() === new Date().toDateString();
+      var since = (sameDay ? "" : ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][t.getDay()] + " ") + p2(t.getHours()) + ':' + p2(t.getMinutes());
       bar.innerHTML = '🚙 You have <b>' + esc(h.registration) + '</b>' + (h.description ? ' · ' + esc(h.description) : '')
-        + ' since ' + ("0" + t.getHours()).slice(-2) + ':' + ("0" + t.getMinutes()).slice(-2)
+        + ' since ' + since + (h.keeping ? ' <span style="color:#6B6455;font-size:12.5px">(keeping it until you return it, or 08:00 Monday)</span>' : '')
         + ' <button type="button" id="vReturn" style="margin-left:8px">I\'ve returned it</button>';
       document.getElementById("vReturn").onclick = function () {
         bwQueue.send(BASE_FN + "?action=return_vehicle", { person_id: me.id }, "Returned " + h.registration).then(function (out) {
@@ -490,16 +497,25 @@
       bar.innerHTML = '<label style="display:block;font-size:12.5px;margin:0 0 4px">Which vehicle are you taking?</label>'
         + '<select id="vPick" style="max-width:100%"><option value="">Choose a vehicle</option>'
         + (vehicleInfo.vehicles || []).map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.registration) + (v.description ? ' · ' + esc(v.description) : '') + '</option>'; }).join("")
-        + '</select> <button type="button" id="vGo">Take it</button> <button type="button" class="secondary" id="vCancel">Cancel</button>';
+        + '</select>'
+        // Weekend duty: no midnight end (Mark, 2026-10-16: "duty staff that
+        // will have a base car for the whole weekend... lets end it at 08h00
+        // the next monday").
+        + '<div style="margin:8px 0">'
+        + '<label style="display:block;font-weight:400;margin:0 0 4px"><input type="radio" name="vKeep" value="0" checked style="width:auto"> Today only</label>'
+        + '<label style="display:block;font-weight:400;margin:0"><input type="radio" name="vKeep" value="1" style="width:auto"> Keeping it overnight or for the weekend (until I return it, or 08:00 Monday)</label></div>'
+        + '<button type="button" id="vGo">Take it</button> <button type="button" class="secondary" id="vCancel">Cancel</button>';
       document.getElementById("vCancel").onclick = renderVehicleBar;
       document.getElementById("vGo").onclick = function () {
         var id = document.getElementById("vPick").value;
         if (!id) { alert("Choose the vehicle you are taking."); return; }
         var v = (vehicleInfo.vehicles || []).filter(function (x) { return x.id === id; })[0];
+        var keeping = (document.querySelector('input[name="vKeep"]:checked') || {}).value === "1";
         var now = Date.now();
-        bwQueue.send(BASE_FN + "?action=take_vehicle", { person_id: me.id, vehicle_id: id }, "Took " + v.registration).then(function (out) {
+        bwQueue.send(BASE_FN + "?action=take_vehicle", { person_id: me.id, vehicle_id: id, keeping: keeping }, "Took " + v.registration).then(function (out) {
           if (out.error) { alert(out.error); renderVehicleBar(); return; }
-          setLocalHolding({ registration: v.registration, description: v.description, at: now, until: midnightAfter(now) });
+          setLocalHolding({ registration: v.registration, description: v.description, at: now, keeping: keeping,
+                            until: keeping ? nextMonday8(now) : midnightAfter(now) });
           renderVehicleBar();
           if (out.queued) queuedNotice();
         });
@@ -515,7 +531,8 @@
         var waiting = q.some(function (i) { return /action=(take|return)_vehicle/.test(i.url || ""); });
         if (!waiting && !d._offline_copy_at) {
           setLocalHolding(d.holding ? { registration: d.holding.registration, description: d.holding.description,
-            at: Date.parse(d.holding.taken_at), until: midnightAfter(Date.parse(d.holding.taken_at)) } : null);
+            at: Date.parse(d.holding.taken_at), keeping: !!d.holding.keeping,
+            until: d.holding.ends_at ? Date.parse(d.holding.ends_at) : midnightAfter(Date.parse(d.holding.taken_at)) } : null);
         }
         renderVehicleBar();
       });
