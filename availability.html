@@ -141,7 +141,7 @@ function render(){
       + '<td class="' + (full ? "full" : "") + '">' + e(r.confirmed) + '</td><td class="' + (full ? "full" : "") + '">' + e(r.provisional) + '</td>'
       + '<td class="' + (full ? "full" : "") + '">' + e(r.available) + '</td><td>' + e(r.season) + '</td>'
       + '<td class="run">' + e(r.status || "") + '</td><td class="wrap muted">' + e(r.comments || "") + '</td>'
-      + '<td>English</td><td>' + e(r.second_language || "") + '</td></tr>';
+      + '<td>ENGLISH</td><td>' + e(r.second_language || "") + '</td></tr>';
   }).join("");
   el("rows").innerHTML = '<table><thead><tr>' + cols.map(function(c){ return '<th>' + c + '</th>'; }).join("") + '</tr></thead><tbody>'
     + (rows || '<tr><td colspan="14" class="muted">No departures left in this period.</td></tr>') + '</tbody></table>';
