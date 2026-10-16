@@ -172,7 +172,12 @@
     { key: "report_schedule_history", label: "Schedule History" },
     { key: "report_asset_checks", label: "Asset Checks" },
     { key: "report_fault_history", label: "Fault History" },
+    // The weekly lodge vehicle reports (maintenance D-151), listed to open.
+    // Mark, 2026-10-16: "on the reports page we an have a new button -
+    // vehicle reports".
+    { key: "vehicle_reports", label: "Vehicle Reports" },
   ];
+  var TELEMATICS = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/telematics";
   var currentReport = null;
   // Kept so Export to Excel can rebuild exactly what's on screen
   // without a second fetch — the same rows and the same area lookups
@@ -202,7 +207,41 @@
   // to Oldest or Oldest to Newest." The date range itself moved to the
   // shared bar above; what each report's own row keeps in that slot is
   // just which way it sorts.
+  // The weekly vehicle reports for the camp(s), newest week first, each
+  // with a View button to the full report.
+  function runVehicleReports() {
+    var from = document.getElementById("dateFrom").value, to = document.getElementById("dateTo").value;
+    var qs = "?action=lodge_reports_list&person_id=" + encodeURIComponent(me.id)
+      + (reportCamp ? "&location_id=" + encodeURIComponent(reportCamp) : "")
+      + (from ? "&from=" + encodeURIComponent(from) : "") + (to ? "&to=" + encodeURIComponent(to) : "");
+    document.getElementById("exportBtn").hidden = true;
+    document.getElementById("results").innerHTML = '<p class="loading">Running…</p>';
+    fetch(TELEMATICS + qs).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) { document.getElementById("results").innerHTML = '<p class="empty">' + esc(d.error) + "</p>"; return; }
+      var rows = d.reports || [];
+      document.getElementById("resultCount").textContent = rows.length + " report" + (rows.length === 1 ? "" : "s");
+      if (!rows.length) { document.getElementById("results").innerHTML = '<p class="empty">No weekly vehicle reports for these dates yet. They are built every Monday morning for the week before.</p>'; return; }
+      var nice = function (iso) { var x = new Date(iso + "T00:00:00Z"); return x.getUTCDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][x.getUTCMonth()]; };
+      document.getElementById("results").innerHTML = '<div class="tableWrap"><table><thead><tr><th>Week</th><th>Camp</th><th>Vehicles</th><th>Confirmed speeding</th><th>No driver (DNA)</th><th>Not covered</th><th></th></tr></thead><tbody>'
+        + rows.map(function (r) {
+          return '<tr><td>' + esc(nice(r.week_start)) + ' – ' + esc(nice(r.week_end || r.week_start)) + '</td><td>' + esc(r.camp) + '</td><td>' + r.vehicles + '</td><td>' + r.speeding + '</td><td>' + r.dna + '</td><td>'
+            + esc((r.not_covered || []).join(", ")) + '</td><td><button class="secondary" onclick="location.href=\'./lodge-vehicle-report.html?id=' + esc(r.id) + '\'">View →</button></td></tr>';
+        }).join("") + "</tbody></table></div>";
+    }).catch(function () { document.getElementById("results").innerHTML = '<p class="empty">Something went wrong loading the vehicle reports.</p>'; });
+  }
+
   function renderFilters() {
+    if (currentReport === "vehicle_reports") {
+      // Only the camp: the date range above already applies.
+      document.getElementById("filtersRow").innerHTML = multiCamp
+        ? '<div class="filter-section"><div class="title">Camp</div>' +
+          '<label>Site</label><select id="campFilter" onchange="onCampChange()"><option value="">All camps</option>' +
+          me.locations.map(function (l) {
+            return '<option value="' + esc(l.id) + '"' + (reportCamp === l.id ? " selected" : "") + '>' + esc(l.name) + "</option>";
+          }).join("") + "</select></div>"
+        : "";
+      return;
+    }
     var whoLabel = currentReport === "report_fault_history" ? "Who logged it" : "Who did it";
     var html =
       (multiCamp
@@ -270,6 +309,7 @@
 
   window.runReport = function () {
     if (!currentReport) return;
+    if (currentReport === "vehicle_reports") { runVehicleReports(); return; }
     var from = document.getElementById("dateFrom").value;
     var to = document.getElementById("dateTo").value;
     var areaId = document.getElementById("areaFilter").value;

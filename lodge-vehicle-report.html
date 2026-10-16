@@ -102,7 +102,10 @@ var me = null;
 try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
 var id = new URLSearchParams(location.search).get("id");
 if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
-document.getElementById("backBtn").onclick = function () { location.href = "./"; };
+// Back to the Reports page when that is where it was opened from.
+var fromReports = /reports\.html/.test(document.referrer || "");
+if (fromReports) document.getElementById("backBtn").textContent = "← Reports";
+document.getElementById("backBtn").onclick = function () { location.href = fromReports ? "./reports.html" : "./"; };
 document.getElementById("printBtn").onclick = function () { window.print(); };
 function e(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 function secs(n) { if (n < 90) return n + " s"; var m = n / 60, w = Math.floor(m), f = m - w; return f >= 0.75 ? (w + 1) + " minutes" : w + (f >= 0.25 ? "½" : "") + " minutes"; }
