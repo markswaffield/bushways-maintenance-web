@@ -268,6 +268,7 @@
   <button class="ghost" id="later">Later ▶</button>
   <button id="sync">Update from ResRequest</button>
   <button class="ghost" id="expandBtn" title="Give the chart the whole screen">⤢ Expand</button>
+  <button class="ghost" id="availBtn" title="The agents' availability update: view, download, email">📊 Availability</button>
   <button class="ghost" id="staffBtn" hidden title="Bush Ways Safaris people: add, edit, transfer">👥 Staff</button>
   <button class="ghost" id="assetsBtn" hidden title="Bush Ways Safaris vehicles and trailers">🚙 Assets</button>
   <span class="status" id="status"></span>
@@ -1138,6 +1139,7 @@ function openPanel(id){
   };
 }
 document.addEventListener("keydown", function(e){ if (e.key === "Escape") el("panel").className = ""; });
+el("availBtn").onclick = function(){ location.href = "./availability.html"; };
 
 // Update from ResRequest: the same small read the nightly job makes, only
 // what was edited since the last clean run (D-015; ResRequest's fair-usage

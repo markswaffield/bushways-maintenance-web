@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Availability Update</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap">
+<!--
+  The agents' availability report (safari-ops D-028), opened from the Tour
+  Master's "Availability" button. Every scheduled departure (not Tailor Made)
+  from tomorrow to the end of the year, and next year too from 1 September,
+  with confirmed, provisional and available seats. Reads the
+  safari-availability function, which needs Tour Master access; editors can
+  change the seasons, rates, places, comments and recipients, and send it now.
+  The same report goes to the recipients every Monday at 07:00.
+-->
+<style>
+  :root {
+    --bg:#f6f4ee; --panel:#ffffff; --line:#e2ddd0; --ink:#262420; --muted:#6b665a;
+    --accent:#2f4d3a; --accent-soft:#e4ebe2; --teal:#122d31; --bronze:#a57452; --stripe:#faf7f2;
+    --full:#9a3b1a; --run:#2f6b45;
+    --warn-bg:#fbeadf; --warn-line:#e3a86b; --warn-ink:#7a4312;
+    --serif:"Fraunces", Georgia, serif; --sans:"Inter", -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#1b1a17; --panel:#242320; --line:#38362f; --ink:#ece8df; --muted:#a39d8d;
+    --accent:#8fb99c; --accent-soft:#2a332c; --teal:#1e3e43; --bronze:#8a6044; --stripe:#2a2925;
+    --full:#f0a27f; --run:#8fd0a5; --warn-bg:#3a2c1c; --warn-line:#c98a42; --warn-ink:#f0c795;
+    color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg:#1b1a17; --panel:#242320; --line:#38362f; --ink:#ece8df; --muted:#a39d8d;
+    --accent:#8fb99c; --accent-soft:#2a332c; --teal:#1e3e43; --bronze:#8a6044; --stripe:#2a2925;
+    --full:#f0a27f; --run:#8fd0a5; --warn-bg:#3a2c1c; --warn-line:#c98a42; --warn-ink:#f0c795;
+    color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:14px; line-height:1.5; padding:0 16px 64px; }
+  .page { max-width:1240px; margin:0 auto; display:flex; flex-direction:column; gap:20px; }
+  /* Pinned, so the way back is always in reach (Mark, 2026-10-15). */
+  .topbar { display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center;
+    position:sticky; top:0; z-index:10; background:var(--bg); padding:12px 0; border-bottom:1px solid var(--line); }
+  .topbar .grp { display:flex; gap:8px; flex-wrap:wrap; }
+  button { font:inherit; font-size:13.5px; font-weight:600; padding:9px 14px; border-radius:8px; cursor:pointer;
+    border:1.5px solid var(--line); background:var(--panel); color:var(--ink); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.55; cursor:default; }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .masthead { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 24px; border-bottom:2px solid var(--ink); padding-bottom:12px; }
+  .kicker { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--bronze); font-weight:600; }
+  h1 { font-family:var(--serif); font-weight:600; font-size:clamp(26px,4vw,36px); margin:2px 0 0; text-wrap:balance; }
+  h2 { font-family:var(--serif); font-weight:600; font-size:19px; margin:0 0 10px; }
+  .stamp { font-size:12.5px; color:var(--muted); text-align:right; }
+  .msg { font-size:13px; color:var(--muted); }
+  .msg.err { color:var(--full); } .msg.ok { color:var(--run); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:#fff; background:var(--bronze); font-weight:600; padding:8px; white-space:nowrap; }
+  td { padding:7px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  tbody tr:nth-child(even) td { background:var(--stripe); }
+  td.code { font-weight:700; }
+  td.full { color:var(--full); font-weight:700; }
+  td.run { color:var(--run); font-weight:600; }
+  td.muted { color:var(--muted); }
+  td.wrap { white-space:normal; min-width:170px; }
+  .flag { font-size:11px; font-weight:600; color:var(--warn-ink); background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:4px; padding:0 4px; margin-left:4px; }
+  .trips th { background:var(--teal); }
+  .trips td:first-child { font-weight:600; color:var(--muted); }
+  .warnings { background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:10px; padding:14px 18px; color:var(--warn-ink); }
+  .warnings h2 { color:var(--warn-ink); font-size:17px; }
+  .warnings ul { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; }
+  .settings input[type=text], .settings input[type=number], .settings input[type=email] { font:inherit; font-size:13px; padding:5px 7px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); width:100%; min-width:70px; }
+  .settings td { white-space:normal; vertical-align:middle; }
+  .settings .row { display:flex; gap:14px; flex-wrap:wrap; align-items:end; margin-bottom:12px; }
+  .settings label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
+  .note { font-size:12.5px; color:var(--muted); }
+  .hidden { display:none; }
+</style></head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <button type="button" id="backBtn">← Tour Master</button>
+    <div class="grp">
+      <button type="button" id="xlsxBtn">Download Excel</button>
+      <button type="button" id="pdfBtn">Download PDF</button>
+      <button type="button" id="emailBtn" class="hidden">Email it now</button>
+      <button type="button" id="setBtn" class="hidden">Settings</button>
+    </div>
+  </div>
+  <div class="masthead">
+    <div><div class="kicker">Bush Ways Safaris · for agents</div><h1 id="title">Availability Update</h1></div>
+    <div class="stamp" id="stamp">Loading…</div>
+  </div>
+  <div id="actMsg" class="msg"></div>
+  <div id="settings" class="card settings hidden"></div>
+  <div id="warnings"></div>
+  <div class="card"><h2>Trip information</h2><div class="table-wrap" id="trips"></div></div>
+  <div class="card"><h2>Departures</h2><div class="table-wrap" id="rows"><p class="msg">Loading…</p></div>
+    <p class="note">Available is the total seats less confirmed and provisional bookings; above 4 it reads "More than 4". Confirmed to Run: at least one confirmed booking. Seats are as booked in ResRequest at the last Tour Master update.</p></div>
+  <p class="note" id="sentNote"></p>
+</div>
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-availability";
+var me = null, data = null;
+try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
+if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
+function el(id){ return document.getElementById(id); }
+function e(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function nice(d){ var x = new Date(d + "T00:00:00Z"); return String(x.getUTCDate()).padStart(2, "0") + " " + MON[x.getUTCMonth()] + " " + x.getUTCFullYear(); }
+function msg(t, cls){ el("actMsg").className = "msg " + (cls || ""); el("actMsg").textContent = t; }
+el("backBtn").onclick = function(){ location.href = "./safari-board.html"; };
+
+function load(){
+  return fetch(FN + "?action=report&person_id=" + encodeURIComponent(me.id)).then(function(r){ return r.json(); }).then(function(d){
+    if (d.error) { el("rows").innerHTML = '<p class="msg err">' + e(d.error) + '</p>'; el("stamp").textContent = ""; return; }
+    data = d; render();
+  }).catch(function(){ el("rows").innerHTML = '<p class="msg err">Could not reach the report. Check the signal and try again.</p>'; });
+}
+function render(){
+  var d = data;
+  el("title").textContent = "Availability Update " + d.years.join(" – ");
+  el("stamp").innerHTML = "Departures " + e(nice(d.from)) + " to " + e(nice(d.to)) + "<br>" + d.rows.length + " departures · made " + e(nice(d.generated));
+  if (d.level === "edit") { el("emailBtn").classList.remove("hidden"); el("setBtn").classList.remove("hidden"); }
+  // Trip information, as at the top of the sheet.
+  var head = '<tr><th></th>' + d.trips.map(function(t){ return '<th>' + e(t.code) + '</th>'; }).join("") + '</tr>';
+  var line = function(label, f){ return '<tr><td>' + e(label) + '</td>' + d.trips.map(function(t){ return '<td>' + f(t) + '</td>'; }).join("") + '</tr>'; };
+  var money = function(v){ return v == null ? "" : "US$ " + Number(v).toLocaleString("en-US"); };
+  var body = line("Safari", function(t){ return e(t.safari_name) + (t.note ? '<br><span class="note">' + e(t.note) + '</span>' : ''); })
+    + line("Days", function(t){ return e(t.nights_label); });
+  d.years.forEach(function(y){
+    body += line("Rack rate low " + y, function(t){ return money(t.rates && t.rates[y] && t.rates[y].low); });
+    body += line("Rack rate high " + y, function(t){ return money(t.rates && t.rates[y] && t.rates[y].high); });
+  });
+  el("trips").innerHTML = '<table class="trips">' + head + body + '</table>';
+  // The departures.
+  var cols = ["Dep date","End date","Trip code","Days","Starts in","Ends in","Confirmed","Provisional","Available","Season","Status","Comments","Language","Second"];
+  var rows = d.rows.map(function(r){
+    var full = r.available === "FULL";
+    return '<tr><td>' + e(nice(r.start_date)) + '</td><td>' + e(nice(r.end_date)) + '</td>'
+      + '<td class="code">' + e(r.code) + (r.no_code ? '<span class="flag" title="No master booking in ResRequest, so no code">no code</span>' : '') + '</td>'
+      + '<td>' + r.days + '</td><td>' + e(r.starts_in) + '</td><td>' + e(r.ends_in) + '</td>'
+      + '<td class="' + (full ? "full" : "") + '">' + e(r.confirmed) + '</td><td class="' + (full ? "full" : "") + '">' + e(r.provisional) + '</td>'
+      + '<td class="' + (full ? "full" : "") + '">' + e(r.available) + '</td><td>' + e(r.season) + '</td>'
+      + '<td class="run">' + e(r.status || "") + '</td><td class="wrap muted">' + e(r.comments || "") + '</td>'
+      + '<td>English</td><td>' + e(r.second_language || "") + '</td></tr>';
+  }).join("");
+  el("rows").innerHTML = '<table><thead><tr>' + cols.map(function(c){ return '<th>' + c + '</th>'; }).join("") + '</tr></thead><tbody>'
+    + (rows || '<tr><td colspan="14" class="muted">No departures left in this period.</td></tr>') + '</tbody></table>';
+  el("warnings").innerHTML = d.warnings && d.warnings.length
+    ? '<div class="warnings"><h2>To check (not shown to agents)</h2><ul>' + d.warnings.map(function(w){ return '<li>' + e(w) + '</li>'; }).join("") + '</ul></div>' : '';
+  var on = d.recipients.filter(function(r){ return r.active; }).map(function(r){ return r.email; });
+  el("sentNote").textContent = "Emailed every Monday at 07:00 to " + (on.length ? on.join(", ") : "nobody yet") + "."
+    + (d.last_sent ? " Last sent " + new Date(d.last_sent.sent_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) + (d.last_sent.error ? " (failed: " + d.last_sent.error + ")" : "") + "." : "");
+}
+
+// Downloads: fetched with the sign-in, then saved as a file.
+function download(kind, btn){
+  btn.disabled = true; msg("Making the " + (kind === "xlsx" ? "Excel" : "PDF") + " file…");
+  fetch(FN + "?action=" + kind + "&person_id=" + encodeURIComponent(me.id)).then(function(r){
+    if (!r.ok) return r.json().then(function(j){ throw new Error(j.error || r.statusText); });
+    var name = (r.headers.get("content-disposition") || "").match(/filename="([^"]+)"/);
+    return r.blob().then(function(b){ return { b: b, name: name ? name[1] : "Availability Update." + kind }; });
+  }).then(function(x){
+    var a = document.createElement("a"); a.href = URL.createObjectURL(x.b); a.download = x.name;
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    msg("Downloaded " + x.name + ".", "ok");
+  }).catch(function(err){ msg("Not downloaded: " + err.message, "err"); }).then(function(){ btn.disabled = false; });
+}
+el("xlsxBtn").onclick = function(){ download("xlsx", el("xlsxBtn")); };
+el("pdfBtn").onclick = function(){ download("pdf", el("pdfBtn")); };
+function post(action, body){
+  body.person_id = me.id;
+  return fetch(FN + "?action=" + action, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); }).then(function(j){ if (j.error) throw new Error(j.error); return j; });
+}
+el("emailBtn").onclick = function(){
+  var on = data.recipients.filter(function(r){ return r.active; }).map(function(r){ return r.email; });
+  if (!on.length) { alert("Nobody is set to receive it. Add someone in Settings."); return; }
+  if (!confirm("Email the report now to " + on.join(", ") + "?")) return;
+  el("emailBtn").disabled = true; msg("Sending…");
+  post("email_now", {}).then(function(j){ msg("Sent to " + j.to.join(", ") + ".", "ok"); load(); })
+    .catch(function(err){ msg("Not sent: " + err.message, "err"); }).then(function(){ el("emailBtn").disabled = false; });
+};
+
+// Settings (editors): seasons, rates, places, comments, recipients.
+el("setBtn").onclick = function(){
+  var box = el("settings");
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  var d = data, st = d.settings;
+  var years = d.years.slice(); var nx = years[years.length - 1] + 1; years.push(nx);
+  var inp = function(attr, v, type){ return '<input type="' + (type || "text") + '" ' + attr + ' value="' + e(v == null ? "" : v) + '">'; };
+  var h = '<h2>Settings</h2>'
+    + '<div class="row"><label>High season from (MM-DD)' + inp('id="sHf"', st.high_from) + '</label><label>High season to (MM-DD)' + inp('id="sHt"', st.high_to) + '</label>'
+    + '<label>Add next year from (MM-DD)' + inp('id="sNy"', st.next_year_from) + '</label></div>'
+    + '<p class="note">A departure is High season when most of its nights fall between these dates; a tie is Low.</p>'
+    + '<h2 style="margin-top:14px">Trips and rack rates (US$)</h2><div class="table-wrap"><table><tr><th>Code</th><th>Safari</th><th>Days</th><th>Note</th>'
+    + years.map(function(y){ return '<th>Low ' + y + '</th><th>High ' + y + '</th>'; }).join("") + '</tr>'
+    + d.trips.map(function(t){
+        return '<tr data-trip="' + e(t.code) + '"><td><b>' + e(t.code) + '</b></td><td>' + inp('data-f="safari_name"', t.safari_name) + '</td><td>' + inp('data-f="nights_label"', t.nights_label) + '</td><td>' + inp('data-f="note"', t.note) + '</td>'
+          + years.map(function(y){ var r = (t.rates || {})[y] || {}; return '<td>' + inp('data-y="' + y + '" data-k="low"', r.low, "number") + '</td><td>' + inp('data-y="' + y + '" data-k="high"', r.high, "number") + '</td>'; }).join("") + '</tr>';
+      }).join("") + '</table></div>'
+    + '<h2 style="margin-top:14px">Start, end and comments by safari type</h2><div class="table-wrap"><table><tr><th>Type</th><th>Trip</th><th>Starts in</th><th>Ends in</th><th>Comment</th></tr>'
+    + d.types.map(function(t){
+        return '<tr data-type="' + e(t.type_name) + '"><td>' + e(t.type_name) + '</td><td>' + e(t.trip_code) + '</td><td>' + inp('data-f="start_place"', t.start_place) + '</td><td>' + inp('data-f="end_place"', t.end_place) + '</td><td>' + inp('data-f="comment"', t.comment) + '</td></tr>';
+      }).join("") + '</table></div>'
+    + '<h2 style="margin-top:14px">Who gets the Monday email</h2><table><tr><th>Email</th><th>Name</th><th>Receives it</th><th></th></tr>'
+    + d.recipients.map(function(r){
+        return '<tr data-rec="' + e(r.email) + '"><td>' + e(r.email) + '</td><td>' + inp('data-f="name"', r.name) + '</td><td><input type="checkbox" data-f="active"' + (r.active ? " checked" : "") + '></td>'
+          + '<td><button type="button" data-remove="' + e(r.email) + '">Remove</button></td></tr>';
+      }).join("")
+    + '<tr><td>' + inp('id="newEmail" placeholder="add an email address"', "", "email") + '</td><td>' + inp('id="newName" placeholder="name"', "") + '</td><td></td><td></td></tr></table>'
+    + '<div class="row" style="margin-top:14px"><button type="button" class="primary" id="setSave">Save settings</button><button type="button" id="setClose">Close</button><span id="setMsg" class="msg"></span></div>';
+  box.innerHTML = h; box.classList.remove("hidden");
+  el("setClose").onclick = function(){ box.classList.add("hidden"); };
+  var removed = [];
+  box.querySelectorAll("button[data-remove]").forEach(function(b){
+    b.onclick = function(){ removed.push(b.getAttribute("data-remove")); b.closest("tr").remove(); };
+  });
+  el("setSave").onclick = function(){
+    var trips = [].map.call(box.querySelectorAll("tr[data-trip]"), function(tr){
+      var t = { code: tr.getAttribute("data-trip"), rates: {} };
+      tr.querySelectorAll("input[data-f]").forEach(function(i){ t[i.getAttribute("data-f")] = i.value; });
+      tr.querySelectorAll("input[data-y]").forEach(function(i){ var y = i.getAttribute("data-y"); t.rates[y] = t.rates[y] || {}; t.rates[y][i.getAttribute("data-k")] = i.value; });
+      return t;
+    });
+    var types = [].map.call(box.querySelectorAll("tr[data-type]"), function(tr){
+      var t = { type_name: tr.getAttribute("data-type") };
+      tr.querySelectorAll("input[data-f]").forEach(function(i){ t[i.getAttribute("data-f")] = i.value; });
+      return t;
+    });
+    var recipients = [].map.call(box.querySelectorAll("tr[data-rec]"), function(tr){
+      return { email: tr.getAttribute("data-rec"), name: tr.querySelector('[data-f="name"]').value, active: tr.querySelector('[data-f="active"]').checked };
+    }).concat(removed.map(function(m){ return { email: m, remove: true }; }));
+    var ne = el("newEmail").value.trim();
+    if (ne) recipients.push({ email: ne, name: el("newName").value.trim(), active: true });
+    el("setMsg").className = "msg"; el("setMsg").textContent = "Saving…";
+    post("settings", { settings: { high_from: el("sHf").value.trim(), high_to: el("sHt").value.trim(), next_year_from: el("sNy").value.trim() }, trips: trips, types: types, recipients: recipients })
+      .then(function(){ el("setMsg").className = "msg ok"; el("setMsg").textContent = "Saved."; return load(); })
+      .then(function(){ box.classList.add("hidden"); msg("Settings saved; the report below uses them.", "ok"); })
+      .catch(function(err){ el("setMsg").className = "msg err"; el("setMsg").textContent = "Not saved: " + err.message; });
+  };
+};
+load();
+</script>
+</body></html>
