@@ -247,6 +247,9 @@
   })();
 </script>
 
+<!-- "I'm taking a vehicle" (maintenance D-153): only for the people allowed
+     to take one; the server decides who, and which vehicles. -->
+<div id="vehicleBar" hidden style="margin:10px 0 0;padding:10px 12px;border:1px solid #D9D2C2;border-radius:8px;background:#fff"></div>
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
@@ -447,6 +450,76 @@
         bwApi.get(BASE_FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(id) + CAMP_PARAM).catch(function () {});
       }, 500 * i);
     });
+  }
+
+  // ── "I'm taking a vehicle" (maintenance D-153) ─────────────────────
+  // Mark, 2026-10-16: "a button for I am Taking a Vehicle for base cars...
+  // And then it will need a dropdown menu of the vehicle they are taking",
+  // and for the lodges, "when management etc will take a car and it is not
+  // on the Day Sheet". Who sees it, and which vehicles, comes from the
+  // server (my_vehicle). Taking and returning go through the WiFi-only queue;
+  // the phone remembers what it holds so the bar is right with no signal.
+  var VKEY = "bw_vehicle_holding_" + (me ? me.id : "");
+  function localHolding() {
+    try { var h = JSON.parse(localStorage.getItem(VKEY) || "null");
+      if (h && Date.now() < h.until) return h; } catch (e) {} return null; }
+  function setLocalHolding(h) { try { h ? localStorage.setItem(VKEY, JSON.stringify(h)) : localStorage.removeItem(VKEY); } catch (e) {} }
+  function midnightAfter(ms) { var t = ms + 2 * 3600e3; return Math.floor(t / 86400e3) * 86400e3 + 86400e3 - 2 * 3600e3; }
+  var vehicleInfo = null;
+  function renderVehicleBar() {
+    var bar = document.getElementById("vehicleBar");
+    if (!vehicleInfo || !vehicleInfo.eligible) { bar.hidden = true; return; }
+    bar.hidden = false;
+    var h = localHolding();
+    if (h) {
+      var t = new Date(h.at);
+      bar.innerHTML = '🚙 You have <b>' + esc(h.registration) + '</b>' + (h.description ? ' · ' + esc(h.description) : '')
+        + ' since ' + ("0" + t.getHours()).slice(-2) + ':' + ("0" + t.getMinutes()).slice(-2)
+        + ' <button type="button" id="vReturn" style="margin-left:8px">I\'ve returned it</button>';
+      document.getElementById("vReturn").onclick = function () {
+        bwQueue.send(BASE_FN + "?action=return_vehicle", { person_id: me.id }, "Returned " + h.registration).then(function (out) {
+          if (out.error) { alert(out.error); return; }
+          setLocalHolding(null); renderVehicleBar();
+          if (out.queued) queuedNotice();
+        });
+      };
+      return;
+    }
+    bar.innerHTML = '<button type="button" id="vTake">🚙 I\'m taking a vehicle</button>';
+    document.getElementById("vTake").onclick = function () {
+      bar.innerHTML = '<label style="display:block;font-size:12.5px;margin:0 0 4px">Which vehicle are you taking?</label>'
+        + '<select id="vPick" style="max-width:100%"><option value="">Choose a vehicle</option>'
+        + (vehicleInfo.vehicles || []).map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.registration) + (v.description ? ' · ' + esc(v.description) : '') + '</option>'; }).join("")
+        + '</select> <button type="button" id="vGo">Take it</button> <button type="button" class="secondary" id="vCancel">Cancel</button>';
+      document.getElementById("vCancel").onclick = renderVehicleBar;
+      document.getElementById("vGo").onclick = function () {
+        var id = document.getElementById("vPick").value;
+        if (!id) { alert("Choose the vehicle you are taking."); return; }
+        var v = (vehicleInfo.vehicles || []).filter(function (x) { return x.id === id; })[0];
+        var now = Date.now();
+        bwQueue.send(BASE_FN + "?action=take_vehicle", { person_id: me.id, vehicle_id: id }, "Took " + v.registration).then(function (out) {
+          if (out.error) { alert(out.error); renderVehicleBar(); return; }
+          setLocalHolding({ registration: v.registration, description: v.description, at: now, until: midnightAfter(now) });
+          renderVehicleBar();
+          if (out.queued) queuedNotice();
+        });
+      };
+    };
+  }
+  if (me) {
+    bwApi.get(BASE_FN + "?action=my_vehicle&person_id=" + encodeURIComponent(me.id)).then(function (d) {
+      vehicleInfo = d;
+      // The server's word on what this person holds, unless a take or a
+      // return is still waiting in this phone's queue.
+      bwQueue.all().then(function (q) {
+        var waiting = q.some(function (i) { return /action=(take|return)_vehicle/.test(i.url || ""); });
+        if (!waiting && !d._offline_copy_at) {
+          setLocalHolding(d.holding ? { registration: d.holding.registration, description: d.holding.description,
+            at: Date.parse(d.holding.taken_at), until: midnightAfter(Date.parse(d.holding.taken_at)) } : null);
+        }
+        renderVehicleBar();
+      });
+    }).catch(function () {});
   }
 
   // A staff action saved on the phone instead of sent (maintenance D-150).
