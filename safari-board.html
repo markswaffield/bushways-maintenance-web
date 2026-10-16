@@ -108,7 +108,13 @@
   .sp{font-weight:400;font-style:italic;color:#B5651D}
   .blk.night.sx.head .s .sc,.blk.night.sx.head .s .sp{color:inherit}
   .warnbtn{background:#FBEADF;border-color:#E3A86B;color:#7A4312}
-  .lang{display:inline-block;margin-left:5px;padding:0 4px;border-radius:3px;background:#1F3A5F;color:#fff;font-size:10px;font-weight:700;line-height:14px;vertical-align:1px}
+  .lang{display:inline-block;flex:none;margin-left:3px;padding:0 3px;border-radius:3px;background:#1F3A5F;color:#fff;font-size:9.5px;font-weight:700;line-height:13px;letter-spacing:.02em}
+  /* A translated safari's top line carries the full code and DE/FR (Mark,
+     2026-10-16: "We need to see the full tour code and DE in the cell"):
+     tighter padding and a slightly smaller code, never cut short. */
+  .blk.night.head.hl{padding:0 2px;gap:0}
+  .blk.night.head.hl b{font-size:11px;letter-spacing:-.02em;flex:none;overflow:visible}
+  .blk.night.head.hl .nmark{margin-left:2px;font-size:10px}
   .blk .end{margin-top:auto;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   /* Each safari in the Tour Master's own colours (Mark, 2026-10-04: "the
      colour codings are not to reflect each safari type, but rather each
@@ -569,7 +575,7 @@ function draw(r){
       if (day < r.from || day > r.to || (d.slot_id && i < stack.length - 1 && busy(day))) return;
       var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
       if (ln.code) {
-        h.push('<button class="blk night ' + fam + ' head" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
+        h.push('<button class="blk night ' + fam + ' head' + (d.language ? ' hl' : '') + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
           + '<b>' + esc(label(d)) + '</b>' + (d.language ? '<span class="lang" title="Second language">' + esc(d.language) + '</span>' : '') + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
       } else if (ln.pre) {
         h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
