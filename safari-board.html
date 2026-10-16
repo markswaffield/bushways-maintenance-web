@@ -139,6 +139,23 @@
   /* An area, not a place: a person has to enter the campsite (D-003). */
   .nt.camp{font-style:italic}
   .nt.camp::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#D9822B;margin-right:5px}
+  /* D-026: every supplier night provisional (italics, orange dot) until a
+     reference confirms it (bold, no dot); HATAB nights carry a green H.
+     Only the name takes the mouse (its tooltip, and a click opens the
+     panel), so the rest of the row still drags the safari. */
+  .nt.prov{font-style:italic;font-weight:400}
+  .nt.prov::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#D9822B;margin-right:5px}
+  .nt.conf{font-style:normal;font-weight:700;color:#232019}
+  .nt .ntx{pointer-events:auto;cursor:pointer;overflow:hidden;text-overflow:ellipsis}
+  .hb{display:inline-block;flex:none;font-style:normal;font-weight:700;font-size:9px;line-height:13px;color:#fff;background:#5E9B2E;border-radius:3px;padding:0 3px;margin-left:4px}
+  .cstat{font-size:11px;white-space:nowrap}
+  .cstat.conf{color:#2F4D3A;font-weight:700}
+  .cstat.prov{color:#8C4A12;font-style:italic}
+  .readbox{border:1px dashed #C9C2B0;border-radius:8px;padding:10px;margin:8px 0}
+  .readbox textarea{width:100%;min-height:110px;font-size:12.5px}
+  .readbox .warn{color:#8C4A12;font-size:12px;margin:4px 0}
+  .readbox table{width:100%;font-size:12.5px;border-collapse:collapse;margin:6px 0}
+  .readbox td{padding:3px 4px;border-bottom:1px solid #EEE9DD}
   .nt.end{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6B6455}
   .nt.site{font-weight:700;color:#232019}
   .blk[draggable=true]{cursor:grab}
@@ -567,8 +584,14 @@ function draw(r){
         else if (n.date === r.from) txt = label(d) + " · " + txt; // its pre night is above the screen
       }
       if (!txt) return;
-      var ncls = n.campsite ? " site" : (n.needs_campsite ? " camp" : "");
-      h.push('<div class="nt' + ncls + '" title="' + esc((n.area || "") + (n.campsite ? " · " + n.campsite : "")) + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">' + esc(txt) + '</div>');
+      // D-026: a supplier night is provisional until confirmed with a ref.
+      // Bush Ways' own lodges need no confirmation, and keep the old look.
+      var ncls = n.own ? (n.campsite ? " site" : "") : (n.status === "confirmed" ? " conf" : " prov");
+      var tip = (n.area || "") + (n.campsite ? " · " + n.campsite : "")
+        + (n.own ? "" : n.status === "confirmed" ? " · Confirmed" + (n.hatab ? " · HATAB" : n.supplier ? " · " + n.supplier : "") + (n.ref ? " · Ref " + n.ref : "")
+                          : " · Provisional" + (n.hatab ? " · HATAB" : ""));
+      h.push('<div class="nt' + ncls + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">'
+        + '<span class="ntx" data-id="' + d.id + '" title="' + esc(tip) + '">' + esc(txt) + '</span>' + (n.hatab ? '<span class="hb" title="HATAB">H</span>' : '') + '</div>');
     });
     if (d.end_date >= r.from && d.end_date <= r.to) {
       h.push('<div class="nt end" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? "END (estimated)" : "END") + '</div>');
@@ -577,6 +600,7 @@ function draw(r){
 
   g.innerHTML = h.join("");
   g.querySelectorAll(".crewln[data-id]").forEach(function(b){ b.onclick = function(){ openPanel(b.getAttribute("data-id")); }; });
+  g.querySelectorAll(".ntx[data-id]").forEach(function(b){ b.onclick = function(){ openPanel(b.getAttribute("data-id")); }; });
   g.querySelectorAll(".blk[data-id]").forEach(function(b){
     b.onclick = function(){ openPanel(b.getAttribute("data-id")); };
     b.ondragstart = function(e){
@@ -861,14 +885,126 @@ function nightsTable(d){
     var cell = allowed
       ? '<input data-date="' + n.date + '" value="' + esc(n.campsite || "") + '" placeholder="' + (n.needs_campsite ? "campsite" : "") + '">'
       : esc(n.campsite || "");
+    // D-026: the supplier's reference confirms the night; Bush Ways' own lodges need none.
+    var ref = n.own ? '<span class="meta">own lodge</span>' : (allowed
+      ? '<input data-ref="' + n.date + '" value="' + esc(n.ref || "") + '" placeholder="ref no.">'
+      : esc(n.ref || ""));
+    var stat = n.own ? "" : (n.status === "confirmed"
+      ? '<span class="cstat conf">Confirmed</span>' + (n.confirmation_id ? ' <button type="button" class="ghost" data-doc="' + n.confirmation_id + '" title="Open the confirmation" style="padding:1px 6px;font-size:11px">📄</button>' : '')
+      : '<span class="cstat prov">Provisional</span>') + (n.hatab ? ' <span class="hb">H</span>' : '');
     return '<tr class="' + (n.needs_campsite && !n.campsite ? "need" : "") + '"><td>' + (i + 1) + '</td><td>' + nice(n.date) + '</td>'
-      + '<td class="area' + (n.needs_campsite ? " need" : "") + '">' + esc(n.area || "—") + '</td><td>' + cell + '</td></tr>';
+      + '<td class="area' + (n.needs_campsite ? " need" : "") + '">' + esc(n.area || "—") + '</td><td>' + cell + '</td><td>' + ref + '</td><td>' + stat + '</td></tr>';
   }).join("");
   var stray = (d.stray_days || []).map(function(x){ return '<li>' + nice(x.date) + ": " + esc(x.campsite || x.note) + '</li>'; }).join("");
   return '<h3 style="font-size:13px;margin:12px 0 4px">Nights and campsites</h3>'
-    + '<table class="nights"><tr><th>Night</th><th>Date</th><th>Area</th><th>Campsite</th></tr>' + rows + '</table>'
+    + '<table class="nights"><tr><th>Night</th><th>Date</th><th>Area</th><th>Campsite</th><th>Ref</th><th>Status</th></tr>' + rows + '</table>'
     + (stray ? '<p class="err">Entered for nights this safari no longer covers (ResRequest moved its dates):</p><ul>' + stray + '</ul>' : '')
-    + (allowed ? '<div class="edit"><button id="csSave">Save campsites</button> <span id="csMsg"></span></div>' : '');
+    + '<p class="meta" style="margin:4px 0 0">A night is provisional until the supplier\'s reference is entered; then it is confirmed. <span class="hb">H</span> HATAB.</p>'
+    + (allowed ? '<div class="edit"><button id="csSave">Save campsites</button> <button type="button" class="ghost" id="readConf">📋 Read a confirmation</button> <span id="csMsg"></span></div><div id="readBox"></div>' : '');
+}
+
+// ── Read a confirmation (D-026) ──────────────────────────────────────
+// Paste the supplier's email, or choose its PDF; the server's AI reads it,
+// matches it to safaris and nights, and nothing changes until Confirm.
+var pdfjsReady = null;
+function loadPdfJs(){
+  if (pdfjsReady) return pdfjsReady;
+  pdfjsReady = new Promise(function(res, rej){
+    var sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    sc.onload = function(){ window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); };
+    sc.onerror = function(){ rej(new Error("Could not load the PDF reader.")); };
+    document.head.appendChild(sc);
+  });
+  return pdfjsReady;
+}
+function pdfText(buf){
+  return loadPdfJs().then(function(lib){ return lib.getDocument({ data: buf }).promise; }).then(function(doc){
+    var pages = [];
+    for (var i = 1; i <= Math.min(doc.numPages, 20); i++) pages.push(doc.getPage(i).then(function(pg){ return pg.getTextContent(); })
+      .then(function(tc){ return tc.items.map(function(it){ return it.str; }).join(" "); }));
+    return Promise.all(pages).then(function(t){ return t.join("\n"); });
+  });
+}
+function b64(buf){ var s = "", a = new Uint8Array(buf); for (var i = 0; i < a.length; i += 32768) s += String.fromCharCode.apply(null, a.subarray(i, i + 32768)); return btoa(s); }
+function wireRead(d){
+  var btn = el("readConf"); if (!btn) return;
+  btn.onclick = function(){
+    var box = el("readBox");
+    if (box.innerHTML) { box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="readbox"><b>Read a confirmation</b>'
+      + '<p class="meta" style="margin:2px 0 6px">Paste the supplier\'s email, or choose its PDF. Nothing is confirmed until you check it and tap Confirm.</p>'
+      + '<textarea id="rcText" placeholder="Paste the confirmation email here"></textarea>'
+      + '<div style="margin:6px 0"><label>Or the PDF: <input type="file" id="rcFile" accept="application/pdf,.pdf"></label></div>'
+      + '<button type="button" id="rcGo">Read</button> <button type="button" class="ghost" id="rcCancel">Cancel</button> <span id="rcMsg" class="meta"></span>'
+      + '<div id="rcResult"></div></div>';
+    el("rcCancel").onclick = function(){ box.innerHTML = ""; };
+    el("rcGo").onclick = function(){
+      var text = el("rcText").value.trim(), f = el("rcFile").files[0];
+      if (!text && !f) { alert("Paste the email, or choose the PDF."); return; }
+      el("rcMsg").textContent = "Reading…"; el("rcGo").disabled = true;
+      var prep = !f ? Promise.resolve({ text: text })
+        : f.arrayBuffer().then(function(buf){
+            return pdfText(buf.slice(0)).catch(function(){ return ""; }).then(function(t){
+              // The PDF's own text when it has some (checkable); the file itself only for a scan.
+              return { text: (t || "").trim().length > 40 ? t : (text || ""), pdf_base64: b64(buf), file_name: f.name };
+            });
+          });
+      prep.then(function(b){
+        b.departure_id = d.id;
+        return post("read_confirmation", b);
+      }).then(function(res){ el("rcGo").disabled = false; el("rcMsg").textContent = ""; showRead(d, res); })
+        .catch(function(e){ el("rcGo").disabled = false; el("rcMsg").textContent = "Not read: " + e.message; });
+    };
+  };
+}
+function showRead(d, res){
+  var h = '<div style="margin-top:8px"><div><b>Found:</b> ' + esc(res.supplier || "supplier not named") + '</div>'
+    + '<div style="margin:4px 0">Reference: <input id="rcRef" value="' + esc(res.reference || "") + '" placeholder="supplier\'s reference" style="width:160px"> '
+    + (res.reference ? (res.verified ? '<span class="cstat conf">✓ in the confirmation</span>' : '<span class="cstat prov">' + (res.scanned ? "read from a scan: check it" : "not found word for word: check it") + '</span>')
+                     : '<span class="cstat prov">no reference found: type it from the confirmation, or leave it provisional</span>') + '</div>'
+    + 'Supplier: <input id="rcSup" value="' + esc(res.supplier || "") + '" style="width:200px">'
+    + (res.notes ? '<p class="warn">' + esc(res.notes) + '</p>' : '');
+  if (!(res.matches || []).length) h += '<p class="warn">No stays could be read from it.</p>';
+  (res.matches || []).forEach(function(m, mi){
+    h += '<div style="margin-top:8px"><b>' + esc((m.departure && m.departure.code) || "No safari matched") + '</b>'
+      + (m.stay ? ' <span class="meta">' + esc((m.stay.date_in || "?") + " to " + (m.stay.date_out || "?")) + (m.stay.guest_name ? " · " + esc(m.stay.guest_name) : "") + '</span>' : '') + '</div>';
+    (m.warnings || []).forEach(function(w){ h += '<p class="warn">⚠ ' + esc(w) + '</p>'; });
+    if (m.nights.length) h += '<table>' + m.nights.map(function(n, ni){
+      return '<tr><td><input type="checkbox" checked data-pick="' + mi + ':' + ni + '" style="width:auto"></td><td>' + nice(n.date) + '</td>'
+        + '<td class="meta">' + esc(n.current || "") + (n.status === "confirmed" ? " (already confirmed" + (n.current_ref ? ", ref " + esc(n.current_ref) : "") + ")" : "") + '</td>'
+        + '<td>→ <input data-site="' + mi + ':' + ni + '" value="' + esc(n.proposed || n.current || "") + '" placeholder="campsite" style="width:110px"></td></tr>';
+    }).join("") + '</table>';
+  });
+  h += '<button type="button" id="rcConfirm">Confirm the ticked nights</button></div>';
+  el("rcResult").innerHTML = h;
+  el("rcConfirm").onclick = function(){
+    var ref = el("rcRef").value.trim();
+    if (!ref) { alert("Enter the supplier's reference number. Without one the nights stay provisional."); return; }
+    var items = [];
+    el("rcResult").querySelectorAll("input[data-pick]").forEach(function(cb){
+      if (!cb.checked) return;
+      var k = cb.getAttribute("data-pick").split(":"), m = res.matches[+k[0]], n = m.nights[+k[1]];
+      items.push({ departure_id: m.departure.id, date: n.date, campsite: el("rcResult").querySelector('[data-site="' + k[0] + ':' + k[1] + '"]').value });
+    });
+    if (!items.length) { alert("Tick at least one night."); return; }
+    post("confirm_nights", { confirmation_id: res.confirmation_id, reference: ref, supplier: el("rcSup").value, items: items })
+      .then(function(out){ el("rcResult").innerHTML = '<p class="saved">Confirmed ' + out.confirmed + ' night' + (out.confirmed === 1 ? "" : "s") + ', ref ' + esc(ref) + '.</p>'; reload(d.id); })
+      .catch(function(e){ alert("Not confirmed: " + e.message); });
+  };
+}
+// The original confirmation, from the 📄 button on a confirmed night.
+function wireDocs(p){
+  p.querySelectorAll("button[data-doc]").forEach(function(b){
+    b.onclick = function(){
+      fetch(FN + "?action=confirmation_doc&id=" + encodeURIComponent(b.getAttribute("data-doc")) + who()).then(function(x){ return x.json(); }).then(function(c){
+        if (c.error) { alert(c.error); return; }
+        if (c.url) { window.open(c.url, "_blank"); return; }
+        var w = window.open("", "_blank");
+        if (w) { w.document.title = "Confirmation"; var pre = w.document.createElement("pre"); pre.style.whiteSpace = "pre-wrap"; pre.textContent = c.text || ""; w.document.body.appendChild(pre); }
+      });
+    };
+  });
 }
 
 // The guest mix: seats per safari type, like the Tour Master's "8PC 3FC".
@@ -971,9 +1107,13 @@ function openPanel(id){
     }) || cs[0];
     moveTo(d.id, free.id, 1);
   };
+  wireRead(d); wireDocs(p);
   if (el("csSave")) el("csSave").onclick = function(){
     var days = [];
-    p.querySelectorAll("input[data-date]").forEach(function(i){ days.push({ date: i.getAttribute("data-date"), campsite: i.value }); });
+    p.querySelectorAll("input[data-date]").forEach(function(i){
+      var dt = i.getAttribute("data-date"), r = p.querySelector('input[data-ref="' + dt + '"]');
+      days.push({ date: dt, campsite: i.value, ref: r ? r.value : undefined });
+    });
     el("csMsg").className = ""; el("csMsg").textContent = "Saving…";
     post("campsites", { departure_id: d.id, days: days }).then(function(){
       el("csMsg").className = "saved"; el("csMsg").textContent = "Saved.";
