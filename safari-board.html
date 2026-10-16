@@ -107,6 +107,7 @@
   .sc{font-weight:700;color:#2F6B45}
   .sp{font-weight:400;font-style:italic;color:#B5651D}
   .blk.night.sx.head .s .sc,.blk.night.sx.head .s .sp{color:inherit}
+  .warnbtn{background:#FBEADF;border-color:#E3A86B;color:#7A4312}
   .lang{display:inline-block;margin-left:5px;padding:0 4px;border-radius:3px;background:#1F3A5F;color:#fff;font-size:10px;font-weight:700;line-height:14px;vertical-align:1px}
   .blk .end{margin-top:auto;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   /* Each safari in the Tour Master's own colours (Mark, 2026-10-04: "the
@@ -268,6 +269,7 @@
   <button class="ghost" id="later">Later ▶</button>
   <button id="sync">Update from ResRequest</button>
   <button class="ghost" id="expandBtn" title="Give the chart the whole screen">⤢ Expand</button>
+  <button class="ghost" id="checkBtn" hidden title="Booking problems found in ResRequest that need someone to sort out">⚠ To check</button>
   <button class="ghost" id="availBtn" title="The agents' availability update: view, download, email">📊 Availability</button>
   <button class="ghost" id="staffBtn" hidden title="Bush Ways Safaris people: add, edit, transfer">👥 Staff</button>
   <button class="ghost" id="assetsBtn" hidden title="Bush Ways Safaris vehicles and trailers">🚙 Assets</button>
@@ -375,6 +377,7 @@ function load(){
   if (level === null) {
     fetch(FN + "?action=access" + who()).then(function(x){ return x.json(); }).then(function(a){
       level = a.level || "none"; allowed = level === "edit"; canView = level === "edit" || level === "view";
+      if (canView) loadChecks();
       if (!allowed) {
         // View only: nothing that changes the board is offered.
         el("sync").style.display = "none";
@@ -1141,6 +1144,41 @@ function openPanel(id){
 document.addEventListener("keydown", function(e){ if (e.key === "Escape") el("panel").className = ""; });
 el("availBtn").onclick = function(){ location.href = "./availability.html"; };
 
+// ── To check ────────────────────────────────────────────────────────
+// Booking problems in ResRequest that the availability report finds (D-028):
+// a trip with guests but no master booking, a master in two products, guests
+// on a false safari. Shown here so they are seen without opening the report.
+var checks = [];
+var AV = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-availability";
+function loadChecks(){
+  fetch(AV + "?action=checks" + who()).then(function(x){ return x.json(); }).then(function(c){
+    checks = c.warnings || [];
+    var b = el("checkBtn"); b.hidden = false;
+    b.textContent = checks.length ? "⚠ To check (" + checks.length + ")" : "✓ Nothing to check";
+    b.className = checks.length ? "ghost warnbtn" : "ghost";
+  }).catch(function(){ /* worth having, not worth an error on the board */ });
+}
+el("checkBtn").onclick = function(){
+  var p = el("panel");
+  p.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">'
+    + '<div><h2>To check</h2><p class="meta">Booking problems in ResRequest that need fixing there. They clear by themselves at the next update once fixed.</p></div>'
+    + '<button class="ghost" id="closePanel">Close ✕</button></div>'
+    + (checks.length ? checks.map(function(w, i){
+        return '<div class="bk"><div class="h"><span>' + esc(nice(w.date)) + " " + w.date.slice(0, 4) + (w.code ? " · " + esc(w.code) : "") + '</span>'
+          + '<button type="button" class="ghost" data-go="' + i + '" style="padding:3px 10px;font-size:12px">Open safari</button></div>'
+          + '<div class="n">' + esc(w.text) + '</div></div>';
+      }).join("") : '<p>Nothing to check.</p>');
+  p.className = "on";
+  el("closePanel").onclick = function(){ p.className = ""; };
+  p.querySelectorAll("button[data-go]").forEach(function(b){
+    b.onclick = function(){
+      var w = checks[+b.getAttribute("data-go")];
+      el("from").value = add(w.date, -7);   // the safari a week down the screen
+      reload(w.departure_id);
+    };
+  });
+};
+
 // Update from ResRequest: the same small read the nightly job makes, only
 // what was edited since the last clean run (D-015; ResRequest's fair-usage
 // rules, daily-operations D-033), then a live check of the months on screen.
@@ -1171,7 +1209,7 @@ el("sync").onclick = function(){
     btn.disabled = false;
     setStatus("Updated: " + changed + " reservation" + (changed === 1 ? "" : "s") + " re-read, "
       + placed + " new departure" + (placed === 1 ? "" : "s") + " placed.");
-    load();
+    load(); loadChecks();
   }).catch(function(e){ btn.disabled = false; setStatus("ResRequest update failed: " + e.message, true); });
 };
 

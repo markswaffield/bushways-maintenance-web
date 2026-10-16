@@ -146,7 +146,7 @@ function render(){
   el("rows").innerHTML = '<table><thead><tr>' + cols.map(function(c){ return '<th>' + c + '</th>'; }).join("") + '</tr></thead><tbody>'
     + (rows || '<tr><td colspan="14" class="muted">No departures left in this period.</td></tr>') + '</tbody></table>';
   el("warnings").innerHTML = d.warnings && d.warnings.length
-    ? '<div class="warnings"><h2>To check (not shown to agents)</h2><ul>' + d.warnings.map(function(w){ return '<li>' + e(w) + '</li>'; }).join("") + '</ul></div>' : '';
+    ? '<div class="warnings"><h2>To check (not shown to agents; also on the Tour Master)</h2><ul>' + d.warnings.map(function(w){ return '<li>' + e(nice(w.date)) + (w.code ? " · " + e(w.code) : "") + ": " + e(w.text) + '</li>'; }).join("") + '</ul></div>' : '';
   var on = d.recipients.filter(function(r){ return r.active; }).map(function(r){ return r.email; });
   el("sentNote").textContent = "Emailed every Monday at 07:00 to " + (on.length ? on.join(", ") : "nobody yet") + "."
     + (d.last_sent ? " Last sent " + new Date(d.last_sent.sent_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) + (d.last_sent.error ? " (failed: " + d.last_sent.error + ")" : "") + "." : "");
