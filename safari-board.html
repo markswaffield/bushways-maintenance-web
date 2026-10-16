@@ -108,6 +108,11 @@
   .sp{font-weight:400;font-style:italic;color:#B5651D}
   .blk.night.sx.head .s .sc,.blk.night.sx.head .s .sp{color:inherit}
   .warnbtn{background:#FBEADF;border-color:#E3A86B;color:#7A4312}
+  .exp{font-size:11px;color:#6B665A;white-space:nowrap}
+  .exp.soon{color:#9A3B1A;font-weight:700}
+  #alertPop{position:fixed;inset:0;background:rgba(20,18,14,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;overflow:auto}
+  #alertPop .pop{background:#fff;border-radius:10px;border:2px solid #E3A86B;max-width:620px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  #alertPop h2{color:#7A4312;margin:0 0 4px}
   .lang{display:inline-block;flex:none;margin-left:3px;padding:0 3px;border-radius:3px;background:#1F3A5F;color:#fff;font-size:9.5px;font-weight:700;line-height:13px;letter-spacing:.02em}
   /* A translated safari's top line carries the full code and DE/FR (Mark,
      2026-10-16: "We need to see the full tour code and DE in the cell"):
@@ -387,7 +392,7 @@ function load(){
   if (level === null) {
     fetch(FN + "?action=access" + who()).then(function(x){ return x.json(); }).then(function(a){
       level = a.level || "none"; allowed = level === "edit"; canView = level === "edit" || level === "view";
-      if (canView) loadChecks();
+      if (canView) { loadChecks(); loadAlerts(); }
       if (!allowed) {
         // View only: nothing that changes the board is offered.
         el("sync").style.display = "none";
@@ -1083,7 +1088,10 @@ function openPanel(id){
       .filter(function(n){ return n[1]; })
       .map(function(n){ return '<div class="n"><em>' + n[0] + '</em>' + esc(n[1].trim()) + '</div>'; }).join("");
     return '<div class="bk"><div class="h"><span>' + (b.type && !b.is_master ? '<span class="sf sx" style="' + vars(lookOf({ type: b.type, product: d.product })) + '">' + esc(b.type) + '</span> ' : '') + esc(b.name) + ' <span style="color:#8A8270;font-weight:400">' + esc(b.reservation_id) + '</span></span>'
-      + '<span>' + esc(seats) + ' <span class="tag ' + st[1] + '">' + st[0] + '</span></span></div>' + join + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
+      + '<span>' + esc(seats) + ' <span class="tag ' + st[1] + '">' + st[0] + '</span>'
+      // D-030: when a provisional booking lapses in ResRequest.
+      + (b.rr_status === "20" && b.prov_expiry ? ' <span class="exp' + (b.prov_expiry <= add(iso(new Date()), 3) ? ' soon' : '') + '" title="Provisional expiry in ResRequest">expires ' + esc(nice(b.prov_expiry)) + '</span>' : '')
+      + '</span></div>' + join + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
   }
 
   var p = el("panel");
@@ -1172,34 +1180,79 @@ el("availBtn").onclick = function(){ location.href = "./availability.html"; };
 // on a false safari. Shown here so they are seen without opening the report.
 var checks = [];
 var AV = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-availability";
+var CHECK_GROUPS = [
+  ["expiring", "Provisional bookings about to expire", "Every booking on these safaris is provisional and lapses in ResRequest within 3 days."],
+  ["not_confirmed", "Leaving within 90 days, not confirmed", "Safaris with guests whose campsites or lodges are not all confirmed (D-030)."],
+  ["rr", "ResRequest booking problems", "Fix these in ResRequest; they clear at the next update."]
+];
 function loadChecks(){
-  fetch(AV + "?action=checks" + who()).then(function(x){ return x.json(); }).then(function(c){
-    checks = c.warnings || [];
-    var b = el("checkBtn"); b.hidden = false;
-    b.textContent = checks.length ? "⚠ To check (" + checks.length + ")" : "✓ Nothing to check";
-    b.className = checks.length ? "ghost warnbtn" : "ghost";
-  }).catch(function(){ /* worth having, not worth an error on the board */ });
+  var a = fetch(FN + "?action=checks" + who()).then(function(x){ return x.json(); }).then(function(c){ return c.checks || []; }).catch(function(){ return []; });
+  var b = fetch(AV + "?action=checks" + who()).then(function(x){ return x.json(); })
+    .then(function(c){ return (c.warnings || []).map(function(w){ w.kind = "rr"; return w; }); }).catch(function(){ return []; });
+  Promise.all([a, b]).then(function(r){
+    checks = r[0].concat(r[1]);
+    var btn = el("checkBtn"); btn.hidden = false;
+    btn.textContent = checks.length ? "⚠ To check (" + checks.length + ")" : "✓ Nothing to check";
+    btn.className = checks.length ? "ghost warnbtn" : "ghost";
+  });
+}
+function goTo(w){
+  el("from").value = add(w.date, -7);   // the safari a week down the screen
+  el("panel").className = "on";
+  reload(w.departure_id);
 }
 el("checkBtn").onclick = function(){
   var p = el("panel");
-  p.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">'
-    + '<div><h2>To check</h2><p class="meta">Booking problems in ResRequest that need fixing there. They clear by themselves at the next update once fixed.</p></div>'
-    + '<button class="ghost" id="closePanel">Close ✕</button></div>'
-    + (checks.length ? checks.map(function(w, i){
-        return '<div class="bk"><div class="h"><span>' + esc(nice(w.date)) + " " + w.date.slice(0, 4) + (w.code ? " · " + esc(w.code) : "") + '</span>'
-          + '<button type="button" class="ghost" data-go="' + i + '" style="padding:3px 10px;font-size:12px">Open safari</button></div>'
-          + '<div class="n">' + esc(w.text) + '</div></div>';
-      }).join("") : '<p>Nothing to check.</p>');
-  p.className = "on";
-  el("closePanel").onclick = function(){ p.className = ""; };
-  p.querySelectorAll("button[data-go]").forEach(function(b){
-    b.onclick = function(){
-      var w = checks[+b.getAttribute("data-go")];
-      el("from").value = add(w.date, -7);   // the safari a week down the screen
-      reload(w.departure_id);
-    };
+  var html = '<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">'
+    + '<div><h2>To check</h2><p class="meta">They clear by themselves once fixed and the Tour Master next updates.</p></div>'
+    + '<button class="ghost" id="closePanel">Close ✕</button></div>';
+  CHECK_GROUPS.forEach(function(g){
+    var list = checks.map(function(w, i){ return [w, i]; }).filter(function(x){ return x[0].kind === g[0]; });
+    if (!list.length) return;
+    html += '<h3 style="font-size:13px;margin:14px 0 2px">' + esc(g[1]) + ' (' + list.length + ')</h3><p class="meta" style="margin:0 0 6px">' + esc(g[2]) + '</p>'
+      + list.map(function(x){
+          var w = x[0];
+          return '<div class="bk"><div class="h"><span>' + esc(nice(w.date)) + " " + w.date.slice(0, 4) + (w.code ? " · " + esc(w.code) : "") + '</span>'
+            + '<button type="button" class="ghost" data-go="' + x[1] + '" style="padding:3px 10px;font-size:12px">Open safari</button></div>'
+            + '<div class="n">' + esc(w.text) + '</div></div>';
+        }).join("");
   });
+  if (!checks.length) html += '<p>Nothing to check.</p>';
+  p.innerHTML = html; p.className = "on";
+  el("closePanel").onclick = function(){ p.className = ""; };
+  p.querySelectorAll("button[data-go]").forEach(function(b){ b.onclick = function(){ goTo(checks[+b.getAttribute("data-go")]); }; });
 };
+
+// ── Alerts that pop up (D-030) ──────────────────────────────────────
+// A seat booked within 90 days on a safari not fully confirmed. Shown on
+// opening the Tour Master until an editor marks them seen; also emailed.
+function loadAlerts(){
+  if (el("alertPop")) return;
+  fetch(FN + "?action=alerts" + who()).then(function(x){ return x.json(); }).then(function(r){
+    var list = r.alerts || [];
+    if (!list.length) return;
+    var box = document.createElement("div");
+    box.id = "alertPop";
+    box.innerHTML = '<div class="pop" role="alertdialog" aria-labelledby="popT"><h2 id="popT">⚠ Booked within 90 days, not confirmed</h2>'
+      + '<p class="meta">New bookings on safaris whose campsites or lodges are not all confirmed.</p>'
+      + list.map(function(a, i){
+          return '<div class="bk"><div class="h"><span>' + (a.date ? esc(nice(a.date)) + " " + a.date.slice(0, 4) : "") + (a.code ? " · " + esc(a.code) : "") + '</span>'
+            + '<button type="button" class="ghost" data-pgo="' + i + '" style="padding:3px 10px;font-size:12px">Open safari</button></div>'
+            + '<div class="n">' + esc(a.summary) + '</div></div>';
+        }).join("")
+      + '<div class="edit" style="margin-top:10px">' + (allowed ? '<button type="button" id="popAck">Seen, I will deal with it</button> ' : '')
+      + '<button type="button" class="ghost" id="popClose">Close</button></div></div>';
+    document.body.appendChild(box);
+    var close = function(){ box.remove(); };
+    el("popClose").onclick = close;
+    if (el("popAck")) el("popAck").onclick = function(){
+      post("ack_alerts", { ids: list.map(function(a){ return a.id; }) }).then(close).catch(function(e){ alert("Not saved: " + e.message); });
+    };
+    box.querySelectorAll("button[data-pgo]").forEach(function(b){
+      b.onclick = function(){ var a = list[+b.getAttribute("data-pgo")]; close(); goTo({ date: a.date, departure_id: a.departure_id }); };
+    });
+  }).catch(function(){});
+}
 
 // Update from ResRequest: the same small read the nightly job makes, only
 // what was edited since the last clean run (D-015; ResRequest's fair-usage
@@ -1231,7 +1284,7 @@ el("sync").onclick = function(){
     btn.disabled = false;
     setStatus("Updated: " + changed + " reservation" + (changed === 1 ? "" : "s") + " re-read, "
       + placed + " new departure" + (placed === 1 ? "" : "s") + " placed.");
-    load(); loadChecks();
+    load(); loadChecks(); loadAlerts();
   }).catch(function(e){ btn.disabled = false; setStatus("ResRequest update failed: " + e.message, true); });
 };
 
