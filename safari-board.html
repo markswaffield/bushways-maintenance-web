@@ -157,6 +157,8 @@
   .nt.prov{font-style:italic;font-weight:400}
   .nt.prov::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#D9822B;margin-right:5px}
   .nt.conf{font-style:normal;font-weight:700;color:#232019}
+  .nt.pv{font-style:italic;font-weight:400}
+  .cstat.pv{color:#4A4436;font-style:italic}
   .nt .ntx{pointer-events:auto;cursor:pointer;overflow:hidden;text-overflow:ellipsis}
   .hb{display:inline-block;flex:none;font-style:normal;font-weight:700;font-size:9px;line-height:13px;color:#fff;background:#5E9B2E;border-radius:3px;padding:0 3px;margin-left:4px}
   .cstat{font-size:11px;white-space:nowrap}
@@ -285,7 +287,9 @@
   <span id="legendSafaris" style="display:contents"></span>
   <span><i style="background:#fff;border:2px dashed var(--open-bd)"></i>No guests yet (dashed)</span>
   <span><i style="background:#fff;border-color:#888;border-style:dotted;opacity:.6"></i>Pre night, with seats</span>
-  <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i>Campsite to enter</span>
+  <span><i style="background:#D9822B;border-color:#D9822B;border-radius:50%;width:9px;height:9px"></i><em>Location, nothing booked</em></span>
+  <span><em>Provisional booking</em></span>
+  <span><b>Confirmed booking</b></span>
   <span><i style="background:#fff;border-color:var(--clash)"></i>Clash or over seats</span>
   <span><i style="background:#E9E9E9;border-color:#9A9A9A"></i>Cancelled on the board</span>
 </div>
@@ -604,10 +608,13 @@ function draw(r){
       if (!txt) return;
       // D-026: a supplier night is provisional until confirmed with a ref.
       // D-027: a lodge night (n.own) is confirmed only by ResRequest.
-      var ncls = n.status === "confirmed" ? " conf" : " prov";
-      var tip = (n.area || "") + (n.campsite ? " · " + n.campsite : "") + (n.exclusive ? " · " + n.exclusive + ": confirmed, exclusive camping rights" : n.own ? " · " + rrText(n)
-        : n.status === "confirmed" ? " · Confirmed" + (n.hatab ? " · HATAB" : n.supplier ? " · " + n.supplier : "") + (n.ref ? " · Ref " + n.ref : "")
-                                   : " · Provisional" + (n.hatab ? " · HATAB" : ""));
+      // D-029: a location (orange dot, italics), a provisional booking
+      // (italics), or a confirmed booking (bold); the reference on hover.
+      var ncls = n.state === "confirmed" ? " conf" : n.state === "provisional" ? " pv" : " prov";
+      var tip = (n.campsite ? n.campsite + " · " + (n.area || "") : (n.area || "")) + " · " + stateText(n)
+        + (n.exclusive ? ", exclusive camping rights" : "")
+        + (n.own ? " · " + n.lodge : n.hatab ? " · HATAB" : n.supplier ? " · " + n.supplier : "")
+        + (n.ref ? " · Ref " + n.ref + (n.own ? " (ResRequest)" : "") : "");
       h.push('<div class="nt' + ncls + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">'
         + '<span class="ntx" data-id="' + d.id + '" title="' + esc(tip) + '">' + esc(txt) + '</span>' + (n.hatab ? '<span class="hb" title="HATAB">H</span>' : '') + '</div>');
     });
@@ -898,6 +905,9 @@ function lockIfViewOnly(){
 // Night by night: the area from the route, and the campsite a person
 // enters. Nights whose area is a region are marked: those need one (D-003).
 // A lodge night's state in ResRequest (D-027).
+function stateText(n){
+  return n.state === "confirmed" ? "Confirmed booking" : n.state === "provisional" ? "Provisional booking" : "Location only, nothing booked";
+}
 function rrText(n){
   if (!n.ref) return n.lodge + ": not booked in ResRequest, provisional";
   return n.lodge + (n.status === "confirmed" ? ": confirmed in ResRequest, " : ": provisional in ResRequest, ") + n.ref;
@@ -913,10 +923,15 @@ function nightsTable(d){
     var ref = n.exclusive ? '<span class="meta">exclusive camping rights</span>' : n.own ? '<span class="meta" title="' + esc(rrText(n)) + '">' + (n.ref ? esc(n.ref) + ' (ResRequest)' : 'not in ResRequest') + '</span>' : (allowed
       ? '<input data-ref="' + n.date + '" value="' + esc(n.ref || "") + '" placeholder="ref no.">'
       : esc(n.ref || ""));
-    var stat = (n.status === "confirmed"
-      ? '<span class="cstat conf">Confirmed</span>' + (n.confirmation_id ? ' <button type="button" class="ghost" data-doc="' + n.confirmation_id + '" title="Open the confirmation" style="padding:1px 6px;font-size:11px">📄</button>' : '')
-      : '<span class="cstat prov">Provisional</span>') + (n.hatab ? ' <span class="hb">H</span>' : '')
-      + (n.own ? ' <span class="meta">' + esc(n.lodge) + '</span>' : '');
+    // D-029: on a campsite night the person says provisional or confirmed;
+    // lodge nights follow ResRequest, DVL Camping is always confirmed.
+    var label = n.state === "confirmed" ? '<span class="cstat conf">Confirmed</span>' : n.state === "provisional" ? '<span class="cstat pv">Provisional</span>' : '<span class="cstat prov">Location</span>';
+    var pick = allowed && !n.own && !n.exclusive
+      ? '<select data-status="' + n.date + '" title="Location until a campsite is entered"><option value="provisional"' + (n.status !== "confirmed" ? " selected" : "") + '>Provisional</option><option value="confirmed"' + (n.status === "confirmed" ? " selected" : "") + '>Confirmed</option></select>'
+        + (n.state === "location" ? ' <span class="cstat prov">Location</span>' : '')
+      : label;
+    var stat = pick + (n.state === "confirmed" && n.confirmation_id ? ' <button type="button" class="ghost" data-doc="' + n.confirmation_id + '" title="Open the confirmation" style="padding:1px 6px;font-size:11px">📄</button>' : '')
+      + (n.hatab ? ' <span class="hb">H</span>' : '') + (n.own ? ' <span class="meta">' + esc(n.lodge) + '</span>' : '');
     return '<tr class="' + (n.needs_campsite && !n.campsite ? "need" : "") + '"><td>' + (i + 1) + '</td><td>' + nice(n.date) + '</td>'
       + '<td class="area' + (n.needs_campsite ? " need" : "") + '">' + esc(n.area || "—") + '</td><td>' + cell + '</td><td>' + ref + '</td><td>' + stat + '</td></tr>';
   }).join("");
@@ -924,7 +939,7 @@ function nightsTable(d){
   return '<h3 style="font-size:13px;margin:12px 0 4px">Nights and campsites</h3>'
     + '<table class="nights"><tr><th>Night</th><th>Date</th><th>Area</th><th>Campsite</th><th>Ref</th><th>Status</th></tr>' + rows + '</table>'
     + (stray ? '<p class="err">Entered for nights this safari no longer covers (ResRequest moved its dates):</p><ul>' + stray + '</ul>' : '')
-    + '<p class="meta" style="margin:4px 0 0">A night is provisional until the supplier\'s reference is entered; then it is confirmed. Nights at our own and managed lodges are confirmed by a confirmed booking in ResRequest carrying the safari\'s code. <span class="hb">H</span> HATAB.</p>'
+    + '<p class="meta" style="margin:4px 0 0"><b>Location</b> (orange dot, italics): only the area, nothing booked. <b>Provisional</b> (italics): a campsite or lodge booked, not yet confirmed. <b>Confirmed</b> (bold): confirmed, with the supplier\'s reference. Lodge nights follow their booking in ResRequest; DVL Camping is always confirmed. <span class="hb">H</span> HATAB.</p>'
     + (allowed ? '<div class="edit"><button id="csSave">Save campsites</button> <button type="button" class="ghost" id="readConf">📋 Read a confirmation</button> <span id="csMsg"></span></div><div id="readBox"></div>' : '');
 }
 
@@ -1138,7 +1153,8 @@ function openPanel(id){
     var days = [];
     p.querySelectorAll("input[data-date]").forEach(function(i){
       var dt = i.getAttribute("data-date"), r = p.querySelector('input[data-ref="' + dt + '"]');
-      days.push({ date: dt, campsite: i.value, ref: r ? r.value : undefined });
+      var st = p.querySelector('select[data-status="' + dt + '"]');
+      days.push({ date: dt, campsite: i.value, ref: r ? r.value : undefined, status: st ? st.value : undefined });
     });
     el("csMsg").className = ""; el("csMsg").textContent = "Saving…";
     post("campsites", { departure_id: d.id, days: days }).then(function(){
