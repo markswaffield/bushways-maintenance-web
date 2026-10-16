@@ -104,6 +104,10 @@
   .blk .s{font-weight:700}
   .blk .s.full{color:#2F6B45}
   .blk .s.over{color:var(--clash)}
+  .sc{font-weight:700;color:#2F6B45}
+  .sp{font-weight:400;font-style:italic;color:#B5651D}
+  .blk.night.sx.head .s .sc,.blk.night.sx.head .s .sp{color:inherit}
+  .lang{display:inline-block;margin-left:5px;padding:0 4px;border-radius:3px;background:#1F3A5F;color:#fff;font-size:10px;font-weight:700;line-height:14px;vertical-align:1px}
   .blk .end{margin-top:auto;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   /* Each safari in the Tour Master's own colours (Mark, 2026-10-04: "the
      colour codings are not to reflect each safari type, but rather each
@@ -516,7 +520,11 @@ function draw(r){
 
     var seatsCls = d.max_seats && d.seats > d.max_seats ? " over" : (d.max_seats && d.seats === d.max_seats ? " full" : "");
     var seatsTxt = d.seats + (d.max_seats ? "/" + d.max_seats : "");
-    var title = esc(label(d) + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats"
+    // Confirmed and provisional on the busiest night: "9/12 · 7C 2P".
+    var splitHtml = d.seats ? ' <span class="sc">' + d.seats_conf + 'C</span>' + (d.seats_prov ? ' <span class="sp">' + d.seats_prov + 'P</span>' : '') : '';
+    var splitTxt = d.seats ? d.seats_conf + " confirmed" + (d.seats_prov ? ", " + d.seats_prov + " provisional" : "")
+      + (d.max_seats ? ", " + Math.max(0, d.max_seats - d.seats) + " available" : "") : "";
+    var title = esc(label(d) + (d.language ? " · " + d.language : "") + " · " + d.product + " · " + d.type + " · " + seatsTxt + " seats" + (splitTxt ? " (" + splitTxt + ")" : "")
       + (d.mix.length > 1 ? " · " + mixText(d) : "")
       + (d.shelved ? " · CANCELLED on the board" : "") + (d.notes ? " · notes: " + d.notes : "")
       + (d.placed_by_person ? " · placed by hand" : "") + (allowed ? " · drag to move" : ""));
@@ -558,10 +566,10 @@ function draw(r){
       var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
       if (ln.code) {
         h.push('<button class="blk night ' + fam + ' head" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
-          + '<b>' + esc(label(d)) + '</b>' + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
+          + '<b>' + esc(label(d)) + '</b>' + (d.language ? '<span class="lang" title="Second language">' + esc(d.language) + '</span>' : '') + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
       } else if (ln.pre) {
         h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
-          + '<span class="s' + seatsCls + '">' + seatsTxt + ' seats</span><span class="pn">pre night</span></button>');
+          + '<span class="s' + seatsCls + '">' + seatsTxt + splitHtml + '</span><span class="pn">pre night</span></button>');
       } else {
         h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + title + '" style="' + row + '">' + esc(ln.text) + '</div>');
       }
@@ -1069,6 +1077,7 @@ function openPanel(id){
       + (!d.shelved ? '<button class="ghost" id="mvCancel">Move to Cancelled</button>' : '<button id="mvAuto">Put it back on the board</button>') + '</div>' : '')
     + '</td></tr>'
     + '<tr><th>Seats</th><td>' + d.seats + (d.max_seats ? " of " + d.max_seats : "") + ' on the busiest night'
+    + (d.seats ? '<br><span class="sc">' + d.seats_conf + ' confirmed</span> · <span class="sp">' + d.seats_prov + ' provisional</span>' + (d.max_seats ? ' · ' + Math.max(0, d.max_seats - d.seats) + ' available' : '') : '')
     + (d.booked !== d.seats ? '<br><span class="meta">' + d.booked + ' booked in all: some leave before others join</span>' : '') + '</td></tr>'
     + '<tr><th>Status</th><td>' + (d.shelved ? '<span class="tag x">Cancelled on the board</span> everything kept; drag it onto a vehicle or press Put it back to reactivate' : esc(d.status)) + '</td></tr></table>'
     + '<h3 style="font-size:13px;margin:12px 0 4px">History</h3><div id="histBox"><p class="meta">Loading…</p></div>'
