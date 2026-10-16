@@ -985,16 +985,34 @@ document.addEventListener("keydown", function(e){ if (e.key === "Escape") el("pa
 
 // Update from ResRequest: the same small read the nightly job makes, only
 // what was edited since the last clean run (D-015; ResRequest's fair-usage
-// rules, daily-operations D-033). Not a month-by-month pull.
+// rules, daily-operations D-033), then a live check of the months on screen.
 el("sync").onclick = function(){
   var btn = el("sync");
   btn.disabled = true;
   setStatus("Reading changes from ResRequest…");
+  // Then a live check of the months on screen. The changes list is not
+  // live: on 2026-10-16 "BWT2642 -Saiyu x 8+1C", renamed that day, was not
+  // on it yet, so Mark's update did nothing. One request per month; only the
+  // reservations ResRequest says changed since we last read them are re-read.
+  var months = [], r = range();
+  for (var m = r.from.slice(0, 7); m <= r.to.slice(0, 7); m = add(m + "-01", 32).slice(0, 7)) months.push(m);
+  var changed = 0, placed = 0;
   fetch(FN + "?action=sync_delta" + who(), { method: "POST" }).then(function(x){ return x.json(); }).then(function(res){
     if (res.error) throw new Error(res.error);
+    changed += res.safari_bookings || 0; placed += res.placed || 0;
+    return months.reduce(function(p, mo){
+      return p.then(function(){
+        setStatus("Checking " + mo + " in ResRequest…");
+        return fetch(FN + "?action=sync&month=" + mo + who()).then(function(x){ return x.json(); }).then(function(m){
+          if (m.error) throw new Error(m.error);
+          changed += m.read || 0; placed += m.placed || 0;
+        });
+      });
+    }, Promise.resolve());
+  }).then(function(){
     btn.disabled = false;
-    setStatus("Updated: " + res.safari_bookings + " safari booking" + (res.safari_bookings === 1 ? "" : "s") + " changed, "
-      + res.placed + " new departure" + (res.placed === 1 ? "" : "s") + " placed.");
+    setStatus("Updated: " + changed + " reservation" + (changed === 1 ? "" : "s") + " re-read, "
+      + placed + " new departure" + (placed === 1 ? "" : "s") + " placed.");
     load();
   }).catch(function(e){ btn.disabled = false; setStatus("ResRequest update failed: " + e.message, true); });
 };
