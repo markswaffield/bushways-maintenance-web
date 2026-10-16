@@ -80,8 +80,10 @@
   #app { display:flex; flex-direction:column; gap:22px; }
   @media print { .topbar { display:none; } }
 
-  td.reg { font-weight:600; white-space:nowrap; }
-  td.reg small { display:block; font-weight:400; color:var(--muted); font-size:12px; white-space:normal; }
+  td.reg { font-weight:600; }
+  /* The description beside the registration, not under it (Mark, 2026-10-16). */
+  td.reg small { display:inline; font-weight:400; color:var(--muted); font-size:13px; margin-left:4px; }
+  td.reg small::before { content:"· "; }
   .drv { white-space:nowrap; }
   .drv small { display:block; color:var(--muted); font-size:12px; }
   .dna { color:var(--warn-ink); font-weight:600; }
