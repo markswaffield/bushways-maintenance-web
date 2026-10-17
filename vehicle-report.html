@@ -104,7 +104,13 @@ var id = new URLSearchParams(location.search).get("id");
 var token = new URLSearchParams(location.search).get("t");
 // No token and no sign-in: sign in first, then come back here.
 if (!me && !token) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
-document.getElementById("backBtn").onclick = function () { location.href = "./safari-board.html"; };
+// Opened from the email without signing in: the button says so, and signing
+// in (or a phone's kept sign-in) lands on the Tour Master, not the tool list.
+if (!me) document.getElementById("backBtn").textContent = "Sign in to the Tour Master";
+document.getElementById("backBtn").onclick = function () {
+  if (!me) { try { sessionStorage.setItem("bw_after_signin", new URL("./safari-board.html", location.href).href); } catch (e) {} location.href = "./"; return; }
+  location.href = "./safari-board.html";
+};
 document.getElementById("printBtn").onclick = function () { window.print(); };
 
 function e(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {

@@ -108,6 +108,7 @@ if (!me && !token) { try { sessionStorage.setItem("bw_after_signin", location.hr
 // Back to the Reports page when that is where it was opened from.
 var fromReports = /reports\.html/.test(document.referrer || "");
 if (fromReports) document.getElementById("backBtn").textContent = "← Reports";
+if (!me) document.getElementById("backBtn").textContent = "Sign in to the Ops App";
 document.getElementById("backBtn").onclick = function () { location.href = fromReports ? "./reports.html" : "./"; };
 document.getElementById("printBtn").onclick = function () { window.print(); };
 function e(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }

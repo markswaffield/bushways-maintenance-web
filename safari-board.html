@@ -309,7 +309,9 @@ var ROW = 24, DAYW = 92, LANEW = 112;
 
 var me = null;
 try { var savedMe = sessionStorage.getItem("bw_signin"); if (savedMe) me = JSON.parse(savedMe); } catch (e) {}
-if (!me) { location.href = "./"; }
+// Not signed in in this tab (opened from a link): sign in, or resume a phone's
+// kept sign-in, and come straight back here.
+if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href.split("#")[0]); } catch (e) {} location.href = "./"; }
 // Access comes from the server, never from the page (D-017): 'edit' for
 // administrators and Tour Master editors, 'view' for view-only, or none.
 // `allowed` means may edit; `canView` means may look.
