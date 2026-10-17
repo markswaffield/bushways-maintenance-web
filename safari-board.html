@@ -1101,6 +1101,14 @@ function openPanel(id){
     var seats = tailor ? (b.pax != null ? b.pax + " guests" : "") : (b.units != null ? b.units + (b.units === 1 ? " seat" : " seats") : "");
     var join = b.arrive_date !== d.start_date || b.depart_date !== d.end_date
       ? '<div class="t">' + nice(b.arrive_date) + " → " + nice(b.depart_date) + '</div>' : "";
+    // D-034: who booked it, from ResRequest's Agent and Contact.
+    var party = function(label, p){
+      if (!p || !(p.name || p.phone || p.email)) return "";
+      return '<div class="n"><em>' + label + '</em>' + esc(p.name || "")
+        + (p.phone ? ' · <a href="tel:' + esc(p.phone.replace(/[^+0-9]/g, "")) + '">' + esc(p.phone) + '</a>' : '')
+        + (p.email ? ' · <a href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a>' : '') + '</div>';
+    };
+    var who = party("Agent", b.agent_info) + party("Contact", b.contact_info);
     var notes = [["Guests", b.rr_guest], ["Note", b.rr_note], ["Memo", b.rr_memo]]
       .filter(function(n){ return n[1]; })
       .map(function(n){ return '<div class="n"><em>' + n[0] + '</em>' + esc(n[1].trim()) + '</div>'; }).join("");
@@ -1108,7 +1116,7 @@ function openPanel(id){
       + '<span>' + esc(seats) + ' <span class="tag ' + st[1] + '">' + st[0] + '</span>'
       // D-030: when a provisional booking lapses in ResRequest.
       + (b.rr_status === "20" && b.prov_expiry ? ' <span class="exp' + (b.prov_expiry <= add(iso(new Date()), 3) ? ' soon' : '') + '" title="Provisional expiry in ResRequest">expires ' + esc(nice(b.prov_expiry)) + '</span>' : '')
-      + '</span></div>' + join + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
+      + '</span></div>' + join + who + (notes || '<div class="n" style="color:#8A8270">No notes in ResRequest.</div>') + '</div>';
   }
 
   var p = el("panel");
