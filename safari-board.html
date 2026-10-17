@@ -107,6 +107,7 @@
   .sc{font-weight:700;color:#2F6B45}
   .sp{font-weight:400;font-style:italic;color:#B5651D}
   .blk.night.sx.head .s .sc,.blk.night.sx.head .s .sp{color:inherit}
+  .crewln.grp{font-weight:700;font-style:italic;color:#4A4436;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .warnbtn{background:#FBEADF;border-color:#E3A86B;color:#7A4312}
   .exp{font-size:11px;color:#6B665A;white-space:nowrap}
   .exp.soon{color:#9A3B1A;font-weight:700}
@@ -585,7 +586,9 @@ function draw(r){
     });
     // The code has its own line so it is never cut short; the seats go on
     // the pre night line (Mark, 2026-10-05).
-    var stack = [{ code: true }].concat(lines.map(function(t){ return { text: t }; })).concat([{ pre: true }]);
+    // Tailor Made: the group name on the line under the BWT code (D-033).
+    var stack = [{ code: true }].concat(d.group ? [{ text: d.group, group: true }] : [])
+      .concat(lines.map(function(t){ return { text: t }; })).concat([{ pre: true }]);
     // A line is drawn only where nothing else in this column is on that day.
     var busy = function(day){
       return deps.some(function(o){
@@ -604,7 +607,7 @@ function draw(r){
         h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
           + '<span class="s' + seatsCls + '">' + seatsTxt + splitHtml + '</span><span class="pn">pre night</span></button>');
       } else {
-        h.push('<div class="crewln' + (d._crewClash ? " bad" : "") + '" data-id="' + d.id + '" title="' + title + '" style="' + row + '">' + esc(ln.text) + '</div>');
+        h.push('<div class="crewln' + (ln.group ? " grp" : (d._crewClash ? " bad" : "")) + '" data-id="' + d.id + '" title="' + (ln.group ? esc(ln.text) : title) + '" style="' + row + '">' + esc(ln.text) + '</div>');
       }
     });
     var s = d.start_date < r.from ? r.from : d.start_date;
