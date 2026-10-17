@@ -637,7 +637,8 @@ function draw(r){
       var tip = (n.campsite ? n.campsite + " · " + (n.area || "") : (n.area || "")) + " · " + stateText(n)
         + (n.exclusive ? ", exclusive camping rights" : "")
         + (n.own ? " · " + n.lodge : n.hatab ? " · HATAB" : n.supplier ? " · " + n.supplier : "")
-        + (n.ref ? " · Ref " + n.ref + (n.own ? " (ResRequest)" : "") : "");
+        + (n.ref ? " · Ref " + n.ref + (n.own ? " (ResRequest)" : "") : "")
+        + (n.source === "rr_itinerary" ? " · from the itinerary in ResRequest" : "");
       h.push('<div class="nt' + ncls + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">'
         + '<span class="ntx" data-id="' + d.id + '" title="' + esc(tip) + '">' + esc(txt) + '</span>' + (n.hatab ? '<span class="hb" title="HATAB">H</span>' : '') + '</div>');
     });
