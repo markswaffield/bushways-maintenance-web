@@ -114,6 +114,7 @@
   #alertPop{position:fixed;inset:0;background:rgba(20,18,14,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;overflow:auto}
   #alertPop .pop{background:#fff;border-radius:10px;border:2px solid #E3A86B;max-width:620px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
   #alertPop h2{color:#7A4312;margin:0 0 4px}
+  .kind{display:inline-block;flex:none;margin-left:3px;padding:0 3px;border-radius:3px;background:#fff;color:#7A1F12;border:1px solid #7A1F12;font-size:9.5px;font-weight:700;line-height:12px;letter-spacing:.02em}
   .lang{display:inline-block;flex:none;margin-left:3px;padding:0 3px;border-radius:3px;background:#1F3A5F;color:#fff;font-size:9.5px;font-weight:700;line-height:13px;letter-spacing:.02em}
   /* A translated safari's top line carries the full code and DE/FR (Mark,
      2026-10-16: "We need to see the full tour code and DE in the cell"):
@@ -601,8 +602,8 @@ function draw(r){
       if (day < r.from || day > r.to || (d.slot_id && i < stack.length - 1 && busy(day))) return;
       var row = 'grid-row:' + (diff(r.from, day) + 2) + ';grid-column:' + col;
       if (ln.code) {
-        h.push('<button class="blk night ' + fam + ' head' + (d.language ? ' hl' : '') + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
-          + '<b>' + esc(label(d)) + '</b>' + (d.language ? '<span class="lang" title="Second language">' + esc(d.language) + '</span>' : '') + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
+        h.push('<button class="blk night ' + fam + ' head' + ((d.language || d.bwt_kind) && d.code ? ' hl' : '') + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
+          + '<b>' + esc(label(d)) + '</b>' + (d.bwt_kind ? '<span class="kind" title="Tailor Made: ' + esc(d.type) + '">' + esc(d.bwt_kind) + '</span>' : '') + (d.language ? '<span class="lang" title="Second language">' + esc(d.language) + '</span>' : '') + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
       } else if (ln.pre) {
         h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
           + '<span class="s' + seatsCls + '">' + seatsTxt + splitHtml + '</span><span class="pn">pre night</span></button>');
