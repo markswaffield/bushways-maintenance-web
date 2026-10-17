@@ -79,7 +79,12 @@
   .reason { font-size:13px; color:var(--muted); }
   .loading { color:var(--muted); }
   #app { display:flex; flex-direction:column; gap:22px; }
-  @media print { .topbar { display:none; } }
+  .vjump { display:flex; gap:8px; flex-wrap:wrap; }
+  .vjump button { font:inherit; font-size:13.5px; font-weight:600; padding:9px 14px; border-radius:8px; cursor:pointer;
+    border:1.5px solid var(--accent); background:var(--accent-soft); color:var(--accent); }
+  .vpage { display:flex; flex-direction:column; gap:22px; scroll-margin-top:64px; }
+  .vpage + .vpage { border-top:3px double var(--line); padding-top:28px; margin-top:12px; }
+  @media print { .topbar, .vjump { display:none; } .vpage + .vpage { break-before:page; border:none; padding-top:0; margin-top:0; } }
 </style></head><body>
 <div class="page">
   <div class="topbar">
@@ -93,8 +98,12 @@ var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/safari-board";
 var me = null;
 try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
 var id = new URLSearchParams(location.search).get("id");
-// Arriving from the email with no sign-in: sign in first, then come back here.
-if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
+// The report email's link carries a private token, so it opens without
+// signing in: each browser tab has its own sign-in, and a link opened from
+// an email never sees the app's (Mark, 2026-10-17).
+var token = new URLSearchParams(location.search).get("t");
+// No token and no sign-in: sign in first, then come back here.
+if (!me && !token) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
 document.getElementById("backBtn").onclick = function () { location.href = "./safari-board.html"; };
 document.getElementById("printBtn").onclick = function () { window.print(); };
 
@@ -167,7 +176,6 @@ function render(x) {
   var harshOn = x.show_harsh === true;
   var r = x.report, d = harshOn ? r.data : Object.assign({}, r.data, { harsh: null }), sf = x.safari, v = verdict(d);
   var title = (sf.code || sf.type || "Safari") + (sf.code && sf.type ? " — " + sf.type : "");
-  document.title = (sf.code || "Safari") + " · " + r.registration + " · Vehicle Report";
   var role = r.role === "backup" ? "Back-up" : "Game drive";
   var prev = null;
   var runs = (d.starts || []).map(function (s) {
@@ -187,8 +195,7 @@ function render(x) {
       + (a.speeding ? '<span class="pill check">Speeding</span>' : '<span class="pill quiet">Geofence entry</span>') + '</td></tr>';
   }).join("");
   var pending = d.events_complete === false ? "Still being read from Telematics Guru." : null;
-  document.getElementById("app").innerHTML =
-    '<header class="masthead"><div><div class="kicker">Safari Vehicle Report</div><h1>' + e(title) + '</h1></div>'
+  return '<header class="masthead"><div><div class="kicker">Safari Vehicle Report</div><h1>' + e(title) + '</h1></div>'
     + '<div class="stamp">' + e(nice(sf.start_date)) + ' – ' + e(nice(sf.end_date)) + '<br>' + e(r.registration) + '</div></header>'
     + '<p class="reason">Built ' + e(new Date(r.built_at).toLocaleString("en-GB", { timeZone: "Africa/Gaborone", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))
     + ' · ' + e(r.reason) + '</p>'
@@ -227,12 +234,28 @@ function render(x) {
     + '<div><b>' + (harshOn ? "Harsh driving and alerts" : "Alerts") + '</b>: Telematics Guru\'s own events.</div></footer>';
 }
 
-if (me) {
-  fetch(FN + "?action=report&id=" + encodeURIComponent(id || "") + "&person_id=" + encodeURIComponent(me.id))
+// Every vehicle on the safari, each in its own section (Mark, 2026-10-17:
+// "when there are 2 vehicles on a safari the report opens with both vehicles
+// - each with their own page"); printed, each starts a new page.
+function show(x) {
+  var list = x.reports && x.reports.length ? x.reports : [{ report: x.report, vehicle: x.vehicle }];
+  document.title = (x.safari.code || "Safari") + " · Vehicle Report";
+  var jump = list.length > 1 ? '<nav class="vjump">' + list.map(function (it, i) {
+      return '<button type="button" data-v="' + i + '">' + e(it.report.registration) + ' · ' + (it.report.role === "backup" ? "Back-up" : "Game drive") + '</button>';
+    }).join("") + '</nav>' : '';
+  document.getElementById("app").innerHTML = jump + list.map(function (it, i) {
+    return '<section class="vpage" id="v' + i + '">' + render(Object.assign({}, x, { report: it.report, vehicle: it.vehicle })) + '</section>';
+  }).join("");
+  document.querySelectorAll(".vjump button").forEach(function (b) {
+    b.onclick = function () { document.getElementById("v" + b.getAttribute("data-v")).scrollIntoView({ behavior: "smooth", block: "start" }); };
+  });
+}
+if (me || token) {
+  fetch(FN + "?action=report&id=" + encodeURIComponent(id || "") + (me ? "&person_id=" + encodeURIComponent(me.id) : "") + (token ? "&t=" + encodeURIComponent(token) : ""))
     .then(function (r) { return r.json(); })
     .then(function (x) {
       if (x.error) { document.getElementById("app").innerHTML = '<p class="loading">' + e(x.error) + '</p>'; return; }
-      render(x);
+      show(x);
     })
     .catch(function () { document.getElementById("app").innerHTML = '<p class="loading">Could not load the report. Check the connection and try again.</p>'; });
 }

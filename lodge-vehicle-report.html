@@ -101,7 +101,10 @@ var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/telematics";
 var me = null;
 try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
 var id = new URLSearchParams(location.search).get("id");
-if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
+// The report email's link carries a private token, so it opens without
+// signing in (Mark, 2026-10-17); otherwise sign in first.
+var token = new URLSearchParams(location.search).get("t");
+if (!me && !token) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
 // Back to the Reports page when that is where it was opened from.
 var fromReports = /reports\.html/.test(document.referrer || "");
 if (fromReports) document.getElementById("backBtn").textContent = "← Reports";
@@ -168,8 +171,8 @@ function render(r) {
     + '<footer class="sources"><div><b>Driving and speeding</b>: Telematics Guru GPS readings, Bush Ways zone limits and the 80 km/h vehicle limit.</div>'
     + (harshOn ? '<div><b>Harsh driving</b>: Telematics Guru\'s own events.</div>' : '') + '<div><b>Drivers</b>: the Day Sheet. DNA: driver not assigned.</div></footer>';
 }
-if (me) {
-  fetch(FN + "?action=lodge_report&id=" + encodeURIComponent(id || "") + "&person_id=" + encodeURIComponent(me.id))
+if (me || token) {
+  fetch(FN + "?action=lodge_report&id=" + encodeURIComponent(id || "") + (me ? "&person_id=" + encodeURIComponent(me.id) : "") + (token ? "&t=" + encodeURIComponent(token) : ""))
     .then(function (r) { return r.json(); })
     .then(function (x) { if (x.error) { document.getElementById("app").innerHTML = '<p class="loading">' + e(x.error) + '</p>'; return; } render(x); })
     .catch(function () { document.getElementById("app").innerHTML = '<p class="loading">Could not load the report. Check the connection and try again.</p>'; });
