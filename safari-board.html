@@ -275,8 +275,8 @@
 
 <div class="toolbar">
   <div><label for="from">From</label><input type="date" id="from"></div>
-  <div><label for="weeks">Show</label>
-    <select id="weeks"><option value="4">4 weeks</option><option value="8" selected>8 weeks</option><option value="13">3 months</option><option value="26">6 months</option></select></div>
+  <div><label for="months">Show</label>
+    <select id="months"><option value="12" selected>12 months</option><option value="18">18 months</option><option value="24">24 months</option></select></div>
   <button class="ghost" id="earlier">◀ Earlier</button>
   <button class="ghost" id="today">Today</button>
   <button class="ghost" id="later">Later ▶</button>
@@ -349,14 +349,26 @@ var DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON=["Jan","Feb","Mar","Apr
 function nice(s){var d=parse(s);return DOW[d.getDay()]+" "+String(d.getDate()).padStart(2,"0")+" "+MON[d.getMonth()];}
 function setStatus(t,err){var s=el("status");s.textContent=t;s.className="status"+(err?" err":"");}
 
-var startFrom = (function(){ try { return sessionStorage.getItem("sb_from"); } catch (e) { return null; } })() || add(iso(new Date()), -7);
+// Opens one month before today, showing 12 months (Mark, 2026-10-17: "if it
+// 17 Oct today, then it must open show from the 17 Sept. Then the selection
+// options must be 12 months (default), 18 months, 24 months").
+function addMonths(s, n){
+  var d = parse(s), day = d.getDate();
+  d.setDate(1); d.setMonth(d.getMonth() + n);
+  var last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));   // 31 Mar less a month is 28 Feb
+  return iso(d);
+}
+function monthBack(){ return addMonths(iso(new Date()), -1); }
+var startFrom = (function(){ try { return sessionStorage.getItem("sb_from"); } catch (e) { return null; } })() || monthBack();
 el("from").value = startFrom;
-function range(){ var f = el("from").value; return { from: f, to: add(f, +el("weeks").value * 7 - 1) }; }
-function shift(n){ el("from").value = add(el("from").value, n); load(); }
-el("from").onchange = load; el("weeks").onchange = load;
-el("earlier").onclick = function(){ shift(-(+el("weeks").value * 7) / 2); };
-el("later").onclick = function(){ shift((+el("weeks").value * 7) / 2); };
-el("today").onclick = function(){ el("from").value = add(iso(new Date()), -7); load(); };
+function range(){ var f = el("from").value; return { from: f, to: add(addMonths(f, +el("months").value), -1) }; }
+function shiftMonths(n){ el("from").value = addMonths(el("from").value, n); load(); }
+el("from").onchange = load; el("months").onchange = load;
+// Earlier and Later move a month at a time.
+el("earlier").onclick = function(){ shiftMonths(-1); };
+el("later").onclick = function(){ shiftMonths(1); };
+el("today").onclick = function(){ el("from").value = monthBack(); load(); };
 
 // Freezes the date column and the corner by hand, with a transform kept in
 // step with horizontal scroll — CSS "position:sticky;left:0" stopped
