@@ -937,7 +937,36 @@
   var pendingHours = null;
   var pendingTourCode = null;
 
+  // Faults this phone found and has not sent yet (still in its queue) shown
+  // on the next check of the same thing, as "reported on this phone, waiting
+  // to send" (Mark, 2026-10-18: "if a check is done on an asset and a fault
+  // is found, but does not get repaired. How does this get seen in the next
+  // check if someone is offline"). Read-only, like any open fault.
   function renderChecklist(data, personId, roomId) {
+    if (!window.bwQueue) return drawChecklist(data, personId, roomId);
+    bwQueue.all().then(function (items) {
+      var waiting = {};
+      items.filter(function (it) { return it.kind === "check" && it.body && (it.body.target_id === roomId || it.body.room_id === roomId); })
+        .forEach(function (it) {
+          (it.body.results || []).concat(it.body.trailer_results || []).forEach(function (r) {
+            if (!r.failed) return;
+            (waiting[r.item_id] = waiting[r.item_id] || []).push({ fault_type_id: r.fault_type_id || null, created_at: it.done_at,
+              waiting: true, note: r.action_if_failed || r.note || null });
+          });
+        });
+      if (Object.keys(waiting).length) {
+        try { data = JSON.parse(JSON.stringify(data)); } catch (e) {}
+        (function walk(x) {
+          if (!x || typeof x !== "object") return;
+          if (Array.isArray(x)) { x.forEach(walk); return; }
+          if (x.id && waiting[x.id] && typeof x.text === "string") x.open_issues = (x.open_issues || []).concat(waiting[x.id]);
+          Object.keys(x).forEach(function (k) { if (x[k] && typeof x[k] === "object") walk(x[k]); });
+        })(data);
+      }
+      drawChecklist(data, personId, roomId);
+    }, function () { drawChecklist(data, personId, roomId); });
+  }
+  function drawChecklist(data, personId, roomId) {
     var c = document.getElementById("checklist");
     show("checklist");
 
@@ -1114,8 +1143,11 @@
             forceNewItemIds[item.id] = true;
             html2 = '<div class="item" data-item="' + item.id + '">' +
               '<label class="main"><input type="checkbox" checked disabled> ' + esc(item.text) + '</label>' +
-              '<p class="reopen-banner">⚠ Already reported' + (oiFault ? " — <b>" + esc(oiFault.name) + "</b>" : "") +
-              ', not yet fixed — ' + esc(timeAgo(oi.created_at)) + '. Update or resolve it from Fix a Fault.</p>' +
+              (oi.waiting
+                ? '<p class="reopen-banner">⚠ Reported on this phone' + (oiFault ? " — <b>" + esc(oiFault.name) + "</b>" : "")
+                  + (oi.note ? " (" + esc(oi.note) + ")" : "") + ', ' + esc(timeAgo(oi.created_at)) + ', waiting to send. It goes to the to-do list when this phone is next on WiFi.</p>'
+                : '<p class="reopen-banner">⚠ Already reported' + (oiFault ? " — <b>" + esc(oiFault.name) + "</b>" : "") +
+                  ', not yet fixed — ' + esc(timeAgo(oi.created_at)) + '. Update or resolve it from Fix a Fault.</p>') +
               '<label class="main" style="margin-top:8px"><input type="checkbox" data-failed="' + item.id + '"> A different problem with this too</label>' +
               '<div class="details">' + faultPickerHtml(item) +
               '<label>Action / notes</label><textarea data-action="' + item.id + '" rows="2" placeholder="What needs doing"></textarea>' +
@@ -1132,8 +1164,8 @@
             // above already gives — not just a count.
             var faultList = openIssues.map(function (oi) {
               var oiF = (item.faults || []).find(function (f) { return f.id === oi.fault_type_id; });
-              return '<li>' + (oiF ? esc(oiF.name) : 'A reported problem')
-                + ' — logged ' + esc(timeAgo(oi.created_at)) + '</li>';
+              return '<li>' + (oiF ? esc(oiF.name) : (oi.note ? esc(oi.note) : 'A reported problem'))
+                + (oi.waiting ? ' — reported on this phone ' + esc(timeAgo(oi.created_at)) + ', waiting to send' : ' — logged ' + esc(timeAgo(oi.created_at))) + '</li>';
             }).join('');
             // A real gap Mark caught, 2026-10-08: this branch built the
             // list above but never marked the item force_new the way the

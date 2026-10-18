@@ -183,12 +183,16 @@
     if (kind === "data") return Promise.resolve({ sent: 0, reason: "This phone is on mobile data. The checks wait for WiFi." });
     if (kind === "unknown" && !manual) return Promise.resolve({ sent: 0, reason: "waiting for Send now" });
     sending = true; refreshBar();
-    var sent = 0, failed = 0, lastError = null;
+    var sent = 0, failed = 0, lastError = null, targets = [];
     return all().then(function (items) {
       var chain = Promise.resolve();
       items.forEach(function (it) {
         chain = chain.then(function () {
-          return sendOne(it).then(function () { sent++; }, function (e) {
+          return sendOne(it).then(function () {
+            sent++;
+            var b = it.body || {};
+            [b.target_id, b.room_id, b.area_id, b.sub_area_id].forEach(function (t) { if (t && targets.indexOf(t) === -1) targets.push(t); });
+          }, function (e) {
             failed++; lastError = e.message;
             if (e.refused) {
               // The server turned it down: shown with its reason, not retried.
@@ -203,7 +207,7 @@
       return chain;
     }).then(function () {
       sending = false; refreshBar();
-      document.dispatchEvent(new CustomEvent("bwqueue:sent", { detail: { sent: sent, failed: failed } }));
+      document.dispatchEvent(new CustomEvent("bwqueue:sent", { detail: { sent: sent, failed: failed, targets: targets } }));
       return { sent: sent, failed: failed, error: lastError };
     }, function (e) { sending = false; refreshBar(); return { sent: sent, failed: failed, error: e.message }; });
   }
@@ -264,7 +268,14 @@
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 
   // Try whenever things change, and every minute on WiFi.
-  function tick() { refreshBar(); if (mayAutoSend()) flush(false); }
+  function tick() { refreshBar(); if (mayAutoSend()) { flush(false); if (lastSave) saveLodge(lastSave); } }
+  // Straight after sending: what those checks touched comes down again, and
+  // anything else older than an hour (iPhone's Send now counts as WiFi).
+  document.addEventListener("bwqueue:sent", function (e) {
+    var d = e.detail || {};
+    if (!lastSave || !d.sent) return;
+    saveLodge(Object.assign({}, lastSave, { refresh: d.targets || [], force: !mayAutoSend() }));
+  });
   window.addEventListener("online", tick);
   window.addEventListener("offline", refreshBar);
   var conn = navigator.connection; if (conn && conn.addEventListener) conn.addEventListener("change", tick);
@@ -285,7 +296,13 @@
   // start their day on Schedule, where nothing was saved. Now it RESUMES: a
   // checklist saved in the last 12 hours is skipped, so every open carries
   // on from where the last one stopped; and Schedule runs it too.
-  var SAVE_FRESH = 12 * 3600e3;
+  // An hour, not 12 (Mark, 2026-10-18: a fault found and not fixed must show
+  // on the next check, "can we not automatically update the checklists every
+  // time someone comes into Wifi"): on WiFi the phone refreshes whatever is
+  // older than an hour, and straight after sending, the checklists its checks
+  // touched.
+  var SAVE_FRESH = 3600e3;
+  var lastSave = null;
   var savingLodge = false;
   function lodgeGroups(data) {
     var g = [];
@@ -307,9 +324,11 @@
   // force: the person confirmed WiFi: refresh what is older than an hour.
   function saveLodge(o) {
     if (!o || !o.personId || !o.data || savingLodge) return Promise.resolve(false);
+    if (!o.refresh) lastSave = { fn: o.fn, campParam: o.campParam, campId: o.campId, personId: o.personId, data: o.data, groups: o.groups };
     if (!o.force && !mayAutoSend()) return Promise.resolve(false);
     var key = savedKey(o.campId, o.personId), FN = o.fn, cp = o.campParam || "", me = o.personId;
-    if (!o.force) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < SAVE_FRESH) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
+    var renew = o.refresh || [];   // target ids whose checklists must come down again now
+    if (!o.force && !renew.length) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < SAVE_FRESH) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
     var groups = o.groups === undefined ? chosenGroups(o.campId) : o.groups;
     var want = function (k) { return !groups || groups.indexOf(k) !== -1; };
     savingLodge = true;
@@ -338,7 +357,8 @@
         }).catch(function () {});
       });
     });
-    var fresh = o.force ? 3600e3 : SAVE_FRESH;
+    var fresh = o.force ? 15 * 60e3 : SAVE_FRESH;
+    var mustRenew = function (u) { return renew.some(function (t) { return u.indexOf("target=" + t) !== -1; }); };
     return chain.then(function () {
       return new Promise(function (done) {
         // Four at a time: one at a time took several minutes at Chobe's ~90.
@@ -354,7 +374,7 @@
           while (!stopped && running < 4 && i < n) {
             var u = urls[i++]; running++;
             copyAge(u).then(function (age) {
-              if (age != null && age < fresh) return true;   // saved recently: carry on
+              if (age != null && age < fresh && !mustRenew(u)) return true;   // saved recently: carry on
               return get(u).then(function () { return true; }, function () { return false; });
             }).then(function (got) { running--; finished++; if (got) ok++; note(); if (i >= n || stopped) end(); else pump(); });
           }
