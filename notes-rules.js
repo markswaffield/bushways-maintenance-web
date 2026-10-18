@@ -329,10 +329,12 @@ function extract(guestInfo, notes){
 // hold two or six. An uneven split still returns something (rounded) rather
 // than nothing, because the pax total still matters even when the exact
 // per-room count cannot be known.
+// The short forms too (Mark, 2026-10-18, Grubbs x13 at Chobe: "Sgl x3 /
+// Dbl x4 / Twin x1" read as nothing, so every room showed the whole party).
 var ROOM_COMPOSITION_WORDS = [
-  { re:/DOUBLE/i, label:"Double" }, { re:/TWIN/i,   label:"Twin" },
-  { re:/SINGLE/i, label:"Single" }, { re:/TRIPLE/i, label:"Triple" },
-  { re:/FAMILY/i, label:"Family" }, { re:/QUAD/i,   label:"Quad" }
+  { re:/^(DOUBLE|DOUBLES|DBL|DBLS|DBLE)$/i, label:"Double" }, { re:/^(TWIN|TWINS|TWN|TWNS)$/i, label:"Twin" },
+  { re:/^(SINGLE|SINGLES|SGL|SGLS|SNGL)$/i, label:"Single" }, { re:/^(TRIPLE|TRIPLES|TPL|TRPL|TRP)$/i, label:"Triple" },
+  { re:/^(FAMILY|FAMILIES|FAM)$/i, label:"Family" }, { re:/^(QUAD|QUADS|QUADRUPLE)$/i, label:"Quad" }
 ];
 var COMPOSITION_DEFAULT_PAX = { Double:2, Twin:2, Single:1, Triple:3, Family:4, Quad:4 };
 
@@ -364,15 +366,20 @@ function composition(guestInfo, notes){
   // appears on — ResRequest sometimes echoes the same "[note]" counts into
   // special_requests as well as guest_details (WB31839, 2026-10-06), and
   // scanning both naively doubled every room in the group.
+  // And the word first, with an x: "Dbl x4", "Twin x 1" (Grubbs x13,
+  // 2026-10-18). A guest's own "Sutz x8" is not a room word, so not counted.
   var seenCount = {}, counts = [], countRe = /\b(\d{1,2})\s*(?:x\s*)?([A-Za-z]+)\b/g, cm;
-  while ((cm = countRe.exec(text))){
-    var label = compositionLabel(cm[2]);
-    if (!label) continue;
-    var key = label + ":" + cm[1];
-    if (seenCount[key]) continue;
+  var add = function(word, n){
+    var label = compositionLabel(word);
+    if (!label) return;
+    var key = label + ":" + n;
+    if (seenCount[key]) return;
     seenCount[key] = true;
-    counts.push({ label: label, rooms: +cm[1] });
-  }
+    counts.push({ label: label, rooms: +n });
+  };
+  while ((cm = countRe.exec(text))) add(cm[2], cm[1]);
+  var wordFirst = /\b([A-Za-z]+)\s*x\s*(\d{1,2})\b/gi;
+  while ((cm = wordFirst.exec(text))) add(cm[1], cm[2]);
   if (!counts.length) return null;
 
   // A bare heading — just the type word, nothing else on the line — starts

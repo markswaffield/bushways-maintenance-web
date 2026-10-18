@@ -446,7 +446,17 @@ document.getElementById("boardBtn").onclick = function () {
 };
 document.getElementById("staffBtn").onclick = function () { location.href = "./staff.html"; };
 document.getElementById("assetsBtn").onclick = function () { location.href = "./assets.html"; };
+// Unsaved changes are lost on leaving: say so first (Chobe, 2026-10-18:
+// "when logging out the information is deleted").
+function unsavedCount(){ return Object.keys(typeof dirty === "object" && dirty ? dirty : {}).length; }
+window.addEventListener("beforeunload", function (e) {
+  if (!unsavedCount()) return;
+  e.preventDefault(); e.returnValue = "";
+});
 document.getElementById("signOut").onclick = function () {
+  var n = unsavedCount();
+  if (n && !confirm(n + (n === 1 ? " room has" : " rooms have") + " changes that are not saved yet. Sign out and lose them? Press Cancel, then Save changes, to keep them.")) return;
+  dirty = {};
   sessionStorage.removeItem("bw_signin"); try { localStorage.removeItem("bw_keep"); } catch (e) {}
   sessionStorage.removeItem("bw_camp");
   location.href = "./";
@@ -815,8 +825,38 @@ function liveGuestNames(roomId, loaded){
 // nameless one should (D-038's "assign from the start" for Matter x4
 // applies here too); typing a name only improves on the guess, it should
 // not be required to get one at all.
+// The rooms' breakdown for THIS leg of a party. ResRequest often holds one
+// party as several legs (Grubbs x13 at Chobe, 2026-10-18: 3 guests in 3
+// rooms, and 10 in 5), each carrying the whole party's note ("Sgl x3, Dbl x4,
+// Twin x1"). Each leg takes the rooms that fit its own rooms and guests:
+// the 3 singles for the first, the 4 doubles and the twin for the second.
+// Read again here when what was stored is empty, so a note the reader has
+// just learnt to read (short forms, "Dbl x4") is used without waiting a night.
+function legComposition(b){
+  var x = b && b.extraction || {};
+  var groups = (x.composition && x.composition.length) ? x.composition
+    : (typeof composition === "function" ? (composition(b.guest_details, b.special_requests) || []) : []);
+  if (!groups.length) return [];
+  var rooms = b.rooms_needed || 0, pax = (b.adults || 0) + (b.children || 0);
+  if (!rooms || groups.length <= rooms) return groups;
+  // Pick, by type, the counts that make exactly this leg's rooms and guests.
+  var types = [], have = {};
+  groups.forEach(function(g){ var k = g.type + "|" + g.pax; if (!have[k]) { have[k] = []; types.push(k); } have[k].push(g); });
+  var pick = null;
+  (function walk(i, left, guests, chosen){
+    if (pick) return;
+    if (i === types.length){ if (left === 0 && (!pax || guests === pax)) pick = chosen.slice(); return; }
+    var pool = have[types[i]], per = pool[0].pax;
+    for (var n = Math.min(pool.length, left); n >= 0; n--){ chosen[i] = n; walk(i + 1, left - n, guests + n * per, chosen); }
+  })(0, rooms, 0, []);
+  if (!pick) return [];
+  var out = [];
+  types.forEach(function(k, i){ out = out.concat(have[k].slice(0, pick[i])); });
+  return out;
+}
+
 function assignCompositionRooms(b){
-  var groups = b && b.extraction && b.extraction.composition;
+  var groups = legComposition(b);
   if (!groups || !groups.length) return {};
   var sibs = (sheet.rows || [])
     .filter(function(r){ return r.stay && r.stay.booking && r.stay.booking.id === b.id; })
@@ -914,7 +954,23 @@ function rowPax(b, roomId){
   if (!b) return 0;
   var match = matchComposition(b, roomId);
   if (match) return match.pax || 0;
-  return (b.adults || 0) + (b.children || 0);
+  return evenShare(b, roomId).total;
+}
+
+// A leg in several rooms with no breakdown in its notes: its guests shared
+// across its rooms, never the whole leg in every room (Mark, 2026-10-18: a
+// 10-guest leg in 5 rooms read as 10 per room, 69 guests in camp for 32).
+// The first rooms take any extra one: 3 in 2 rooms is 2 and 1.
+function evenShare(b, roomId){
+  var a = b.adults || 0, c = b.children || 0;
+  var sibs = (sheet.rows || []).filter(function(r){ return r.stay && r.stay.booking && r.stay.booking.id === b.id; })
+    .map(function(r){ return r.room_id; }).sort();
+  var n = Math.max(sibs.length, b.rooms_needed || 1);
+  if (n <= 1) return { a: a, c: c, total: a + c, shared: false };
+  var i = Math.max(0, sibs.indexOf(roomId));
+  var share = function(t){ return Math.floor(t / n) + (i < t % n ? 1 : 0); };
+  var sa = share(a), sc = share(c);
+  return { a: sa, c: sc, total: sa + sc, shared: true, of: a + c, rooms: n };
 }
 
 function cellPax(b, roomId){
@@ -924,10 +980,11 @@ function cellPax(b, roomId){
     return '<td class="ro c-pax" title="This room\'s own pax, from the group\'s own booking notes">'
       + esc(match.pax) + "</td>";
   }
-  var p = [];
-  if (b.adults) p.push(b.adults+"A");
-  if (b.children) p.push(b.children+"C");
-  return '<td class="ro c-pax">'+esc(p.join(" "))+"</td>";
+  var sh = evenShare(b, roomId), p = [];
+  if (sh.a) p.push(sh.a+"A");
+  if (sh.c) p.push(sh.c+"C");
+  return '<td class="ro c-pax"' + (sh.shared ? ' title="This room\'s share of the party\'s ' + sh.of + ' guests across ' + sh.rooms + ' rooms; the notes do not say who is in which room"' : '') + '>'
+    + esc(p.join(" "))+"</td>";
 }
 
 // One entry per column, in order. Change a width here and the frozen
@@ -1054,9 +1111,10 @@ function rowHtml(row){
 // allocated more than 6 pax - similar to your conflict highlight for the
 // vehicles." Six is a game-drive vehicle's worth.
 //
-// Counted per BOOKING, not per row. A party of four in two inter-leading
-// rooms appears on two lines with the same guide; counting rows would
-// call that eight people and flag a guide who has four.
+// Counted per ROOM, each room's own guests (rowPax), since 2026-10-18. A
+// party of four in two inter-leading rooms is 2 and 2, so a guide on both
+// has four; counting the whole party per booking flagged any guide on a
+// room of a big group (Grubbs x13 at Chobe).
 //
 // The limit comes from the LODGE, not from here — Mark, 2026-09-11:
 // "depending on the lodge we determine the max number per vehicle - so
@@ -1076,10 +1134,9 @@ function markGuideLoad(){
     var b = r.stay.booking || {};
     var g = perGuide[gid] || (perGuide[gid] = { pax: 0, seen: {}, cells: [] });
     if (sel) g.cells.push(sel);
-    if (b.id && !g.seen[b.id]) {
-      g.seen[b.id] = true;
-      g.pax += (b.adults || 0) + (b.children || 0);
-    }
+    // Each room's own guests (D-049): a guide on two rooms of a 13-guest
+    // party has those two rooms' guests, not the whole party.
+    g.pax += rowPax(b, r.room_id);
   });
   var over = [];
   Object.keys(perGuide).forEach(function(gid){
