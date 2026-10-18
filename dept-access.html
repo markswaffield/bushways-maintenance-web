@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Department access</title>
+<!--
+  Which kinds of assets each department sees (maintenance D-156). One tick
+  per department and area; "Everything" for a department that sees all.
+  Applies at every lodge (by department and area name). Managers, General
+  Managers, Base managers and administrators always see everything, and
+  anything assigned to a person or their department always shows. Reporting
+  a fault is open to everyone. Administrators only.
+-->
+<style>
+  body{font:16px/1.4 -apple-system,system-ui,sans-serif;margin:0;padding:16px 16px 64px;background:#F7F5F0;color:#232019}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:#6B6455;font-size:13px;margin:0 0 10px;max-width:720px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+  button{padding:8px 13px;font-size:14px;font-family:inherit;border:1px solid #43594A;background:#fff;color:#43594A;border-radius:6px;cursor:pointer}
+  button.primary{background:#43594A;color:#fff}
+  button:disabled{opacity:.5;cursor:default}
+  .wrapt{overflow-x:auto;background:#fff;border:1px solid #E2DDD0;border-radius:8px}
+  table{border-collapse:collapse;font-size:13px}
+  th,td{border-bottom:1px solid #F1EDE4;padding:6px 8px;text-align:center}
+  th{position:sticky;top:0;background:#F2EFE6;font-size:11.5px;font-weight:600;color:#5B5344;vertical-align:bottom;min-width:74px}
+  th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;min-width:170px;font-weight:600}
+  th:first-child{background:#F2EFE6;z-index:2}
+  td.all{background:#F6FAF6}
+  tr.everything td:not(:first-child):not(.all){opacity:.35}
+  input[type=checkbox]{width:18px;height:18px;accent-color:#43594A;cursor:pointer}
+  .lic{display:block;font-size:10.5px;color:#6B6455;margin-top:3px;white-space:nowrap}
+  .lic input{width:13px;height:13px;vertical-align:-2px}
+  .msg{font-size:13px;color:#6B6455}
+  .msg.ok{color:#2F6B45} .msg.err{color:#A8502F}
+  .note{font-size:12.5px;color:#6B6455;margin:10px 0 0;max-width:720px}
+</style></head><body>
+
+<h1>Department access</h1>
+<p class="sub">Which kinds of assets each department sees on Schedule, Inspection, the To-do list and Fix a fault, at every lodge. Managers and administrators always see everything. Anything assigned to a person or their department always shows, and anyone can report a fault anywhere.</p>
+<div class="bar">
+  <button type="button" id="backBtn">← Staff</button>
+  <button type="button" class="primary" id="saveBtn" disabled>Save changes</button>
+  <span class="msg" id="msg"></span>
+</div>
+<div class="wrapt" id="grid"><p class="msg" style="padding:12px">Loading…</p></div>
+<p class="note">A department with nothing ticked sees only what is assigned to it. "Licence only" on Boats means only people allowed to operate boats (set on their staff record) see the boats.</p>
+
+<script>
+var FN = "https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist";
+var me = null, data = null;
+try { var s = sessionStorage.getItem("bw_signin"); if (s) me = JSON.parse(s); } catch (e) {}
+if (!me) { try { sessionStorage.setItem("bw_after_signin", location.href); } catch (e) {} location.href = "./"; }
+function el(id){ return document.getElementById(id); }
+function esc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+el("backBtn").onclick = function(){ location.href = "./staff.html"; };
+
+function has(d, a){ return data.rules.some(function(r){ return r.department_name === d && r.area_name === a; }); }
+function lic(d){ return data.rules.some(function(r){ return r.department_name === d && r.area_name === "Boats" && r.needs_boat_licence; }); }
+function draw(){
+  var h = '<table><thead><tr><th>Department</th><th>Everything</th>' + data.areas.map(function(a){ return '<th>' + esc(a) + '</th>'; }).join("") + '</tr></thead><tbody>';
+  data.departments.forEach(function(d, i){
+    var all = has(d, "*");
+    h += '<tr' + (all ? ' class="everything"' : '') + '><td>' + esc(d) + '</td>'
+      + '<td class="all"><input type="checkbox" id="c' + i + '_all" data-d="' + esc(d) + '" data-a="*"' + (all ? ' checked' : '') + ' aria-label="' + esc(d) + ' sees everything"></td>'
+      + data.areas.map(function(a, j){
+          return '<td><input type="checkbox" id="c' + i + '_' + j + '" data-d="' + esc(d) + '" data-a="' + esc(a) + '"' + (has(d, a) ? ' checked' : '') + ' aria-label="' + esc(d) + ': ' + esc(a) + '">'
+            + (a === "Boats" ? '<label class="lic"><input type="checkbox" id="l' + i + '" data-lic="' + esc(d) + '"' + (lic(d) ? ' checked' : '') + '> licence only</label>' : '') + '</td>';
+        }).join("") + '</tr>';
+  });
+  el("grid").innerHTML = h + '</tbody></table>';
+}
+function collect(){
+  var rules = [];
+  document.querySelectorAll("input[data-d]").forEach(function(c){
+    if (!c.checked) return;
+    var d = c.getAttribute("data-d"), a = c.getAttribute("data-a");
+    var l = a === "Boats" ? document.querySelector('input[data-lic="' + CSS.escape(d) + '"]') : null;
+    rules.push({ department_name: d, area_name: a, needs_boat_licence: !!(l && l.checked) });
+  });
+  return rules;
+}
+document.addEventListener("change", function(e){
+  if (!e.target.closest("#grid")) return;
+  data.rules = collect();
+  draw();
+  el("saveBtn").disabled = false; el("msg").className = "msg"; el("msg").textContent = "Changed, not saved yet.";
+});
+el("saveBtn").onclick = function(){
+  el("saveBtn").disabled = true; el("msg").textContent = "Saving…";
+  fetch(FN + "?action=save_dept_access", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ person_id: me.id, rules: collect() }) })
+    .then(function(r){ return r.json(); })
+    .then(function(r){
+      if (r.error) throw new Error(r.error);
+      el("msg").className = "msg ok"; el("msg").textContent = "Saved. Staff see the change next time a page loads.";
+    })
+    .catch(function(e){ el("saveBtn").disabled = false; el("msg").className = "msg err"; el("msg").textContent = "Not saved: " + e.message; });
+};
+fetch(FN + "?action=dept_access&person_id=" + encodeURIComponent(me.id)).then(function(r){ return r.json(); }).then(function(d){
+  if (d.error) { el("grid").innerHTML = '<p class="msg err" style="padding:12px">' + esc(d.error) + '</p>'; return; }
+  data = d; draw();
+}).catch(function(){ el("grid").innerHTML = '<p class="msg err" style="padding:12px">Could not load. Check the connection and try again.</p>'; });
+</script>
+</body></html>

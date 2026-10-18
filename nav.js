@@ -96,7 +96,10 @@ function navHtml(me, active, hide) {
     links = links.filter(function (l) { return hide.indexOf(l.label) === -1; });
   }
   var row = '<p class="nav">' + links.map(function (l) {
-    return active === l.label ? "<b>" + l.label + "</b>" : '<a href="' + l.href + '">' + l.label + "</a>";
+    // Real buttons, not links (root CLAUDE.md hard rule; these were padded
+    // <a> links until 2026-10-18).
+    return active === l.label ? "<b>" + l.label + "</b>"
+      : '<button type="button" class="navlink" onclick="location.href=\'' + l.href + '\'">' + l.label + "</button>";
   }).join("") + "</p>";
 
   return row + navMenuHtml(links, active, me);
@@ -225,6 +228,9 @@ document.addEventListener("click", function (e) {
 (function () {
   var css = document.createElement("style");
   css.textContent =
+    ".nav button.navlink{padding:6px 11px;border-radius:6px;border:1px solid #C9C2AC;background:#fff;color:#232019;" +
+      "font:inherit;cursor:pointer;margin:0;width:auto}" +
+    ".nav button.navlink:hover{background:#F2EFE6}" +
     ".navm{position:fixed;top:10px;right:10px;z-index:200}" +
     ".navm-btn{width:46px;height:46px;padding:0;border-radius:11px;overflow:hidden;" +
       "border:1.5px solid rgba(255,255,255,.55);background:#122d31;cursor:pointer;" +

@@ -153,6 +153,7 @@
       <button id="backDaySheet" hidden onclick="location.href='./day-sheet.html'">← Day Sheet</button>
       <button id="backTourMaster" hidden onclick="location.href='./safari-board.html'">← Tour Master</button>
       <button id="changeCampBtn" hidden onclick="location.href='./base-dashboard.html'">Change camp</button>
+      <button id="deptAccessBtn" hidden onclick="location.href='./dept-access.html'">Department access</button>
       <button onclick="signOut()">Sign out</button>
     </span>
   </div>
@@ -523,6 +524,8 @@ document.getElementById("whoName").textContent = bwWho(me);
 if (camp && me.locations && me.locations.length > 1) {
   document.getElementById("changeCampBtn").hidden = false;
 }
+// Which assets each department sees (maintenance D-156): administrators.
+if (me && me.is_administrator) document.getElementById("deptAccessBtn").hidden = false;
 // Reached from the Day Sheet's Staff / Assets buttons (daily-operations
 // D-046): offer the way straight back there.
 if (/day-sheet\.html/.test(document.referrer || "")) document.getElementById("backDaySheet").hidden = false;

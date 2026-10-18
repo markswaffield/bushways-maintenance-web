@@ -306,9 +306,12 @@
   var savingLodge = false;
   function lodgeGroups(data) {
     var g = [];
+    // Only what this person may check (maintenance D-156): an area the
+    // server marks unavailable to them is not saved either.
+    var open = function (name) { var a = (data.areas || []).filter(function (x) { return x.name === name; })[0]; return !a || a.available; };
     var rooms = (data.rooms || []).filter(function (x) { return !x.area_id; });
-    if (rooms.length) g.push({ key: "rooms", name: "Guest Rooms", count: rooms.length });
-    if ((data.vehicles || []).length) g.push({ key: "vehicles", name: "Vehicles", count: data.vehicles.length });
+    if (rooms.length && open("Guest Rooms")) g.push({ key: "rooms", name: "Guest Rooms", count: rooms.length });
+    if ((data.vehicles || []).length && open("Vehicles")) g.push({ key: "vehicles", name: "Vehicles", count: data.vehicles.length });
     (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; })
       .forEach(function (a) { g.push({ key: "area:" + a.id, name: a.name, area: a }); });
     g.push({ key: "rounds", name: "Daily rounds" });
@@ -333,6 +336,8 @@
     var want = function (k) { return !groups || groups.indexOf(k) !== -1; };
     savingLodge = true;
     var urls = [], data = o.data;
+    var has = {}; lodgeGroups(data).forEach(function (g) { has[g.key] = true; });
+    var wantGroup = want; want = function (k) { return has[k] !== false && (k.indexOf("area:") === 0 || k === "rounds" ? wantGroup(k) : !!has[k] && wantGroup(k)); };
     if (want("rooms")) (data.rooms || []).filter(function (x) { return !x.area_id; }).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + me + "&target=" + x.id + "&target_type=room" + cp); });
     if (want("vehicles")) (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + me + "&target=" + x.id + "&target_type=vehicle" + cp); });
     var chain = Promise.resolve();
