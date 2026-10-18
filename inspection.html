@@ -388,72 +388,14 @@
   // What can be saved, as groups the person can tick (Mark, 2026-10-15:
   // "i would like the option to Select All"): Guest Rooms, Vehicles, each
   // other area, and the daily rounds.
-  function offlineGroups(data) {
-    var g = [];
-    var rooms = (data.rooms || []).filter(function (x) { return !x.area_id; });
-    if (rooms.length) g.push({ key: "rooms", name: "Guest Rooms", count: rooms.length });
-    if ((data.vehicles || []).length) g.push({ key: "vehicles", name: "Vehicles", count: data.vehicles.length });
-    (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; })
-      .forEach(function (a) { g.push({ key: "area:" + a.id, name: a.name, area: a }); });
-    g.push({ key: "rounds", name: "Daily rounds" });
-    return g;
-  }
-  function chosenGroups() {
-    try { var x = JSON.parse(localStorage.getItem(groupsKey()) || "null"); if (Array.isArray(x)) return x; } catch (e) {}
-    return null; // never chosen: everything
-  }
-
-  // force: the person confirmed WiFi (the button, or Send now): saved now,
-  // whatever the phone says and however recently it was last done.
-  // groups: the keys to save; null means everything (Android, by itself).
+  // The save itself is shared with Schedule, in offline-queue.js (bwOffline),
+  // and resumes where it stopped (2026-10-18).
+  function offlineGroups(data) { return bwOffline.groups(data); }
+  function chosenGroups() { return bwOffline.chosen(camp ? camp.id : null); }
   function saveForOffline(data, force, progress, groups) {
-    if (!window.bwQueue || !myPersonId || !data || savingOffline) return Promise.resolve(false);
-    if (!force && !bwQueue.mayAutoSend()) return Promise.resolve(false);
-    var key = offlineKey();
-    if (!force) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < 12 * 3600e3) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
-    var want = function (k) { return !groups || groups.indexOf(k) !== -1; };
-    savingOffline = true;
-    var urls = [];
-    if (want("rooms")) (data.rooms || []).filter(function (x) { return !x.area_id; }).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=room" + campParam()); });
-    if (want("vehicles")) (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=vehicle" + campParam()); });
-    var chain = Promise.resolve();
-    // The lodge's daily rounds (consolidated.html asks for exactly this
-    // address), found on the same lists the Schedule page reads.
-    if (want("rounds")) chain = chain.then(function () {
-      return Promise.all([bwApi.get(FN + "?action=dashboard" + campParam()), bwApi.get(FN + "?action=schedules_list" + campParam())])
-        .then(function (lists) {
-          var ids = {};
-          (function walk(x) {
-            if (!x || typeof x !== "object") return;
-            if (Array.isArray(x)) { x.forEach(walk); return; }
-            if (x.is_schedule && x.consolidated && x.id) ids[x.id] = true;
-            Object.keys(x).forEach(function (k) { if (x[k] && typeof x[k] === "object") walk(x[k]); });
-          })(lists);
-          Object.keys(ids).forEach(function (id) { urls.push(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(id) + campParam()); });
-        }).catch(function () {});
-    });
-    offlineGroups(data).filter(function (g) { return g.area && want(g.key); }).forEach(function (g) {
-      chain = chain.then(function () {
-        return bwApi.get(FN + "?action=area_targets&area=" + g.area.id + campParam()).then(function (t) {
-          var list = t.targets || [];
-          if (!list.length) urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + g.area.id + "&target_type=area" + campParam());
-          list.forEach(function (x) { urls.push(FN + "?action=checklist&person=" + myPersonId + "&target=" + x.id + "&target_type=" + (x.type || "asset") + campParam()); });
-        }).catch(function () {});
-      });
-    });
-    return chain.then(function () {
-      return new Promise(function (done) {
-        var i = 0, ok = 0;
-        (function next() {
-          if (progress) progress(i, urls.length);
-          if (i >= urls.length || (!force && !bwQueue.mayAutoSend())) {
-            if (i >= urls.length && ok) try { localStorage.setItem(key, String(Date.now())); } catch (e) {}
-            savingOffline = false; done(ok); return;
-          }
-          bwApi.get(urls[i++]).then(function () { ok++; }, function () {}).then(function () { setTimeout(next, 150); });
-        })();
-      });
-    });
+    if (!window.bwOffline || !myPersonId || !data) return Promise.resolve(false);
+    return bwOffline.save({ fn: FN, campParam: campParam(), campId: camp ? camp.id : null, personId: myPersonId,
+                            data: data, force: force, progress: progress, groups: groups });
   }
 
   // The button, on iPhone and any phone that won't say what it's on.

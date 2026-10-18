@@ -250,6 +250,7 @@
 <!-- "I'm taking a vehicle" (maintenance D-153): only for the people allowed
      to take one; the server decides who, and which vehicles. -->
 <div id="vehicleBar" hidden style="margin:10px 0 0;padding:10px 12px;border:1px solid #D9D2C2;border-radius:8px;background:#fff"></div>
+<div id="offlineReady" hidden style="margin:0 0 10px;padding:8px 12px;border-radius:8px;font-size:13.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
@@ -1957,6 +1958,36 @@
   // ever runs for someone already signed in. Arriving with no session
   // at all (a bookmark, a stale tab) sends you back there rather than
   // showing a page with nobody attributed to anything on it.
+  // Checks with no signal (maintenance D-150): every checklist at the lodge
+  // kept on the phone, saved from here too, where staff start their day,
+  // and a line saying whether the phone is ready (Chobe, 2026-10-18: "we can
+  // only do 2 checks at a time without wifi").
+  function offlineSave(b, force) {
+    if (!window.bwOffline || !/Mobile|Android|iPhone|iPad/i.test(navigator.userAgent || "")) return;
+    var box = document.getElementById("offlineReady"), campId = camp && camp.id ? camp.id : null;
+    var show = function (text, kind, btn) {
+      box.hidden = false;
+      box.style.background = kind === "ok" ? "#E4EBE2" : "#FBEADF";
+      box.style.color = kind === "ok" ? "#2F4D3A" : "#7A4312";
+      box.innerHTML = '<span>' + text + '</span>' + (btn ? '<button type="button" id="offlineNow" style="padding:6px 12px">Save checklists — I\'m on WiFi</button>' : '');
+      var nb = document.getElementById("offlineNow");
+      if (nb) nb.onclick = function () { offlineSave(b, true); };
+    };
+    var status = function () {
+      var st = bwOffline.status(campId, me.id);
+      if (st.done) show("✓ Ready for no signal: checklists saved " + new Date(st.done).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ".", "ok",
+        bwQueue.connectionKind() === "unknown");
+      else if (st.have && st.total) show("Partly saved for no signal: " + st.have + " of " + st.total + " checklists. Keep the app open on WiFi to finish" + (bwQueue.connectionKind() === "unknown" ? ", or tap:" : "."), "warn",
+        bwQueue.connectionKind() === "unknown");
+      else show("Checklists not saved on this phone yet: checks will not open with no signal." + (bwQueue.connectionKind() === "unknown" ? " On WiFi, tap:" : " Open the app on WiFi."), "warn",
+        bwQueue.connectionKind() === "unknown");
+    };
+    status();
+    bwOffline.save({ fn: BASE_FN, campParam: CAMP_PARAM, campId: campId, personId: me.id, data: b, force: force,
+      progress: function (i, n) { if (n) show("Saving checklists for no signal… " + i + " of " + n + ". Stay on WiFi a minute.", "warn", false); } })
+      .then(function (ok) { status(); if (force && !ok) show("Couldn't save — check the WiFi and try again.", "warn", true); });
+  }
+
   if (!me) { location.href = "./"; }
   else {
   var BOOT = BASE_FN + (CAMP_PARAM ? "?" + CAMP_PARAM.slice(1) : "");
@@ -1964,6 +1995,7 @@
     people = b.people || [];
     boot_vehicles = b.vehicles || [];
     showSignedIn();
+    offlineSave(b, false);
     return reload();
   }).catch(function (e) {
     document.getElementById("app").innerHTML = '<p class="loading">Could not load: ' + esc(e) + '</p>';

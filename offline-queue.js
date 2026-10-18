@@ -271,6 +271,107 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tick); else tick();
   setInterval(tick, 60000);
 
-  window.bwApi = { get: get };
+  // How old the phone's copy of an address is, in ms; null when there is none.
+  function copyAge(url) {
+    return tx("copies", "readonly", function (s) { return s.get(url); })
+      .then(function (k) { return k && k.at ? Date.now() - k.at : null; }, function () { return null; });
+  }
+
+  // ── Every checklist at the lodge, kept on the phone (D-150) ──
+  // Shared by Inspection and Schedule (Chobe, 2026-10-18: "we can only do 2
+  // checks at a time without wifi"). The save took about a minute and began
+  // again from the first checklist each time Inspection opened, so a staff
+  // member opening one check after another never let it finish, and staff
+  // start their day on Schedule, where nothing was saved. Now it RESUMES: a
+  // checklist saved in the last 12 hours is skipped, so every open carries
+  // on from where the last one stopped; and Schedule runs it too.
+  var SAVE_FRESH = 12 * 3600e3;
+  var savingLodge = false;
+  function lodgeGroups(data) {
+    var g = [];
+    var rooms = (data.rooms || []).filter(function (x) { return !x.area_id; });
+    if (rooms.length) g.push({ key: "rooms", name: "Guest Rooms", count: rooms.length });
+    if ((data.vehicles || []).length) g.push({ key: "vehicles", name: "Vehicles", count: data.vehicles.length });
+    (data.areas || []).filter(function (a) { return a.available && a.name !== "Vehicles" && a.name !== "Guest Rooms"; })
+      .forEach(function (a) { g.push({ key: "area:" + a.id, name: a.name, area: a }); });
+    g.push({ key: "rounds", name: "Daily rounds" });
+    return g;
+  }
+  function savedKey(campId, personId) { return "bw_offline_saved_" + (campId || "default") + "_" + personId; }
+  function groupsKey(campId) { return "bw_offline_groups_" + (campId || "default"); }
+  function chosenGroups(campId) {
+    try { var x = JSON.parse(localStorage.getItem(groupsKey(campId)) || "null"); if (Array.isArray(x)) return x; } catch (e) {}
+    return null; // never chosen: everything
+  }
+  // o: { fn, campParam, campId, personId, data (the boot list), force, progress(i, n), groups }
+  // force: the person confirmed WiFi: refresh what is older than an hour.
+  function saveLodge(o) {
+    if (!o || !o.personId || !o.data || savingLodge) return Promise.resolve(false);
+    if (!o.force && !mayAutoSend()) return Promise.resolve(false);
+    var key = savedKey(o.campId, o.personId), FN = o.fn, cp = o.campParam || "", me = o.personId;
+    if (!o.force) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < SAVE_FRESH) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
+    var groups = o.groups === undefined ? chosenGroups(o.campId) : o.groups;
+    var want = function (k) { return !groups || groups.indexOf(k) !== -1; };
+    savingLodge = true;
+    var urls = [], data = o.data;
+    if (want("rooms")) (data.rooms || []).filter(function (x) { return !x.area_id; }).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + me + "&target=" + x.id + "&target_type=room" + cp); });
+    if (want("vehicles")) (data.vehicles || []).forEach(function (x) { urls.push(FN + "?action=checklist&person=" + me + "&target=" + x.id + "&target_type=vehicle" + cp); });
+    var chain = Promise.resolve();
+    if (want("rounds")) chain = chain.then(function () {
+      return Promise.all([get(FN + "?action=dashboard" + cp), get(FN + "?action=schedules_list" + cp)]).then(function (lists) {
+        var ids = {};
+        (function walk(x) {
+          if (!x || typeof x !== "object") return;
+          if (Array.isArray(x)) { x.forEach(walk); return; }
+          if (x.is_schedule && x.consolidated && x.id) ids[x.id] = true;
+          Object.keys(x).forEach(function (k) { if (x[k] && typeof x[k] === "object") walk(x[k]); });
+        })(lists);
+        Object.keys(ids).forEach(function (id) { urls.push(FN + "?action=consolidated_checklist&schedule=" + encodeURIComponent(id) + cp); });
+      }).catch(function () {});
+    });
+    lodgeGroups(data).filter(function (g) { return g.area && want(g.key); }).forEach(function (g) {
+      chain = chain.then(function () {
+        return get(FN + "?action=area_targets&area=" + g.area.id + cp).then(function (t) {
+          var list = t.targets || [];
+          if (!list.length) urls.push(FN + "?action=checklist&person=" + me + "&target=" + g.area.id + "&target_type=area" + cp);
+          list.forEach(function (x) { urls.push(FN + "?action=checklist&person=" + me + "&target=" + x.id + "&target_type=" + (x.type || "asset") + cp); });
+        }).catch(function () {});
+      });
+    });
+    var fresh = o.force ? 3600e3 : SAVE_FRESH;
+    return chain.then(function () {
+      return new Promise(function (done) {
+        // Four at a time: one at a time took several minutes at Chobe's ~90.
+        var i = 0, ok = 0, finished = 0, stopped = false, running = 0, n = urls.length;
+        var note = function () { try { localStorage.setItem(key + "_total", String(n)); localStorage.setItem(key + "_have", String(ok)); } catch (e) {} if (o.progress) o.progress(finished, n); };
+        var end = function () {
+          if (running) return;
+          if (finished >= n && ok) try { localStorage.setItem(key, String(Date.now())); } catch (e) {}
+          note(); savingLodge = false; done(ok);
+        };
+        var pump = function () {
+          if (!o.force && !mayAutoSend()) stopped = true;
+          while (!stopped && running < 4 && i < n) {
+            var u = urls[i++]; running++;
+            copyAge(u).then(function (age) {
+              if (age != null && age < fresh) return true;   // saved recently: carry on
+              return get(u).then(function () { return true; }, function () { return false; });
+            }).then(function (got) { running--; finished++; if (got) ok++; note(); if (i >= n || stopped) end(); else pump(); });
+          }
+          if (!running && (i >= n || stopped)) end();
+        };
+        note(); pump();
+      });
+    });
+  }
+  // How ready the phone is: { done (complete save time or 0), total, saved }.
+  function lodgeStatus(campId, personId) {
+    var key = savedKey(campId, personId), last = 0, total = 0, have = 0;
+    try { last = Number(localStorage.getItem(key) || 0); total = Number(localStorage.getItem(key + "_total") || 0); have = Number(localStorage.getItem(key + "_have") || 0); } catch (e) {}
+    return { done: last, total: total, have: have };
+  }
+
+  window.bwApi = { get: get, copyAge: copyAge };
+  window.bwOffline = { save: saveLodge, groups: lodgeGroups, chosen: chosenGroups, groupsKey: groupsKey, savedKey: savedKey, status: lodgeStatus };
   window.bwQueue = { add: add, all: all, send: send, flush: flush, mayAutoSend: mayAutoSend, connectionKind: connectionKind, refresh: refreshBar };
 })();
