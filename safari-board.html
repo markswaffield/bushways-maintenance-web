@@ -177,6 +177,16 @@
   .readbox table{width:100%;font-size:12.5px;border-collapse:collapse;margin:6px 0}
   .readbox td{padding:3px 4px;border-bottom:1px solid #EEE9DD}
   .nt.end{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6B6455}
+  /* D-039: hotel rooms held. On the pre night and END lines, and a "+4" on a
+     night when guests joining the next day have a pre night of their own. */
+  .hh{font-size:10px;color:#3B362B;font-style:italic;font-weight:400;letter-spacing:0}
+  .hh.conf{font-style:normal;font-weight:700;color:#232019}
+  .hh.req{color:#8C4A12}
+  .hh.req::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#D9822B;margin-right:3px;vertical-align:1px}
+  .nt .hh{pointer-events:auto;cursor:help}
+  .jn{flex:none;font-size:9.5px;font-style:italic;font-weight:400;color:#6B6455;margin-left:5px;pointer-events:auto;cursor:help}
+  table.holds input{width:100%;font-size:12px}
+  table.holds input.rm{width:52px}
   .nt.site{font-weight:700;color:#232019}
   .blk[draggable=true]{cursor:grab}
   .blk.dragging{opacity:.35}
@@ -606,7 +616,8 @@ function draw(r){
           + '<b>' + esc(label(d)) + '</b>' + (d.bwt_kind ? '<span class="kind" title="Tailor Made: ' + esc(d.type) + '">' + esc(d.bwt_kind) + '</span>' : '') + (d.language ? '<span class="lang" title="Second language">' + esc(d.language) + '</span>' : '') + (d.notes ? '<span class="nmark" title="Has additional notes">✎</span>' : '') + '</button>');
       } else if (ln.pre) {
         h.push('<button class="blk night ' + fam + '" data-id="' + d.id + '"' + drag + ' title="' + title + '" style="' + sv + row + '">'
-          + '<span class="s' + seatsCls + '">' + seatsTxt + splitHtml + '</span><span class="pn">pre night</span></button>');
+          + '<span class="s' + seatsCls + '">' + seatsTxt + splitHtml + '</span>'
+          + (holdsOf(d, "pre", pre).filter(function(h){ return !h.segment; }).map(holdTag).join(" ") || '<span class="pn">pre night</span>') + '</button>');
       } else {
         h.push('<div class="crewln' + (ln.group ? " grp" : (d._crewClash ? " bad" : "")) + '" data-id="' + d.id + '" title="' + (ln.group ? esc(ln.text) : title) + '" style="' + row + '">' + esc(ln.text) + '</div>');
       }
@@ -623,7 +634,10 @@ function draw(r){
     // (Tailor Made) or the trip started above the screen.
     d.nights.forEach(function(n, i){
       if (n.date < r.from || n.date > r.to) return;
-      var txt = n.campsite || n.area;
+      // D-039: a Pioneers night held for the safari shows the hotel and rooms,
+      // unless a person has typed something else for that night.
+      var sh = !n.campsite ? holdsOf(d, "safari", n.date)[0] : null;
+      var txt = n.campsite || (sh ? holdShort(sh) : null) || n.area;
       if (i === 0 || n.date === r.from) {
         if (!txt) { if (n.date === r.from) txt = label(d) + " · " + seatsTxt; } // else the pre night already says it
         else if (n.date === r.from) txt = label(d) + " · " + txt; // its pre night is above the screen
@@ -634,16 +648,21 @@ function draw(r){
       // D-029: a location (orange dot, italics), a provisional booking
       // (italics), or a confirmed booking (bold); the reference on hover.
       var ncls = n.state === "confirmed" ? " conf" : n.state === "provisional" ? " pv" : " prov";
+      if (sh) ncls = sh.status === "confirmed" ? " conf" : sh.status === "on_request" ? " prov" : " pv";
+      var joiners = holdsOf(d, "pre", n.date).filter(function(h){ return h.segment; });
       var tip = (n.campsite ? n.campsite + " · " + (n.area || "") : (n.area || "")) + " · " + stateText(n)
         + (n.exclusive ? ", exclusive camping rights" : "")
         + (n.own ? " · " + n.lodge : n.hatab ? " · HATAB" : n.supplier ? " · " + n.supplier : "")
         + (n.ref ? " · Ref " + n.ref + (n.own ? " (ResRequest)" : "") : "")
-        + (n.source === "rr_itinerary" ? " · from the itinerary in ResRequest" : "");
+        + (n.source === "rr_itinerary" ? " · from the itinerary in ResRequest" : "")
+        + (sh ? " · " + holdTip(sh) : "");
       h.push('<div class="nt' + ncls + '" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, n.date) + 2) + ';grid-column:' + col + '">'
-        + '<span class="ntx" data-id="' + d.id + '" title="' + esc(tip) + '">' + esc(txt) + '</span>' + (n.hatab ? '<span class="hb" title="HATAB">H</span>' : '') + '</div>');
+        + '<span class="ntx" data-id="' + d.id + '" title="' + esc(tip) + '">' + esc(txt) + '</span>' + (n.hatab ? '<span class="hb" title="HATAB">H</span>' : '')
+        + joiners.map(function(h){ return '<span class="jn" title="' + esc(holdTip(h)) + '">+' + esc(holdShort(h)) + '</span>'; }).join("") + '</div>');
     });
     if (d.end_date >= r.from && d.end_date <= r.to) {
-      h.push('<div class="nt end" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? "END (estimated)" : "END") + '</div>');
+      h.push('<div class="nt end" style="' + (lk ? "color:" + lk.bf + ";" : "") + 'grid-row:' + (diff(r.from, d.end_date) + 2) + ';grid-column:' + col + '">' + (d.end_date_estimated ? (holdsOf(d, "post", d.end_date).length ? "END (est.)" : "END (estimated)") : "END")
+        + holdsOf(d, "post", d.end_date).map(function(h){ return " · " + holdTag(h); }).join("") + '</div>');
     }
   });
 
@@ -936,6 +955,55 @@ function rrText(n){
   if (!n.ref) return n.lodge + ": not booked in ResRequest, provisional";
   return n.lodge + (n.status === "confirmed" ? ": confirmed in ResRequest, " : ": provisional in ResRequest, ") + n.ref;
 }
+// ── Hotel rooms held (D-039) ─────────────────────────────────────────
+// Pre night, the Pioneers nights on the route, post night, and a pre night
+// for guests joining partway. Provisional in italics, confirmed in bold, on
+// request with the orange dot (nothing held).
+var HOLD_STATUS = [["on_request", "On request"], ["provisional", "Provisional"], ["confirmed", "Confirmed"], ["released", "Released"]];
+function holdsOf(d, kind, date){
+  return (d.holds || []).filter(function(h){ return h.kind === kind && (!date || h.date === date) && h.status !== "released"; });
+}
+function holdShort(h){ return (h.hotel || "?") + " " + (h.rooms != null ? h.rooms : "on request"); }
+function holdTip(h){
+  var what = h.kind === "pre" ? (h.segment ? "Pre night for " + h.segment : "Pre night") : h.kind === "post" ? "Post night" : "On safari";
+  return what + ": " + (h.hotel || "no hotel") + ", " + (h.rooms != null ? h.rooms + " rooms" : "on request, nothing held") + ", "
+    + (HOLD_STATUS.filter(function(x){ return x[0] === h.status; })[0] || [0, h.status])[1].toLowerCase() + (h.ref ? ", ref " + h.ref : "");
+}
+function holdTag(h){
+  return '<span class="hh' + (h.status === "confirmed" ? " conf" : h.status === "on_request" ? " req" : "") + '" title="' + esc(holdTip(h)) + '">' + esc(holdShort(h)) + '</span>';
+}
+function holdsTable(d){
+  var hs = (d.holds || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  if (!hs.length) return "";
+  var rows = hs.map(function(h){
+    var what = h.kind === "pre" ? (h.segment ? "Pre night<br><span class=\"meta\">" + esc(h.segment) + "</span>" : "Pre night") : h.kind === "post" ? "Post night" : "On safari";
+    var st = HOLD_STATUS.map(function(x){ return '<option value="' + x[0] + '"' + (h.status === x[0] ? " selected" : "") + '>' + x[1] + '</option>'; }).join("");
+    return '<tr data-hold="' + h.id + '"><td>' + what + '</td><td>' + nice(h.date) + '</td>'
+      + '<td><input data-f="hotel" value="' + esc(h.hotel || "") + '" placeholder="hotel"></td>'
+      + '<td><input data-f="rooms" class="rm" type="number" min="0" value="' + (h.rooms != null ? h.rooms : "") + '" placeholder="—"></td>'
+      + '<td><input data-f="ref" value="' + esc(h.ref || "") + '" placeholder="ref no."></td>'
+      + '<td><select data-f="status">' + st + '</select></td></tr>';
+  }).join("");
+  return '<h3 style="font-size:13px;margin:12px 0 4px">Hotel rooms</h3>'
+    + '<table class="nights holds"><tr><th>For</th><th>Night</th><th>Hotel</th><th>Rooms</th><th>Ref</th><th>Status</th></tr>' + rows + '</table>'
+    + '<p class="meta" style="margin:4px 0 0">Filled in from the room requirements; change any of it. Rooms blank is on request, nothing held. Confirmed needs the hotel\'s reference. Released: rooms handed back, kept for the record.</p>'
+    + (allowed ? '<div class="edit"><button id="hhSave">Save hotel rooms</button> <span id="hhMsg"></span></div>' : '');
+}
+function wireHolds(d){
+  if (!el("hhSave")) return;
+  el("hhSave").onclick = function(){
+    var holds = [];
+    el("panel").querySelectorAll("tr[data-hold]").forEach(function(tr){
+      var v = function(f){ return tr.querySelector('[data-f="' + f + '"]').value; };
+      holds.push({ id: tr.getAttribute("data-hold"), hotel: v("hotel"), rooms: v("rooms"), ref: v("ref"), status: v("status") });
+    });
+    el("hhMsg").className = ""; el("hhMsg").textContent = "Saving…";
+    post("save_holds", { departure_id: d.id, holds: holds }).then(function(){
+      el("hhMsg").className = "saved"; el("hhMsg").textContent = "Saved."; reload(d.id);
+    }).catch(function(e){ el("hhMsg").className = "err"; el("hhMsg").textContent = "Not saved: " + e.message; });
+  };
+}
+
 function nightsTable(d){
   if (!d.nights.length) return "";
   var rows = d.nights.map(function(n, i){
@@ -1144,6 +1212,7 @@ function openPanel(id){
     + notesSection(d)
     + crewSection(d)
     + nightsTable(d)
+    + holdsTable(d)
     + (master ? '<h3 style="font-size:13px;margin:12px 0 6px">Bush Ways master booking</h3>' + card(master) : '')
     + '<h3 style="font-size:13px;margin:12px 0 6px">Guest bookings (' + live.length + ')</h3>'
     + (live.map(card).join("") || '<p class="meta">None yet.</p>')
@@ -1183,7 +1252,7 @@ function openPanel(id){
     }) || cs[0];
     moveTo(d.id, free.id, 1);
   };
-  wireRead(d); wireDocs(p);
+  wireRead(d); wireDocs(p); wireHolds(d);
   if (el("csSave")) el("csSave").onclick = function(){
     var days = [];
     p.querySelectorAll("input[data-date]").forEach(function(i){
