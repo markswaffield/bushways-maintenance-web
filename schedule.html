@@ -497,7 +497,15 @@
     document.getElementById("vTake").onclick = function () {
       bar.innerHTML = '<label style="display:block;font-size:12.5px;margin:0 0 4px">Which vehicle are you taking?</label>'
         + '<select id="vPick" style="max-width:100%"><option value="">Choose a vehicle</option>'
-        + (vehicleInfo.vehicles || []).map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.registration) + (v.description ? ' · ' + esc(v.description) : '') + '</option>'; }).join("")
+        // Grouped by where each vehicle belongs when there is more than one
+        // place (Base and Safaris together, Mark 2026-10-19).
+        + (function () {
+          var vs = vehicleInfo.vehicles || [], groups = [];
+          vs.forEach(function (v) { if (groups.indexOf(v.location || "") < 0) groups.push(v.location || ""); });
+          var opt = function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.registration) + (v.description ? ' · ' + esc(v.description) : '') + '</option>'; };
+          if (groups.length < 2) return vs.map(opt).join("");
+          return groups.map(function (g) { return '<optgroup label="' + esc(g) + '">' + vs.filter(function (v) { return (v.location || "") === g; }).map(opt).join("") + '</optgroup>'; }).join("");
+        })()
         + '</select>'
         // Weekend duty: no midnight end (Mark, 2026-10-16: "duty staff that
         // will have a base car for the whole weekend... lets end it at 08h00
@@ -513,7 +521,7 @@
         var v = (vehicleInfo.vehicles || []).filter(function (x) { return x.id === id; })[0];
         var keeping = (document.querySelector('input[name="vKeep"]:checked') || {}).value === "1";
         var now = Date.now();
-        bwQueue.send(BASE_FN + "?action=take_vehicle", { person_id: me.id, vehicle_id: id, keeping: keeping }, "Took " + v.registration).then(function (out) {
+        bwQueue.send(BASE_FN + "?action=take_vehicle", { person_id: me.id, vehicle_id: id, keeping: keeping, location_id: camp && camp.id ? camp.id : null }, "Took " + v.registration).then(function (out) {
           if (out.error) { alert(out.error); renderVehicleBar(); return; }
           setLocalHolding({ registration: v.registration, description: v.description, at: now, keeping: keeping,
                             until: keeping ? nextMonday8(now) : midnightAfter(now) });
@@ -524,7 +532,7 @@
     };
   }
   if (me) {
-    bwApi.get(BASE_FN + "?action=my_vehicle&person_id=" + encodeURIComponent(me.id)).then(function (d) {
+    bwApi.get(BASE_FN + "?action=my_vehicle&person_id=" + encodeURIComponent(me.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")).then(function (d) {
       vehicleInfo = d;
       // The server's word on what this person holds, unless a take or a
       // return is still waiting in this phone's queue.
