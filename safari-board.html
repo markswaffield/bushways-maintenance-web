@@ -1196,7 +1196,7 @@ function openPanel(id){
     + '<button class="ghost" id="closePanel">Close ✕</button></div>'
     + mixBox(d)
     + '<table><tr><th>Dates</th><td>Pre night ' + nice(add(d.start_date, -1)) + '<br>' + nice(d.start_date) + " → " + nice(d.end_date) + " (" + diff(d.start_date, d.end_date) + " nights)"
-    + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : '') + '</td></tr>'
+    + (d.end_date_estimated ? '<br><span class="tag p">End estimated — no guests yet</span>' : !d.has_guests ? '<br><span class="tag p">No guests yet: the full standard route</span>' : '') + '</td></tr>'
     + '<tr><th>Vehicle</th><td>' + (slot ? esc(slot.label) + " · column " + (d.lane || 1) + (d.placed_by_person ? ' <span class="pin">· placed by hand</span>' : " · placed automatically") : '<span class="tag x">No vehicle free</span>')
     + (allowed ? '<div class="edit"><select id="mvSlot">' + data.slots.map(function(x){ return '<option value="' + x.id + '"' + (x.id === d.slot_id ? " selected" : "") + '>' + esc(x.label) + '</option>'; }).join("")
       + '</select><select id="mvLane"><option value="1"' + ((d.lane || 1) === 1 ? " selected" : "") + '>column 1</option><option value="2"' + (d.lane === 2 ? " selected" : "") + '>column 2</option></select>'
