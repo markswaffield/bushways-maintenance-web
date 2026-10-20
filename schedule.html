@@ -687,7 +687,7 @@
     // administrator and base manager group-wide), and only the chosen
     // department's, when one is chosen (D-100).
     var personChoices = people.filter(function (p) {
-      if (HERE && p.home_location_id !== HERE) return false;
+      if (HERE && p.home_location_id !== HERE && !p.shared_here) return false;   // D-160: shared departments count
       if (filterDept && filterDept !== "__unassigned__" && p.department !== filterDept) return false;
       return true;
     });
