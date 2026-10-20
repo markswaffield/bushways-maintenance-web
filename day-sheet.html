@@ -376,6 +376,9 @@
   <div><button id="save" disabled>Save changes</button></div>
   <div class="full-only"><button class="ghost" id="reload">Refresh</button></div>
   <div class="full-only lean-hide"><button class="ghost" id="print">Print</button></div>
+  <!-- Mark, 2026-10-20: "we would like to be able to export the sheet as a
+       PDF". Shown on phones too, where printing is awkward. -->
+  <div><button class="ghost" id="pdfBtn">Download PDF</button></div>
   <!-- The Allocation Board, per lodge — Mark, 2026-10-05: "The board needs
        to be accesible from the Day Sheet for each lodge." It carries the camp
        across in sessionStorage, the same way this page received it, so there
@@ -1516,6 +1519,126 @@ document.addEventListener("click", function(e){
 el("save").addEventListener("click", saveAll);
 el("reload").addEventListener("click", load);
 el("print").addEventListener("click", function(){ window.print(); });
+
+// ── Download PDF (daily-operations D-050) ───────────────────────────────
+// The sheet as shown (including a status filter), as a clean A4 landscape
+// file: the camp, date and summary on top, every column fitted to the page,
+// headings repeated on each page, values as text (no boxes, arrows or empty
+// placeholders). Made on the device with jsPDF and its table plug-in, loaded
+// from cdnjs only when the button is first pressed.
+var pdfLibs = null;
+function loadPdfLibs(){
+  if (pdfLibs) return pdfLibs;
+  var add = function(src){ return new Promise(function(res, rej){
+    var sc = document.createElement("script"); sc.src = src; sc.onload = res;
+    sc.onerror = function(){ rej(new Error("Could not load the PDF maker. Check the connection and try again.")); };
+    document.head.appendChild(sc); }); };
+  pdfLibs = add("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
+    .then(function(){ return add("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"); })
+    .catch(function(e){ pdfLibs = null; throw e; });
+  return pdfLibs;
+}
+// What a cell shows: typed values and chosen options, never placeholders.
+// (Not cellText: the page has its own, and two would replace each other.)
+function pdfCellText(td){
+  var c = td.cloneNode(true);
+  var live = td.querySelectorAll("input, select, textarea"), copy = c.querySelectorAll("input, select, textarea");
+  copy.forEach(function(x, i){
+    var src = live[i], v = "";
+    if (src.tagName === "SELECT") { var o = src.options[src.selectedIndex]; v = o ? o.text : ""; }
+    else if (src.type !== "checkbox" && src.type !== "radio") v = src.value;
+    v = String(v || "").trim();
+    if (v === "—" || v === "-") v = "";
+    var span = document.createElement("span"); span.textContent = v ? " " + v + " " : "";
+    x.parentNode.replaceChild(span, x);
+  });
+  c.querySelectorAll("button, .srcbtn, .srcback").forEach(function(x){ x.remove(); });
+  // A copy is not laid out, so put back the breaks and spaces the screen
+  // shows between blocks ("DBL" "FI", "Turnover" / "Night 1 of 2").
+  c.querySelectorAll(".diet.empty").forEach(function(x){ x.remove(); });   // "Medical —": nothing to say
+  c.querySelectorAll("div, p, li, br, .diet").forEach(function(x){ x.after("\n"); });
+  c.querySelectorAll("span, b, i, em, small").forEach(function(x){ x.after(" "); });
+  var t = (c.textContent || "")
+    .replace(/→/g, "to").replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/[^\x09\x0A\x20-\x7E\u00A0-\u00FF—–…•]/g, "")   // the PDF's standard font has no emoji or arrows
+    .replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n");
+  // A label with nothing after it ("Medical —") is only clutter on paper.
+  t = t.split("\n").map(function(l){ return l.trim(); }).filter(function(l){ return l && !/^[A-Za-z ]{2,20}\s*—$/.test(l) && l !== "—"; }).join("\n");
+  return t;
+}
+// Column widths for paper (mm, scaled to the page): wide where the text is
+// long (notes, transfer details), narrow for codes and times.
+var PDF_COLS = [11, 15, 7, 9, 18, 16, 15, 17, 26, 14, 14, 25, 8, 17, 14, 14, 30, 8, 12, 8, 12, 8, 14];
+function downloadPdf(){
+  var table = document.querySelector(".scroll table");
+  if (!table || !sheet) { alert("Load the Day Sheet first."); return; }
+  var btn = el("pdfBtn"), was = btn.textContent;
+  btn.disabled = true; btn.textContent = "Making the PDF…";
+  loadPdfLibs().then(function(){
+    var doc = new window.jspdf.jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    var W = doc.internal.pageSize.getWidth(), M = 7;
+    var campName = (shownCamp && shownCamp.name) || "Day Sheet";
+    var date = el("date").value || today();
+    var nice = new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    var summary = (document.querySelector("p.summary") || {}).innerText || "";
+    doc.setFont("helvetica", "bold"); doc.setFontSize(13);
+    doc.text("Day Sheet — " + campName, M, 10);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(nice, W - M, 10, { align: "right" });
+    doc.setFontSize(8); doc.setTextColor(70);
+    doc.text(summary.replace(/\s+/g, " ").trim(), M, 15);
+    var warns = Array.prototype.map.call(document.querySelectorAll("#app p.warn.amber, p.warn.amber"), function(p){ return p.innerText.replace(/→/g, "to").trim(); })
+      .filter(function(t, i, a){ return t && a.indexOf(t) === i; });
+    var y = 19;
+    warns.forEach(function(t){ doc.text(doc.splitTextToSize(t, W - 2 * M), M, y); y += 3.6; });
+    doc.setTextColor(0);
+    // Column widths in proportion to the screen's own (COLS).
+    var total = PDF_COLS.reduce(function(a, b){ return a + b; }, 0);
+    var colStyles = {};
+    PDF_COLS.forEach(function(w, i){ colStyles[i] = { cellWidth: (W - 2 * M) * w / total }; });
+    var g = function(t, n, fill){ return { content: t, colSpan: n, styles: { halign: "center", fillColor: fill } }; };
+    var head = [[
+      { content: "Room", rowSpan: 2 }, { content: "Status", rowSpan: 2 },
+      g("The stay", 7, [221, 214, 196]), g("Arrivals", 4, [214, 230, 216]), g("Departures", 5, [240, 222, 205]),
+      g("Activities", 4, [222, 226, 236]), { content: "Mainten-ance", rowSpan: 2 }
+    ], ["Pax", "Type", "Names", "Housekeeper", "Guide", "Vehicle", "Notes",
+        "Driver/ Guide", "Vehicle", "Arrival details", "ETA",
+        "Names", "Driver/ Guide", "Vehicle", "Departure details", "ETD",
+        "Activity 1", "Time", "Activity 2", "Time"]];
+    var STATUS_FILL = { arriving: [228, 241, 230], departing: [250, 234, 222], turnover: [252, 226, 220], staying: [255, 255, 255], empty: [246, 246, 244] };
+    var body = [], fills = [];
+    table.querySelectorAll("tbody > tr").forEach(function(tr){
+      var cells = Array.prototype.map.call(tr.children, pdfCellText);
+      if (cells.length < 2) return;
+      body.push(cells);
+      var st = (tr.className.match(/st-(\w+)/) || [])[1];
+      fills.push(STATUS_FILL[st] || [255, 255, 255]);
+    });
+    doc.autoTable({
+      head: head, body: body, startY: y + 1, margin: { left: M, right: M, top: 8, bottom: 9 },
+      theme: "grid", columnStyles: colStyles,
+      styles: { font: "helvetica", fontSize: 6.2, cellPadding: 0.9, lineColor: [170, 170, 170], lineWidth: 0.15, overflow: "linebreak", valign: "top", textColor: [30, 30, 30] },
+      headStyles: { fillColor: [18, 45, 49], textColor: 255, fontStyle: "bold", fontSize: 5.6, halign: "left", valign: "middle", cellPadding: 0.7 },
+      didParseCell: function(d){
+        if (d.section === "body") {
+          d.cell.styles.fillColor = fills[d.row.index];
+          if (d.column.index <= 1) d.cell.styles.fontStyle = "bold";
+        }
+        if (d.section === "head" && d.cell.styles.fillColor && d.cell.raw && d.cell.raw.colSpan) d.cell.styles.textColor = [18, 45, 49];
+      },
+      didDrawPage: function(d){
+        doc.setFontSize(7); doc.setTextColor(120);
+        doc.text("Day Sheet — " + campName + " — " + nice, M, doc.internal.pageSize.getHeight() - 4);
+        doc.text("Page " + doc.internal.getNumberOfPages(), W - M, doc.internal.pageSize.getHeight() - 4, { align: "right" });
+        doc.setTextColor(0);
+      }
+    });
+    var abbr = (shownCamp && shownCamp.abbreviation) || campName;
+    doc.save("Day Sheet - " + abbr + " - " + date + ".pdf");
+  }).catch(function(e){ alert(e.message || String(e)); })
+    .then(function(){ btn.disabled = false; btn.textContent = was; });
+}
+el("pdfBtn").addEventListener("click", downloadPdf);
 // Remembered per browser, because somebody working on a phone wants it
 // on every time, and somebody on a laptop never wants it.
 try {
