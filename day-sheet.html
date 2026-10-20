@@ -353,6 +353,7 @@
     td,th{border:1px solid #BBB}
     td input,td select,td textarea{border:0;padding:2px}
   }
+  .paxq{display:block;font-size:11px;line-height:1.3;color:#8C4A12;background:#FBEADF;border-radius:4px;padding:2px 5px;margin:3px 0 2px;white-space:normal}
   [hidden]{display:none!important}
 </style></head><body>
 
@@ -658,6 +659,8 @@ function cellNames(row){
   if (!b) return '<td class="ro dim c-names"></td>';
   var h = '<span class="name">'+esc(b.guest_name)+"</span>";
   if (b.booking_ref) h += ' <span class="ref">'+esc(b.booking_ref)+"</span>";
+  // D-051: the name's count and the guests booked in ResRequest differ.
+  if (b.pax_query) h += '<span class="paxq" title="'+esc(b.pax_query)+'">⚠ '+esc(b.pax_query)+'</span>';
   // Mark, 2026-09-28: "There was mention of being able to review the original
   // text as per the Ops Chart from the Day Sheet - how would we do this?"
   // This is how. It sits in the Names column because that column is frozen,
@@ -1245,7 +1248,8 @@ function render(){
   // Rooms freed overnight because ResRequest released the booking (D-048).
   // Mark, 2026-10-12: cancelled bookings were sitting on the board holding
   // rooms; now the nightly update frees them, and says so here.
-  var WHY = { "0":"released in ResRequest (back to quotation)", "90":"cancelled in ResRequest", "95":"deleted in ResRequest" };
+  var WHY = { "0":"released in ResRequest (back to quotation)", "90":"cancelled in ResRequest", "95":"deleted in ResRequest",
+              "replaced":"the booking was changed in ResRequest and needs fewer rooms" };
   (sheet.released || []).forEach(function(f){
     h += '<p class="warn amber">'+esc(f.room || "A room")+" freed: "+esc(f.guest_name || "")
       + (f.booking_ref ? " ("+esc(f.booking_ref)+")" : "")+", "+esc(f.from_date)+" → "+esc(f.to_date)
