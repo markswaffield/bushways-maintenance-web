@@ -734,10 +734,27 @@ function moveTo(id, slotId, lane){
   setStatus("Moving " + label(d) + " to " + slot.label + "…");
   post("move", { departure_id: id, slot_id: slotId, lane: lane }).then(function(){
     setStatus(label(d) + " moved to " + slot.label + ". The tool will not move it again.");
-    reload(id);
+    refreshOne(id);
   }).catch(function(e){ setStatus("Could not move: " + e.message, true); });
 }
 // Reload the board and, if a panel was open, reopen it on the same safari.
+// After an edit to one safari (D-044): fetch only it and the safaris
+// overlapping its dates, not the whole board, and merge them in. The server
+// returns every safari the full board would show for those dates, so one
+// missing from the answer has gone and is dropped here too.
+function refreshOne(id){
+  var r = range();
+  fetch(FN + "?action=board_around&departure_id=" + encodeURIComponent(id) + who()).then(function(x){ return x.json(); }).then(function(d){
+    if (d.error) throw new Error(d.error);
+    var inWin = function(x, f, t){ return x.start_date <= add(t, 1) && x.end_date >= add(f, -1); };
+    var fresh = {}; d.departures.forEach(function(x){ fresh[x.id] = x; });
+    var kept = data.departures.filter(function(x){ return !fresh[x.id] && !inWin(x, d.from, d.to); });
+    var shown = d.departures.filter(function(x){ return inWin(x, r.from, r.to); });
+    data.departures = kept.concat(shown).sort(function(a, b){ return a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0; });
+    draw(r);
+    if (el("panel").className === "on") openPanel(id);
+  }).catch(function(){ reload(id); });   // anything odd: the whole board, as before
+}
 function reload(openId){
   var r = range();
   fetch(FN + "?action=board&from=" + r.from + "&to=" + r.to + who()).then(function(x){ return x.json(); }).then(function(d){
@@ -888,7 +905,7 @@ function wireCrew(d){
         post("build_report_now", { line_id: id }).then(function(res){
           if (res.error) throw new Error(res.error);
           m.textContent = res.built ? "Built." : (res.waiting ? "Not due yet." : "Not built.");
-          reload(d.id);
+          refreshOne(d.id);
         }).catch(function(e){ b.disabled = false; m.className = "err"; m.textContent = "Not built: " + e.message; });
       };
     });
@@ -910,7 +927,7 @@ function wireCrew(d){
           msg.className = "meta sw-msg"; msg.textContent = "Swapping…";
           post("swap_vehicle", { line_id: id, date: box.querySelector(".sw-date").value,
                                  vehicle_id: box.querySelector("select.sw-veh").value, driver_id: box.querySelector("select.sw-drv").value })
-            .then(function(){ reload(d.id); })
+            .then(function(){ refreshOne(d.id); })
             .catch(function(e){ msg.className = "err sw-msg"; msg.textContent = "Not swapped: " + e.message; });
         };
       };
@@ -933,7 +950,7 @@ function wireCrew(d){
     post("crew", { departure_id: d.id, crew: crew, vehicles: vehicles }).then(function(res){
       el("crewMsg").className = "saved";
       el("crewMsg").textContent = "Saved." + (res.raised ? " " + res.raised + " Safari Vehicle Check" + (res.raised === 1 ? "" : "s") + " opened in Maintenance." : "");
-      reload(d.id);
+      refreshOne(d.id);
     }).catch(function(e){ el("crewMsg").className = "err"; el("crewMsg").textContent = "Not saved: " + e.message; });
   };
 }
@@ -999,7 +1016,7 @@ function wireHolds(d){
     });
     el("hhMsg").className = ""; el("hhMsg").textContent = "Saving…";
     post("save_holds", { departure_id: d.id, holds: holds }).then(function(){
-      el("hhMsg").className = "saved"; el("hhMsg").textContent = "Saved."; reload(d.id);
+      el("hhMsg").className = "saved"; el("hhMsg").textContent = "Saved."; refreshOne(d.id);
     }).catch(function(e){ el("hhMsg").className = "err"; el("hhMsg").textContent = "Not saved: " + e.message; });
   };
 }
@@ -1234,14 +1251,14 @@ function openPanel(id){
   if (el("mvAuto")) el("mvAuto").onclick = function(){
     // Also "Put it back on the board": the tool places it on a free vehicle.
     setStatus("Handing " + label(d) + " back to the tool…");
-    post("release", { departure_id: d.id }).then(function(){ setStatus(label(d) + " placed by the tool again."); reload(d.id); })
+    post("release", { departure_id: d.id }).then(function(){ setStatus(label(d) + " placed by the tool again."); refreshOne(d.id); })
       .catch(function(e){ setStatus("Could not: " + e.message, true); });
   };
   wireCrew(d);
   if (el("ntSave")) el("ntSave").onclick = function(){
     el("ntMsg").className = ""; el("ntMsg").textContent = "Saving…";
     post("notes", { departure_id: d.id, notes: el("ntText").value }).then(function(){
-      el("ntMsg").className = "saved"; el("ntMsg").textContent = "Saved."; reload(d.id);
+      el("ntMsg").className = "saved"; el("ntMsg").textContent = "Saved."; refreshOne(d.id);
     }).catch(function(e){ el("ntMsg").className = "err"; el("ntMsg").textContent = "Not saved: " + e.message; });
   };
   // Move to the first Cancelled column free for these dates.
@@ -1263,7 +1280,7 @@ function openPanel(id){
     el("csMsg").className = ""; el("csMsg").textContent = "Saving…";
     post("campsites", { departure_id: d.id, days: days }).then(function(){
       el("csMsg").className = "saved"; el("csMsg").textContent = "Saved.";
-      reload(d.id);
+      refreshOne(d.id);
     }).catch(function(e){ el("csMsg").className = "err"; el("csMsg").textContent = "Not saved: " + e.message; });
   };
 }
