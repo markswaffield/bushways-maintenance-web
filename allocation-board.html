@@ -95,6 +95,11 @@
   .toolbar input,.toolbar select{font:inherit;padding:7px 9px;border:1px solid var(--line);
     border-radius:8px;background:#fff;color:var(--ink)}
   .status{font-size:13px;color:var(--ink-soft)}
+  .oatbox{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 14px;margin:0 0 12px;font-size:13px}
+  .oatbox h3{margin:0 0 6px;font-size:14px}
+  .oatbox ul{margin:4px 0 0 18px;padding:0}
+  .oatbox table{border-collapse:collapse;font-size:12.5px;margin-top:6px}
+  .oatbox td,.oatbox th{border-bottom:1px solid var(--line);padding:3px 8px;text-align:left}
   .status.bad{color:#8C2F2F;font-weight:600}
   .status.good{color:#2F6B3A;font-weight:600}
 
@@ -189,8 +194,13 @@
         <option value="21">21</option>
         <option value="31">31</option>
       </select></div>
-    <div><button id="syncBtn">Update from ResRequest</button></div>
-    <div><button id="fillBtn" class="ghost">Fill empty rooms</button></div>
+    <div class="rr-only"><button id="syncBtn">Update from ResRequest</button></div>
+    <div class="rr-only"><button id="fillBtn" class="ghost">Fill empty rooms</button></div>
+    <!-- OAT Tented Camp is booked from OAT's own files, never ResRequest (D-052). -->
+    <div class="oat-only" hidden><button id="oatSheetBtn">Upload OAT booking sheet</button></div>
+    <div class="oat-only" hidden><button id="oatRoomingBtn">Upload rooming list</button></div>
+    <div class="oat-only" hidden><button id="oatGroupsBtn" class="ghost">OAT groups</button></div>
+    <input type="file" id="oatFile" accept=".xls,.xlsx" hidden>
     <div><button id="reload" class="ghost">Refresh</button></div>
     <div><button id="print" class="ghost">Print</button></div>
     <div><button class="key" id="daySheetBtn">← Day Sheet</button></div>
@@ -199,6 +209,7 @@
 </div>
 <p class="sub">Rooms down, nights across, holding rows underneath on the same dates. Drag a party to another room, or click to pick up and click to put down.</p>
 
+<div id="oatBox" class="oatbox" hidden></div>
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
@@ -586,6 +597,82 @@ el("syncBtn").onclick = function(){
       load();
     })
     .catch(function(e){ btn.disabled = false; setStatus("ResRequest did not answer: " + e.message, "bad"); });
+};
+
+// ── OAT Tented Camp (D-052) ──────────────────────────────────────────
+// Bookings come from OAT's booking sheet (dates, doubles, singles; updated
+// weekly) and each group's rooming list (names, rooms, bed type, VIPs, notes,
+// trip leaders). The file is read here (SheetJS, from cdnjs, loaded on first
+// use) and its rows sent as they are; the server works out the layout.
+var isOat = !!(shownCamp && (/^OAT\b/i.test(shownCamp.abbreviation || "") || /^OAT\b/i.test(shownCamp.name || "")));
+document.querySelectorAll(".rr-only").forEach(function(x){ x.hidden = isOat; });
+document.querySelectorAll(".oat-only").forEach(function(x){ x.hidden = !isOat; });
+var sheetJs = null;
+function loadSheetJs(){
+  if (sheetJs) return sheetJs;
+  sheetJs = new Promise(function(res, rej){
+    var sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    sc.onload = function(){ res(window.XLSX); };
+    sc.onerror = function(){ sheetJs = null; rej(new Error("Could not load the Excel reader. Check the connection and try again.")); };
+    document.head.appendChild(sc);
+  });
+  return sheetJs;
+}
+// Rows as plain values; a real Excel date as YYYY-MM-DD.
+function fileRows(file){
+  return Promise.all([loadSheetJs(), file.arrayBuffer()]).then(function(x){
+    var wb = x[0].read(x[1], { type: "array", cellDates: true });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    return x[0].utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }).map(function(r){
+      return r.map(function(v){
+        if (v instanceof Date) { var d = new Date(v.getTime() + 12 * 3600e3); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+        return v;
+      });
+    });
+  });
+}
+function oatShow(html){ var b = el("oatBox"); b.innerHTML = html; b.hidden = !html; }
+var oatKind = null;
+function oatPick(kind){ oatKind = kind; el("oatFile").value = ""; el("oatFile").click(); }
+el("oatSheetBtn").onclick = function(){ oatPick("sheet"); };
+el("oatRoomingBtn").onclick = function(){ oatPick("rooming"); };
+el("oatFile").onchange = function(){
+  var f = this.files[0]; if (!f) return;
+  var kind = oatKind;
+  setStatus("Reading " + f.name + "…");
+  fileRows(f).then(function(rows){
+    setStatus("Loading " + (kind === "sheet" ? "the booking sheet" : "the rooming list") + "…");
+    return post(kind === "sheet" ? "oat_booking_sheet" : "oat_rooming_list", { location_id: shownCamp && shownCamp.id, rows: rows, person_id: personId() });
+  }).then(function(d){
+    if (d.error) { setStatus(d.error, "bad"); oatShow(""); return; }
+    var head = kind === "sheet"
+      ? "Booking sheet loaded: " + d.groups + " groups, " + d.with_guests + " with rooms confirmed."
+      : "Rooming list loaded: " + esc(d.trip || "") + ", " + d.date_in.split("-").reverse().join("/") + " to " + d.date_out.split("-").reverse().join("/")
+        + ". " + d.pax + " guests in " + d.rooms + " rooms (" + d.doubles + " double or twin, " + d.singles + " single)"
+        + (d.vip_rooms ? ", " + d.vip_rooms + " VIP" : "") + "; " + d.leaders + " tour leader" + (d.leaders === 1 ? "" : "s") + " in Room 10.";
+    var list = function(t, a){ return a && a.length ? "<p style=\"margin:8px 0 0\"><b>" + t + "</b></p><ul>" + a.map(function(x){ return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : ""; };
+    oatShow("<h3>" + head + "</h3>" + list("What changed", d.changes) + list("To check", d.notes)
+      + (!(d.changes || []).length && !(d.notes || []).length ? "<p style=\"margin:6px 0 0\">Nothing changed.</p>" : "")
+      + '<p style="margin:8px 0 0"><button class="ghost" onclick="oatShow(\'\')">Close</button></p>');
+    setStatus("Done.", "good");
+    load();
+  }).catch(function(e){ setStatus("Not loaded: " + e.message, "bad"); });
+};
+el("oatGroupsBtn").onclick = function(){
+  fetch(FN + "?action=oat_groups" + campParam()).then(function(r){ return r.json(); }).then(function(d){
+    var g = d.groups || [];
+    var fmt = function(x){ return x ? x.split("-").reverse().join("/") : ""; };
+    oatShow("<h3>OAT groups still to come (" + g.length + ")</h3><div style=\"overflow-x:auto\"><table><tr><th>In</th><th>Out</th><th>Rooms</th><th>Guests</th><th>Rooming list</th><th>Booking sheet</th></tr>"
+      + g.map(function(x){
+          var rooms = x.doubles + x.singles;
+          return "<tr><td>" + fmt(x.date_in) + "</td><td>" + fmt(x.date_out) + "</td><td>" + (rooms ? x.doubles + " dbl + " + x.singles + " sgl" : "none confirmed") + "</td>"
+            + "<td>" + (x.pax != null ? x.pax : rooms ? "about " + (2 * x.doubles + x.singles) : "") + "</td>"
+            + "<td>" + (x.rooming_loaded_at ? "✓ " + esc(x.trip_code || "") : "not yet") + "</td>"
+            + "<td>" + (x.on_sheet ? "listed" : "<b>no longer listed</b>") + "</td></tr>";
+        }).join("") + "</table></div>"
+      + '<p style="margin:8px 0 0"><button class="ghost" onclick="oatShow(\'\')">Close</button></p>');
+  });
 };
 
 el("fillBtn").onclick = function(){

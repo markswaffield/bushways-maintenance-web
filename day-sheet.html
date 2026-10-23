@@ -1249,7 +1249,8 @@ function render(){
   // Mark, 2026-10-12: cancelled bookings were sitting on the board holding
   // rooms; now the nightly update frees them, and says so here.
   var WHY = { "0":"released in ResRequest (back to quotation)", "90":"cancelled in ResRequest", "95":"deleted in ResRequest",
-              "replaced":"the booking was changed in ResRequest and needs fewer rooms" };
+              "replaced":"the booking was changed in ResRequest and needs fewer rooms",
+              "oat":"OAT's latest file has fewer rooms for this group" };
   (sheet.released || []).forEach(function(f){
     h += '<p class="warn amber">'+esc(f.room || "A room")+" freed: "+esc(f.guest_name || "")
       + (f.booking_ref ? " ("+esc(f.booking_ref)+")" : "")+", "+esc(f.from_date)+" → "+esc(f.to_date)
