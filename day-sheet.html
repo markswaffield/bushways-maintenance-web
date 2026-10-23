@@ -1332,6 +1332,35 @@ function render(){
   markClashes();
   markGuideLoad();
   markGaps();
+  lockIfViewOnly();
+}
+
+// ── View only (D-054) ─────────────────────────────────────────────────
+// Taps and the weekend duty list see every lodge's Day Sheet; all but Taps
+// view only. Everything in the grid and drawer is read-only for them, and
+// the buttons that change things are hidden; the server refuses a change
+// from them anyway.
+var dsLevel = null;
+try { dsLevel = sessionStorage.getItem("bw_day_sheet") || null; } catch (e) {}
+if (!dsLevel && me) {
+  fetch("https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=day_sheet_access&person_id=" + encodeURIComponent(me.id))
+    .then(function(r){ return r.json(); })
+    .then(function(a){ dsLevel = a.level || null; try { sessionStorage.setItem("bw_day_sheet", dsLevel || ""); } catch (e) {} lockIfViewOnly(); })
+    .catch(function(){});
+}
+function lockIfViewOnly(){
+  if (dsLevel !== "view") return;
+  ["save", "readNotesBtn", "staffBtn", "assetsBtn"].forEach(function(id){ var b = el(id); if (b) b.parentElement.hidden = true; });
+  var app = el("app");
+  app.querySelectorAll("input, select, textarea").forEach(function(x){ x.disabled = true; });
+  app.querySelectorAll(".addbooking, .place .row, button.placebtn, [data-placebtn], [data-movebtn]").forEach(function(x){ x.hidden = true; });
+  if (!el("viewOnlyTag")) {
+    var t = document.createElement("div");
+    t.id = "viewOnlyTag";
+    t.style.cssText = "align-self:center;font-size:12px;font-weight:700;color:#8C4A12;background:#FBEADF;border-radius:6px;padding:4px 9px";
+    t.textContent = "View only";
+    var bar = document.querySelector(".toolbar"); if (bar) bar.appendChild(t);
+  }
 }
 
 function markDirty(roomId){

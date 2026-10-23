@@ -216,14 +216,20 @@
         if (after.indexOf(location.origin + "/") === 0) { location.href = after; return; }
       }
     } catch (e) {}
-    fetch(TM_FN + "?action=access&person_id=" + encodeURIComponent(me.id))
+    // Day Sheet access too (daily-operations D-054): Taps and the weekend
+    // duty list see every lodge's Day Sheet, most of them view only.
+    var tmAsk = fetch(TM_FN + "?action=access&person_id=" + encodeURIComponent(me.id))
       .then(function (r) { return r.json(); })
       .then(function (a) { me.tour_master = a.level || null; })
-      .catch(function () { me.tour_master = null; })
-      .then(function () { routeKnown(me); });
+      .catch(function () { me.tour_master = null; });
+    var dsAsk = fetch(FN + "?action=day_sheet_access&person_id=" + encodeURIComponent(me.id))
+      .then(function (r) { return r.json(); })
+      .then(function (a) { me.day_sheet = a.level || null; me.day_sheet_lodges = a.lodges || null; })
+      .catch(function () { me.day_sheet = (me.is_manager || me.is_administrator) ? "edit" : null; me.day_sheet_lodges = null; });
+    Promise.all([tmAsk, dsAsk]).then(function () { routeKnown(me); });
   }
   function routeKnown(me) {
-    if (!(me.is_manager || me.is_administrator) && !me.tour_master) {
+    if (!(me.is_manager || me.is_administrator) && !me.tour_master && !me.day_sheet) {
       // Exactly the routing this page always did — untouched for
       // anyone who doesn't even see the tool picker below.
       if (me.locations && me.locations.length > 1) { location.href = "./base-dashboard.html"; return; }
@@ -242,7 +248,7 @@
     document.getElementById("safariBoardBtn").hidden = !me.tour_master;
     // The Day Sheet stays managers' and administrators' (D-026); someone
     // here only for the Tour Master does not see it.
-    document.getElementById("daySheetBtn").hidden = !(me.is_manager || me.is_administrator);
+    document.getElementById("daySheetBtn").hidden = !me.day_sheet;
   }
 
   // Back to the sign-in screen, as every other page's Sign out does.
@@ -271,13 +277,16 @@
     // not do the day sheet roll up option. Let Admin only be able to
     // go into the camps via a drop down picker." A single-camp person
     // goes straight in, same as Maintenance does.
-    if (!multi) {
-      sessionStorage.setItem("bw_camp", JSON.stringify(me.locations[0]));
+    // Every lodge for those given Day Sheet access (D-054), else their own camps.
+    var lodges = me.day_sheet_lodges || me.locations || [];
+    try { sessionStorage.setItem("bw_day_sheet", me.day_sheet || ""); } catch (e) {}
+    if (lodges.length <= 1) {
+      sessionStorage.setItem("bw_camp", JSON.stringify(lodges[0]));
       location.href = "./day-sheet.html";
       return;
     }
     var sel = document.getElementById("campPickerSel");
-    sel.innerHTML = me.locations.map(function (l) {
+    sel.innerHTML = lodges.map(function (l) {
       return '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>';
     }).join("");
     document.getElementById("campPicker").hidden = false;

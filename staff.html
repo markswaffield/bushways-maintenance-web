@@ -6,7 +6,7 @@
 <!--
   Staff — every real person across the group, editable. Per Mark,
   2026-09-17, right after the real group staff list (227 people,
-  notes/BW Group Staff Names.xlsx, D-043) was loaded: "we also need an
+  notes/Maintenance Tool/BW Group Staff Names.xlsx, D-043) was loaded: "we also need an
   option to be able to edit these lists - both the names and
   departments if possible."
 
@@ -245,6 +245,9 @@ window.savePerson = function(){
     // Administrators only (safari-ops D-036); not sent by anyone else.
     tour_master: el("f_tm") ? el("f_tm").value : undefined,
     tour_master_changed: el("f_tm") ? el("f_tm").value !== (editing.tour_master || "none") : undefined,
+    // Every lodge's Day Sheet (daily-operations D-054), administrators only.
+    day_sheet: el("f_ds") ? el("f_ds").value : undefined,
+    day_sheet_changed: el("f_ds") ? el("f_ds").value !== (editing.day_sheet || "none") : undefined,
   }).then(function(out){
     if (out.error) { alert(out.error); return; }
     editing = null; load();
@@ -410,7 +413,7 @@ function personForm(){
     '<label class="check"><input type="checkbox" id="f_guests"' + (editing.can_drive_guests ? " checked" : "") + '> Guests</label>' +
     '<label class="check"><input type="checkbox" id="f_utility"' + (editing.can_drive_utility ? " checked" : "") + '> Utility vehicles</label>' +
     '<label class="check"><input type="checkbox" id="f_boat"' + (editing.can_operate_boats ? " checked" : "") + '> Boats</label>' +
-    tourMasterField() +
+    tourMasterField() + daySheetField() +
     '<div class="acts"><button class="primary" onclick="savePerson()">' + (isNew ? "Add" : "Save changes") + '</button>' +
     '<button onclick="cancel()">Cancel</button></div></div>';
 }
@@ -428,6 +431,23 @@ function tourMasterField(){
       return '<option value="' + k + '"' + (cur === k ? " selected" : "") + '>' + TM_LABEL[k] + '</option>';
     }).join("") + '</select>' +
     '<p class="note">View only: sees the board and every booking, cannot change anything. Full use: can change campsites, vehicles and crew.</p>';
+}
+// Day Sheet for every lodge (daily-operations D-054): Taps and the weekend
+// duty list. Their own camp's Day Sheet managers have anyway; this is all of them.
+var DS_LABEL = { none: "Own camp only", view: "All lodges, view only", edit: "All lodges, full use" };
+function daySheetField(){
+  if (!me || !me.is_administrator) return "";
+  if (editing.is_administrator) return '<label>Day Sheet</label><p class="note">Every lodge, full use, as an administrator.</p>';
+  var cur = editing.day_sheet || "none";
+  return '<label>Day Sheet</label><select id="f_ds">' +
+    ["none", "view", "edit"].map(function(k){
+      return '<option value="' + k + '"' + (cur === k ? " selected" : "") + '>' + DS_LABEL[k] + '</option>';
+    }).join("") + '</select>' +
+    '<p class="note">All lodges: they choose any lodge\'s Day Sheet and Room Allocation. View only cannot change anything.</p>';
+}
+function daySheetTag(p){
+  if (p.is_administrator || !p.day_sheet || p.day_sheet === "none") return "";
+  return '<span class="tag tm">Day Sheet ' + (p.day_sheet === "edit" ? "all lodges" : "all lodges, view only") + '</span>';
 }
 function tourMasterTag(p){
   if (p.is_administrator || !p.tour_master || p.tour_master === "none") return "";
@@ -451,7 +471,7 @@ function personRow(p){
     (p.is_administrator ? '<span class="tag admin">Administrator</span>' : "") +
     (p.is_base_manager ? '<span class="tag basemgr">Base Manager — all sites</span>' : "") +
     (p.is_general_manager ? '<span class="tag genmgr">General Manager</span>' : "") +
-    tourMasterTag(p) +
+    tourMasterTag(p) + daySheetTag(p) +
     (p.retired ? " · retired" : "") + '</p>' +
     '<p class="mt">' + (p.phone ? esc(p.phone) : "no number on file") + '</p>' +
     drivesLine(p) +

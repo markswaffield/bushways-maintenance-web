@@ -477,6 +477,7 @@ function wire(){
   var blocks = document.querySelectorAll(".blk");
   Array.prototype.forEach.call(blocks, function(b){
     b.addEventListener("dragstart", function(ev){
+      if (viewOnly) { ev.preventDefault(); return; }
       pick(b);
       try { ev.dataTransfer.setData("text/plain", b.dataset.booking); } catch (e) {}
       ev.dataTransfer.effectAllowed = "move";
@@ -514,7 +515,31 @@ function wire(){
   });
 }
 
+// ── View only (D-054) ─────────────────────────────────────────────────
+// The weekend duty list sees every lodge's rooms; all but Taps view only:
+// nothing can be picked up, dragged, placed or loaded. The server refuses a
+// change from them anyway.
+var viewOnly = false;
+(function(){
+  var lvl = null;
+  try { lvl = sessionStorage.getItem("bw_day_sheet") || null; } catch (e) {}
+  var apply = function(l){
+    viewOnly = l === "view";
+    if (!viewOnly) return;
+    ["syncBtn", "fillBtn", "oatSheetBtn", "oatRoomingBtn"].forEach(function(id){ var x = el(id); if (x) x.parentElement.hidden = true; });
+    var t = document.createElement("div");
+    t.style.cssText = "align-self:center;font-size:12px;font-weight:700;color:#8C4A12;background:#FBEADF;border-radius:6px;padding:4px 9px";
+    t.textContent = "View only";
+    var bar = document.querySelector(".toolbar"); if (bar) bar.appendChild(t);
+    draw();
+  };
+  if (lvl) { apply(lvl); return; }
+  if (me) fetch("https://uqfgkgmvnqiigtoymqbe.supabase.co/functions/v1/checklist?action=day_sheet_access&person_id=" + encodeURIComponent(me.id))
+    .then(function(r){ return r.json(); }).then(function(a){ try { sessionStorage.setItem("bw_day_sheet", a.level || ""); } catch (e) {} apply(a.level); }).catch(function(){});
+})();
+
 function pick(b){
+  if (viewOnly) { setStatus("View only: rooms can be seen here, not changed."); return; }
   picked = { stay_id: b.dataset.stay || null, booking_id: b.dataset.booking };
   Array.prototype.forEach.call(document.querySelectorAll(".blk.picked"), function(x){
     x.classList.remove("picked"); });
@@ -532,6 +557,7 @@ function post(action, body){
 }
 
 function putDown(roomId){
+  if (viewOnly) return;
   if (!picked || !roomId) return;
   var p = picked; picked = null;
   setStatus("Moving…");
@@ -605,8 +631,8 @@ el("syncBtn").onclick = function(){
 // trip leaders). The file is read here (SheetJS, from cdnjs, loaded on first
 // use) and its rows sent as they are; the server works out the layout.
 var isOat = !!(shownCamp && (/^OAT\b/i.test(shownCamp.abbreviation || "") || /^OAT\b/i.test(shownCamp.name || "")));
-document.querySelectorAll(".rr-only").forEach(function(x){ x.hidden = isOat; });
-document.querySelectorAll(".oat-only").forEach(function(x){ x.hidden = !isOat; });
+document.querySelectorAll(".rr-only").forEach(function(x){ x.hidden = isOat || viewOnly; });
+document.querySelectorAll(".oat-only").forEach(function(x){ x.hidden = !isOat || !!(viewOnly && x.querySelector("#oatSheetBtn, #oatRoomingBtn")); });
 var sheetJs = null;
 function loadSheetJs(){
   if (sheetJs) return sheetJs;
