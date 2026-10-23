@@ -251,6 +251,8 @@
      to take one; the server decides who, and which vehicles. -->
 <div id="vehicleBar" hidden style="margin:10px 0 0;padding:10px 12px;border:1px solid #D9D2C2;border-radius:8px;background:#fff"></div>
 <div id="offlineReady" hidden style="margin:0 0 10px;padding:8px 12px;border-radius:8px;font-size:13.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
+<!-- Mobile data by hand (maintenance D-161): duty phone, weekend duty, emergencies. -->
+<div id="dataSwitch" hidden style="margin:0 0 10px;padding:8px 12px;border-radius:8px;font-size:13.5px;background:#FBF3E8;border:1px solid #EBD3B4;display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>
 <div id="app"><p class="loading">Loading…</p></div>
 
 <script>
@@ -438,7 +440,7 @@
   // be done with no signal (maintenance D-150). The address matches the one
   // consolidated.html asks for, so its copy is found there.
   function saveRoundsForOffline(res) {
-    if (!window.bwQueue || !bwQueue.mayAutoSend()) return;
+    if (!window.bwQueue || !(bwQueue.onWifi ? bwQueue.onWifi() : bwQueue.mayAutoSend())) return;   // WiFi only, even with mobile data on (D-161)
     var ids = {};
     (function walk(x) {
       if (!x || typeof x !== "object") return;
@@ -531,6 +533,21 @@
       };
     };
   }
+  // Not on WiFi and mobile data not switched on: offer it (D-161). On WiFi,
+  // or once it is on (the strip at the top says so), nothing to show.
+  function renderDataSwitch() {
+    var box = document.getElementById("dataSwitch");
+    if (!box || !window.bwData || !window.bwQueue) return;
+    var show = bwQueue.connectionKind() !== "wifi" && !bwData.until();
+    box.hidden = !show;
+    if (!show) return;
+    box.innerHTML = '<span>Duty phone or an emergency? Send over mobile data instead of waiting for WiFi.</span>' + bwData.chooserHtml("dsPick");
+    bwData.wire(box);
+  }
+  renderDataSwitch();
+  document.addEventListener("bwdata:change", renderDataSwitch);
+  if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener("change", renderDataSwitch);
+  setInterval(renderDataSwitch, 60000);
   if (me) {
     bwApi.get(BASE_FN + "?action=my_vehicle&person_id=" + encodeURIComponent(me.id) + (camp && camp.id ? "&location_id=" + encodeURIComponent(camp.id) : "")).then(function (d) {
       vehicleInfo = d;

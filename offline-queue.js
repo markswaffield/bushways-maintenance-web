@@ -82,7 +82,72 @@
     if (!/Mobile|Android|iPhone|iPad/i.test(navigator.userAgent || "")) return "wifi"; // a computer
     return "unknown"; // iPhone, or a phone that will not say
   }
-  function mayAutoSend() { return navigator.onLine !== false && connectionKind() === "wifi"; }
+  // On WiFi (or a computer): the big save of every checklist runs only here.
+  function onWifi() { return navigator.onLine !== false && connectionKind() === "wifi"; }
+
+  // ── Mobile data, switched on by hand (maintenance D-161) ──
+  // Mark, 2026-10-23: "if there is a way where someone could manually switch
+  // so that it can work of mobile data. This is relevant for people on
+  // weekend duty, using the duty phone or in a case of an emergency." Anyone
+  // may; it ends by itself: Today only at midnight Botswana time, Weekend
+  // duty at 08:00 the next Monday (the same ends as taking a vehicle, D-153).
+  // While on, everything sends at once; the big checklist save still waits
+  // for WiFi (tens of megabytes, only needed before going out of signal).
+  var DATA_KEY = "bw_data_until";
+  function midnightAfter(ms) { var t = ms + 2 * 3600e3; return Math.floor(t / 86400e3) * 86400e3 + 86400e3 - 2 * 3600e3; }
+  function nextMonday8(ms) {
+    var l = new Date(ms + 2 * 3600e3), d = (8 - l.getUTCDay()) % 7;
+    var end = Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate() + d, 6, 0, 0);
+    return end <= ms ? end + 7 * 86400e3 : end;
+  }
+  function dataUntil() { try { var u = Number(localStorage.getItem(DATA_KEY) || 0); return u > Date.now() ? u : 0; } catch (e) { return 0; } }
+  function dataOn(mode) {
+    var now = Date.now(), until = mode === "weekend" ? nextMonday8(now) : midnightAfter(now);
+    try { localStorage.setItem(DATA_KEY, String(until)); } catch (e) {}
+    showDataStrip(); refreshBar(); flush(true);
+    document.dispatchEvent(new CustomEvent("bwdata:change"));
+    return until;
+  }
+  function dataOff() { try { localStorage.removeItem(DATA_KEY); } catch (e) {} showDataStrip(); refreshBar(); document.dispatchEvent(new CustomEvent("bwdata:change")); }
+  function mayAutoSend() { return navigator.onLine !== false && (connectionKind() === "wifi" || !!dataUntil()); }
+
+  // The strip at the top while it is on, so nobody forgets.
+  var strip = null;
+  function untilText(u) {
+    var d = new Date(u), now = new Date();
+    var p2 = function (n) { return ("0" + n).slice(-2); };
+    var day = d.toDateString() === now.toDateString() ? "" : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()] + " ";
+    return day + p2(d.getHours()) + ":" + p2(d.getMinutes());
+  }
+  function showDataStrip() {
+    if (!document.body) return;
+    var u = dataUntil();
+    if (!u) { if (strip) { strip.remove(); strip = null; } return; }
+    // At the top of the page, not pinned: pages already pin their own title.
+    if (!strip) {
+      strip = document.createElement("div");
+      strip.id = "bwDataStrip";
+      strip.style.cssText = "margin:-4px 58px 12px 0;border-radius:8px;background:#D9822B;color:#fff;"
+        + "font:600 13.5px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;padding:8px 12px;"
+        + "display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap";
+      document.body.insertBefore(strip, document.body.firstChild);
+    }
+    strip.innerHTML = '<span>📶 Using mobile data, until ' + untilText(u) + '</span>'
+      + '<button type="button" id="bwDataOff" style="font:inherit;font-size:13px;padding:6px 12px;border-radius:7px;border:0;background:#fff;color:#8C4A12;cursor:pointer">Switch off</button>';
+    document.getElementById("bwDataOff").onclick = dataOff;
+  }
+  // The chooser, inline (pages cannot rely on pop-ups): Today only or Weekend duty.
+  function dataChooserHtml(id) {
+    var btn = "font:inherit;font-size:13px;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;";
+    return '<span id="' + id + '" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+      + '<button type="button" data-bwdata="today" style="' + btn + 'background:#F4E3D3;color:#4A3620">📶 Use mobile data: Today only</button>'
+      + '<button type="button" data-bwdata="weekend" style="' + btn + 'background:#F4E3D3;color:#4A3620">Weekend duty (to 08:00 Mon)</button></span>';
+  }
+  function wireDataChooser(root) {
+    (root || document).querySelectorAll("[data-bwdata]").forEach(function (b) {
+      b.onclick = function () { dataOn(b.getAttribute("data-bwdata")); };
+    });
+  }
 
   // ── The queue ──
   function newRef() {
@@ -180,8 +245,9 @@
     if (sending) return Promise.resolve({ sent: 0, busy: true });
     var kind = connectionKind();
     if (navigator.onLine === false) return Promise.resolve({ sent: 0, reason: "No signal." });
-    if (kind === "data") return Promise.resolve({ sent: 0, reason: "This phone is on mobile data. The checks wait for WiFi." });
-    if (kind === "unknown" && !manual) return Promise.resolve({ sent: 0, reason: "waiting for Send now" });
+    var data = !!dataUntil();
+    if (kind === "data" && !data) return Promise.resolve({ sent: 0, reason: "This phone is on mobile data. The checks wait for WiFi." });
+    if (kind === "unknown" && !manual && !data) return Promise.resolve({ sent: 0, reason: "waiting for Send now" });
     sending = true; refreshBar();
     var sent = 0, failed = 0, lastError = null, targets = [];
     return all().then(function (items) {
@@ -236,7 +302,8 @@
         : (n === 1 ? "item" : "items")) + " waiting to send";
       var why = sending ? "Sending…"
         : navigator.onLine === false ? "No signal. They send on WiFi."
-        : kind === "data" ? "On mobile data. They send on WiFi."
+        : dataUntil() ? "Using mobile data: sending."
+        : kind === "data" ? "On mobile data. They send on WiFi, or switch on mobile data."
         : kind === "wifi" ? "On WiFi, sending shortly."
         : "Send them when you are on WiFi.";
       var err = items.filter(function (i) { return i.last_error; }).map(function (i) { return i.last_error; })[0];
@@ -246,9 +313,12 @@
           + 'border-radius:6px;border:1px solid #F4C9A8;background:transparent;color:#F4C9A8;cursor:pointer">Show why</button></span>' : "";
       bar.innerHTML = '<span>' + (n ? '📤 ' + what + '<br><span style="font-weight:400;font-size:12.5px;opacity:.85">' + why
         + (err && !sending ? " Last try: " + esc(err) : "") + '</span>' : "") + turnedHtml + '</span>'
-        + (n && kind === "unknown" && !sending && navigator.onLine !== false
+        + (n && kind === "unknown" && !sending && navigator.onLine !== false && !dataUntil()
           ? '<button type="button" id="bwSendNow" style="font:inherit;font-size:13.5px;padding:9px 14px;border-radius:8px;border:0;'
-            + 'background:#F4E3D3;color:#4A3620;cursor:pointer">Send now — I\'m on WiFi</button>' : "");
+            + 'background:#F4E3D3;color:#4A3620;cursor:pointer">Send now — I\'m on WiFi</button>' : "")
+        // Duty phone or an emergency (D-161): send over mobile data instead.
+        + (n && kind !== "wifi" && !sending && navigator.onLine !== false && !dataUntil() ? dataChooserHtml("bwDataPick") : "");
+      wireDataChooser(bar);
       var rs = document.getElementById("bwRefusedShow");
       if (rs) rs.onclick = function () {
         alert(turned.map(function (t) { return "• " + (t.label || "An item") + ": " + t.reason; }).join("\n")
@@ -268,13 +338,14 @@
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 
   // Try whenever things change, and every minute on WiFi.
-  function tick() { refreshBar(); if (mayAutoSend()) { flush(false); if (lastSave) saveLodge(lastSave); } }
+  function tick() { refreshBar(); showDataStrip(); if (mayAutoSend()) flush(false); if (onWifi() && lastSave) saveLodge(lastSave); }
   // Straight after sending: what those checks touched comes down again, and
   // anything else older than an hour (iPhone's Send now counts as WiFi).
   document.addEventListener("bwqueue:sent", function (e) {
     var d = e.detail || {};
     if (!lastSave || !d.sent) return;
-    saveLodge(Object.assign({}, lastSave, { refresh: d.targets || [], force: !mayAutoSend() }));
+    if (!onWifi() && dataUntil()) return;   // on mobile data: no checklist downloads
+    saveLodge(Object.assign({}, lastSave, { refresh: d.targets || [], force: !onWifi() }));
   });
   window.addEventListener("online", tick);
   window.addEventListener("offline", refreshBar);
@@ -328,7 +399,7 @@
   function saveLodge(o) {
     if (!o || !o.personId || !o.data || savingLodge) return Promise.resolve(false);
     if (!o.refresh) lastSave = { fn: o.fn, campParam: o.campParam, campId: o.campId, personId: o.personId, data: o.data, groups: o.groups };
-    if (!o.force && !mayAutoSend()) return Promise.resolve(false);
+    if (!o.force && !onWifi()) return Promise.resolve(false);
     var key = savedKey(o.campId, o.personId), FN = o.fn, cp = o.campParam || "", me = o.personId;
     var renew = o.refresh || [];   // target ids whose checklists must come down again now
     if (!o.force && !renew.length) { try { if (Date.now() - Number(localStorage.getItem(key) || 0) < SAVE_FRESH) return Promise.resolve(false); } catch (e) { return Promise.resolve(false); } }
@@ -375,7 +446,7 @@
           note(); savingLodge = false; done(ok);
         };
         var pump = function () {
-          if (!o.force && !mayAutoSend()) stopped = true;
+          if (!o.force && !onWifi()) stopped = true;
           while (!stopped && running < 4 && i < n) {
             var u = urls[i++]; running++;
             copyAge(u).then(function (age) {
@@ -398,5 +469,6 @@
 
   window.bwApi = { get: get, copyAge: copyAge };
   window.bwOffline = { save: saveLodge, groups: lodgeGroups, chosen: chosenGroups, groupsKey: groupsKey, savedKey: savedKey, status: lodgeStatus };
-  window.bwQueue = { add: add, all: all, send: send, flush: flush, mayAutoSend: mayAutoSend, connectionKind: connectionKind, refresh: refreshBar };
+  window.bwQueue = { add: add, all: all, send: send, flush: flush, mayAutoSend: mayAutoSend, onWifi: onWifi, connectionKind: connectionKind, refresh: refreshBar };
+  window.bwData = { on: dataOn, off: dataOff, until: dataUntil, chooserHtml: dataChooserHtml, wire: wireDataChooser };
 })();
